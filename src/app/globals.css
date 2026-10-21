@@ -281,3 +281,52 @@ tr.fila-etiquetada-rojo:hover td {
   font-size: 12px !important;
   line-height: 1.1 !important;
 }
+
+/* ============================================
+   FUENTE MONTSERRAT - Identidad VIZA HOME
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+
+/* Header: VIZA HOME, slogan, COTIZADOR */
+header h1,
+header .font-black,
+header .font-bold {
+  font-family: 'Montserrat', sans-serif !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* Textos del header con colores dorados */
+header span[style*="#D9B86B"],
+header span[style*="D9B86B"],
+header p[style*="#D9B86B"],
+header p[style*="D9B86B"] {
+  font-family: 'Montserrat', sans-serif !important;
+  letter-spacing: 0.5px !important;
+  font-weight: 700 !important;
+}
+
+/* Footer: VIZA HOME, slogan, CONTACTO, SEGUINOS */
+footer h1,
+footer h2,
+footer h3,
+footer h4,
+footer p,
+footer span {
+  font-family: 'Montserrat', sans-serif !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* Login: VIZA HOME, slogan */
+.login-container h1,
+.login-container h2,
+.login-container p,
+.login-container span {
+  font-family: 'Montserrat', sans-serif !important;
+}
+
+/* Nombres de marca siempre Montserrat */
+*[style*="VIZA"],
+*[style*="viza"] {
+  font-family: 'Montserrat', sans-serif !important;
+}
