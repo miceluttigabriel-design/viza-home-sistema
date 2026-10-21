@@ -179,6 +179,23 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   // Datos principales (pegados al SKU)
   { key: "referencia", label: "REFERENCIA", type: "text", group: "DATOS" },
+  // DATOS FINALES movidos antes de DESCRIPCION (orden solicitado por el usuario)
+  { key: "fabricante", label: "FABRICANTE", type: "text", group: "DATOS FINALES" },
+  { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
+  { key: "categoria", label: "CATEGORIA", type: "text", group: "DATOS FINALES" },
+  { key: "division", label: "DIVISION", type: "text", group: "DATOS FINALES" },
+  { key: "tipo", label: "TIPO", type: "text", group: "DATOS FINALES" },
+  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
+  { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
+  { key: "valorTecnico", label: "VALOR TECNICO", type: "num", group: "DATOS FINALES" },
+  { key: "margenTecnico", label: "MARGEN TECNICO", type: "num", group: "DATOS FINALES" },
+  { key: "coluna1", label: "COLUNA1", type: "text", group: "DATOS FINALES" },
+  { key: "coluna2", label: "COLUNA2", type: "text", group: "DATOS FINALES" },
+  { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
+  { key: "costSistema", label: "COSTO SISTEMA", type: "num", group: "DATOS FINALES" },
+  { key: "safra", label: "SAFRA", type: "num", group: "DATOS FINALES" },
+  { key: "productName", label: "PRODUCTO", type: "text", group: "DATOS FINALES" },
+  // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   { key: "codViza", label: "DATOS VIZA", type: "text", group: "DATOS" },
   { key: "codShow", label: "COD SHOW", type: "text", group: "DATOS" },
@@ -205,9 +222,8 @@ const COLUMNS: ColDef[] = [
   { key: "pct1A6", label: "1 A 6", type: "pct", group: "BASES" },
   { key: "pct7A13", label: "7 A 13", type: "pct", group: "BASES" },
   { key: "pct14A30", label: "14 A 30", type: "pct", group: "BASES" },
-  // Márgenes y precios
+  // Margenes y precios
   { key: "marginContado", label: "% CONTADO", type: "pct", group: "MARGENES" },
-  { key: "safra", label: "SAFRA", type: "num", group: "DATOS FINALES" },
   { key: "priceContado", label: "CONTADO", type: "calc", group: "PRECIOS" },
   ...Array.from({ length: 30 }, (_, i) => ({
     key: `marginC${i + 1}`,
@@ -221,21 +237,6 @@ const COLUMNS: ColDef[] = [
     type: "calc" as const,
     group: "PRECIOS",
   })),
-  // Datos finales
-  { key: "productName", label: "PRODUCTO", type: "text", group: "DATOS FINALES" },
-  { key: "fabricante", label: "FABRICANTE", type: "text", group: "DATOS FINALES" },
-  { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
-  { key: "categoria", label: "CATEGORIA", type: "text", group: "DATOS FINALES" },
-  { key: "division", label: "DIVISION", type: "text", group: "DATOS FINALES" },
-  { key: "tipo", label: "TIPO", type: "text", group: "DATOS FINALES" },
-  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
-  { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
-  { key: "valorTecnico", label: "VALOR TECNICO", type: "num", group: "DATOS FINALES" },
-  { key: "margenTecnico", label: "MARGEN TECNICO", type: "num", group: "DATOS FINALES" },
-  { key: "coluna1", label: "COLUNA1", type: "text", group: "DATOS FINALES" },
-  { key: "coluna2", label: "COLUNA2", type: "text", group: "DATOS FINALES" },
-  { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
-  { key: "costSistema", label: "COSTO SISTEMA", type: "num", group: "DATOS FINALES" },
 ];
 
 export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPanelProps) {

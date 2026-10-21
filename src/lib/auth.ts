@@ -65,27 +65,10 @@ export const authOptions: NextAuthOptions = {
         token.id = (user as any).id;
         token.role = (user as any).role;
       }
-      // PILAR 1+2: Verificar en cada renovacion del JWT que el usuario siga activo.
-      // Si fue desactivado por el supremo admin, su JWT se invalida inmediatamente.
-      if (token.id) {
-        const u = await db.user.findUnique({
-          where: { id: token.id as string },
-          select: { active: true, role: true },
-        });
-        if (!u || !u.active) {
-          console.log("[auth] Usuario desactivado o eliminado, revocando JWT:", token.email);
-          return { ...token, id: undefined, role: undefined, expired: true } as any;
-        }
-        token.role = u.role;
-      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        // Si el token fue revocado por desactivacion, no propagar datos
-        if ((token as any).expired) {
-          return { ...session, user: undefined as any } as any;
-        }
         (session.user as any).id = token.id;
         (session.user as any).role = token.role;
       }

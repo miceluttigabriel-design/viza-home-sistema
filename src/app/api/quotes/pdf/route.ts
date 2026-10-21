@@ -638,7 +638,7 @@ export async function POST(req: NextRequest) {
     doc.setFontSize(7);
     doc.setTextColor(200, 200, 200);
     doc.text("VIZA HOME E.A.S · Muebles, Electrodomésticos y Motos", pageW - margin, footerY + 12, { align: "right" });
-    doc.text("Presupuesto válido por 10 días desde la fecha de emisión.", pageW - margin, footerY + 22, { align: "right" });
+    doc.text("Presupuesto válido por 7 días desde la fecha de emisión.", pageW - margin, footerY + 22, { align: "right" });
     doc.text("¡Gracias por elegirnos!", pageW - margin, footerY + 32, { align: "right" });
 
     // Número de página si tiene múltiples páginas

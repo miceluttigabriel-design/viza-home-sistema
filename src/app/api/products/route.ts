@@ -59,15 +59,15 @@ export async function GET(req: NextRequest) {
     }
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { sku: { contains: search, mode: "insensitive" } },
-        { brand: { contains: search, mode: "insensitive" } },
-        { subcategory: { contains: search, mode: "insensitive" } },
-        { fabricante: { contains: search, mode: "insensitive" } },
-        { tipo: { contains: search, mode: "insensitive" } },
-        { marca: { contains: search, mode: "insensitive" } },
-        { modelo: { contains: search, mode: "insensitive" } },
-        { referencia: { contains: search, mode: "insensitive" } },
+        { name: { contains: search } },
+        { sku: { contains: search } },
+        { brand: { contains: search } },
+        { subcategory: { contains: search } },
+        { fabricante: { contains: search } },
+        { tipo: { contains: search } },
+        { marca: { contains: search } },
+        { modelo: { contains: search } },
+        { referencia: { contains: search } },
       ];
     }
 

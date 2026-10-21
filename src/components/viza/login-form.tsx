@@ -29,6 +29,7 @@ export function LoginForm() {
         setLoading(false);
         return;
       }
+      // Recargamos para que el server revalide la sesión
       window.location.reload();
     } catch {
       toast.error("Error al iniciar sesión");
@@ -38,318 +39,140 @@ export function LoginForm() {
 
   return (
     <div
-      style={{
-        backgroundColor: "#155789",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        position: "relative",
-        padding: "20px",
-      }}
+      className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+      style={{ backgroundColor: "#155789" }}
     >
       {/* Banda dorada superior */}
       <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: "4px",
-          background: "linear-gradient(90deg, #b89853, #D9B86B, #b89853)",
-        }}
+        className="absolute top-0 left-0 right-0 h-2"
+        style={{ backgroundColor: "#D9B86B" }}
+      />
+      {/* Banda dorada inferior */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-2"
+        style={{ backgroundColor: "#D9B86B" }}
       />
 
-      {/* Contenido centrado */}
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "420px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-        }}
-      >
-        {/* === CUADRO DEL LOGO (mismo ancho que el card de login) === */}
-        <div
-          style={{
-            width: "100%",
-            maxWidth: "420px",
-            borderRadius: "20px",
-            overflow: "hidden",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-            marginBottom: "20px",
-          }}
-        >
-          {/* Parte superior: VIZA (fondo blanco) con video animado */}
-          <div
+      <div className="relative w-full max-w-md flex flex-col items-center">
+        {/* Logo + slogan */}
+        <div className="text-center mb-6 flex flex-col items-center">
+          <img
+            src="/viza-home-logo.jpg"
+            alt="VIZA home"
             style={{
-              background: "#FFFFFF",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              maxWidth: "320px",
+              width: "100%",
+              height: "auto",
+              border: "4px solid #D9B86B",
+              borderRadius: "8px",
             }}
+          />
+          <p
+            className="mt-3 text-sm font-medium tracking-wide"
+            style={{ color: "#D9B86B" }}
           >
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              poster="/viza-home-logo-nuevo.png"
-              style={{
-                width: "100%",
-                height: "auto",
-                display: "block",
-                objectFit: "contain",
-              }}
-            >
-              <source src="/viza-home-animacion.mp4" type="video/mp4" />
-              {/* Fallback si el navegador no soporta video */}
-              <img
-                src="/viza-home-logo-nuevo.png"
-                alt="VIZA HOME"
-                style={{
-                  width: "100%",
-                  height: "auto",
-                  display: "block",
-                }}
-              />
-            </video>
-          </div>
+            Todo para tu hogar, en un solo lugar.
+          </p>
         </div>
 
-        {/* === CUADRO DE LOGIN (mismo ancho que el del logo) === */}
+        {/* Card blanca con borde superior dorado */}
         <div
-          style={{
-            width: "100%",
-            maxWidth: "420px",
-            background: "white",
-            borderRadius: "20px",
-            padding: "35px 30px",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-          }}
+          className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full"
+          style={{ borderTop: "4px solid #D9B86B" }}
         >
-          {/* Titulo */}
-          <h1
-            style={{
-              color: "#155789",
-              fontSize: "24px",
-              fontWeight: 700,
-              textAlign: "center",
-              margin: "0 0 25px 0",
-            }}
-          >
-            INICIAR SESIÓN
-          </h1>
+          <div className="flex items-center gap-2 mb-5">
+            <div
+              className="h-8 w-8 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: "#155789" }}
+            >
+              <LogIn className="h-4 w-4 text-white" />
+            </div>
+            <h2 className="font-bold text-lg text-stone-900">Iniciar sesión</h2>
+          </div>
 
-          <form onSubmit={handleSubmit}>
-            {/* Email */}
-            <div style={{ marginBottom: "18px" }}>
-              <label
-                style={{
-                  display: "block",
-                  color: "#343A40",
-                  fontWeight: 600,
-                  marginBottom: "8px",
-                  fontSize: "12px",
-                  textTransform: "uppercase",
-                }}
-              >
-                EMAIL
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div>
+              <label className="text-[11px] uppercase font-semibold text-stone-500">
+                Email
               </label>
-              <div style={{ position: "relative" }}>
-                <Mail
-                  style={{
-                    position: "absolute",
-                    left: "14px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    height: "18px",
-                    width: "18px",
-                    color: "#9CA3AF",
-                  }}
-                />
+              <div className="relative mt-1">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@email.com"
+                  placeholder="admin@vizahome.com"
                   autoComplete="email"
-                  style={{
-                    width: "100%",
-                    padding: "14px 14px 14px 44px",
-                    border: "2px solid #E0E0E0",
-                    borderRadius: "10px",
-                    fontSize: "15px",
-                    background: "#F8F9FA",
-                    color: "#343A40",
-                    outline: "none",
-                    boxSizing: "border-box",
-                    transition: "all 0.3s ease",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#D9B86B";
-                    e.target.style.background = "#FFFFFF";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(217, 184, 107, 0.2)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "#E0E0E0";
-                    e.target.style.background = "#F8F9FA";
-                    e.target.style.boxShadow = "none";
-                  }}
+                  className="w-full h-11 pl-10 pr-3 rounded-xl border border-stone-200 text-sm focus:border-stone-400 focus:ring-2 focus:ring-stone-100 outline-none"
                 />
               </div>
             </div>
 
-            {/* Contrasena */}
-            <div style={{ marginBottom: "25px" }}>
-              <label
-                style={{
-                  display: "block",
-                  color: "#343A40",
-                  fontWeight: 600,
-                  marginBottom: "8px",
-                  fontSize: "12px",
-                  textTransform: "uppercase",
-                }}
-              >
-                CONTRASEÑA
+            <div>
+              <label className="text-[11px] uppercase font-semibold text-stone-500">
+                Contraseña
               </label>
-              <div style={{ position: "relative" }}>
-                <Lock
-                  style={{
-                    position: "absolute",
-                    left: "14px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    height: "18px",
-                    width: "18px",
-                    color: "#9CA3AF",
-                  }}
-                />
+              <div className="relative mt-1">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                 <input
                   type={showPass ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  style={{
-                    width: "100%",
-                    padding: "14px 44px 14px 44px",
-                    border: "2px solid #E0E0E0",
-                    borderRadius: "10px",
-                    fontSize: "15px",
-                    background: "#F8F9FA",
-                    color: "#343A40",
-                    outline: "none",
-                    boxSizing: "border-box",
-                    transition: "all 0.3s ease",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#D9B86B";
-                    e.target.style.background = "#FFFFFF";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(217, 184, 107, 0.2)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "#E0E0E0";
-                    e.target.style.background = "#F8F9FA";
-                    e.target.style.boxShadow = "none";
-                  }}
+                  className="w-full h-11 pl-10 pr-10 rounded-xl border border-stone-200 text-sm focus:border-stone-400 focus:ring-2 focus:ring-stone-100 outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
-                  style={{
-                    position: "absolute",
-                    right: "14px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#9CA3AF",
-                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
                   aria-label="Mostrar/ocultar contraseña"
                 >
-                  {showPass ? <EyeOff style={{ height: "20px", width: "20px" }} /> : <Eye style={{ height: "20px", width: "20px" }} />}
+                  {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            {/* Boton */}
             <button
               type="submit"
               disabled={loading}
+              className="w-full h-12 mt-1 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-60"
               style={{
-                width: "100%",
-                padding: "16px",
-                background: "linear-gradient(135deg, #D9B86B 0%, #c9a55a 100%)",
-                color: "white",
-                border: "none",
-                borderRadius: "10px",
-                fontSize: "16px",
-                fontWeight: 700,
-                cursor: loading ? "not-allowed" : "pointer",
-                transition: "all 0.3s ease",
-                boxShadow: "0 4px 15px rgba(217, 184, 107, 0.4)",
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                opacity: loading ? 0.6 : 1,
-              }}
-              onMouseOver={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = "translateY(-3px)";
-                  e.currentTarget.style.boxShadow = "0 8px 25px rgba(217, 184, 107, 0.5)";
-                }
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 15px rgba(217, 184, 107, 0.4)";
+                background: "linear-gradient(to right, #b89853, #D9B86B)",
+                color: "#0d3d5e",
               }}
             >
               {loading ? (
                 <>
-                  <Loader2 style={{ height: "18px", width: "18px", animation: "spin 1s linear infinite" }} />
-                  INGRESANDO...
+                  <Loader2 className="h-4 w-4 animate-spin" /> Ingresando...
                 </>
               ) : (
                 <>
-                  <LogIn style={{ height: "18px", width: "18px" }} />
-                  INGRESAR AL PANEL
+                  <LogIn className="h-4 w-4" /> Ingresar al Panel
                 </>
               )}
             </button>
           </form>
 
           {/* Separador */}
-          <div style={{ marginTop: "20px", paddingTop: "15px", borderTop: "1px solid #F0F0F0", textAlign: "center" }}>
-            <p style={{ color: "#6C757D", fontSize: "12px", margin: 0 }}>
-              ¿Olvidaste tu contraseña? Contactá al administrador del sistema.
+          <div className="mt-5 pt-4 border-t border-stone-100 text-center">
+            <p className="text-[11px] text-stone-400">
+              Si olvidaste tu contraseña, contactá al administrador del sistema.
             </p>
           </div>
         </div>
 
-        {/* === FOOTER === */}
-        <div
-          style={{
-            marginTop: "25px",
-            textAlign: "center",
-            color: "rgba(255,255,255,0.8)",
-            fontSize: "11px",
-            lineHeight: "1.8",
-          }}
-        >
-          <p>TEL: (0987) 700 707 | EMAIL: VENTAS.ONLINE@VIZA.COM.PY</p>
-          <p>WEB: WWW.VIZA.COM.PY | @VIZAHOME</p>
-          <p style={{ marginTop: "8px" }}>
-            VIZA HOME E.A.S © {new Date().getFullYear()} · ACCESO SOLO PARA PERSONAL AUTORIZADO
-          </p>
+        {/* Contacto */}
+        <div className="mt-5 text-center text-xs space-y-1" style={{ color: "#D9B86B" }}>
+          <p>Tel: (0987) 700 707</p>
+          <p>Email: ventas.online@viza.com.py</p>
+          <p>Web: www.viza.com.py</p>
+          <p>@vizahome</p>
         </div>
+
+        <p className="text-center text-stone-300/80 text-xs mt-4">
+          VIZA HOME E.A.S © {new Date().getFullYear()} · Acceso solo para personal autorizado
+        </p>
       </div>
     </div>
   );
