@@ -29,7 +29,6 @@ export function LoginForm() {
         setLoading(false);
         return;
       }
-      // Recargamos para que el server revalide la sesión
       window.location.reload();
     } catch {
       toast.error("Error al iniciar sesión");
@@ -39,47 +38,91 @@ export function LoginForm() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
-      style={{ backgroundColor: "#155789" }}
+      style={{
+        backgroundColor: "#155789",
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        position: "relative",
+        padding: "20px",
+      }}
     >
       {/* Banda dorada superior */}
       <div
-        className="absolute top-0 left-0 right-0 h-2"
-        style={{ backgroundColor: "#D9B86B" }}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "4px",
+          background: "linear-gradient(90deg, #b89853, #D9B86B, #b89853)",
+        }}
       />
       {/* Banda dorada inferior */}
       <div
-        className="absolute bottom-0 left-0 right-0 h-2"
-        style={{ backgroundColor: "#D9B86B" }}
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: "4px",
+          background: "linear-gradient(90deg, #b89853, #D9B86B, #b89853)",
+        }}
       />
 
-      <div className="relative w-full max-w-md flex flex-col items-center">
-        {/* Logo + slogan */}
-        <div className="text-center mb-6 flex flex-col items-center">
+      {/* Contenido centrado */}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "420px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+        }}
+      >
+        {/* === LOGO CLICKEABLE === */}
+        <div
+          onClick={() => console.log("Logo clickeado")}
+          style={{
+            cursor: "pointer",
+            transition: "transform 0.3s ease",
+            marginBottom: "20px",
+            width: "100%",
+            maxWidth: "420px",
+            borderRadius: "20px",
+            overflow: "hidden",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.transform = "scale(1.05)"; }}
+          onMouseOut={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+          onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.98)"; }}
+        >
           <img
-            src="/viza-home-logo.jpg"
-            alt="VIZA home"
+            src="/viza-home-logo-nuevo.png"
+            alt="VIZA HOME"
             style={{
-              maxWidth: "320px",
               width: "100%",
               height: "auto",
-              border: "4px solid #D9B86B",
-              borderRadius: "8px",
+              display: "block",
             }}
           />
-          <p
-            className="mt-3 text-sm font-medium tracking-wide"
-            style={{ color: "#D9B86B" }}
-          >
-            Todo para tu hogar, en un solo lugar.
-          </p>
         </div>
 
-        {/* Card blanca con borde superior dorado */}
+        {/* === CUADRO DE LOGIN === */}
         <div
-          className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full"
-          style={{ borderTop: "4px solid #D9B86B" }}
+          style={{
+            width: "100%",
+            maxWidth: "420px",
+            background: "white",
+            borderRadius: "20px",
+            padding: "35px 30px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+            borderTop: "4px solid #D9B86B",
+          }}
         >
+          {/* Titulo */}
           <div className="flex items-center gap-2 mb-5">
             <div
               className="h-8 w-8 rounded-lg flex items-center justify-center"
@@ -87,10 +130,11 @@ export function LoginForm() {
             >
               <LogIn className="h-4 w-4 text-white" />
             </div>
-            <h2 className="font-bold text-lg text-stone-900">Iniciar sesión</h2>
+            <h2 className="font-bold text-lg text-stone-900">INICIAR SESIÓN</h2>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
+            {/* Email */}
             <div>
               <label className="text-[11px] uppercase font-semibold text-stone-500">
                 Email
@@ -101,13 +145,14 @@ export function LoginForm() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@vizahome.com"
+                  placeholder="tu@email.com"
                   autoComplete="email"
-                  className="w-full h-11 pl-10 pr-3 rounded-xl border border-stone-200 text-sm focus:border-stone-400 focus:ring-2 focus:ring-stone-100 outline-none"
+                  className="w-full h-12 pl-10 pr-3 rounded-xl border-2 border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
                 />
               </div>
             </div>
 
+            {/* Contrasena */}
             <div>
               <label className="text-[11px] uppercase font-semibold text-stone-500">
                 Contraseña
@@ -120,7 +165,7 @@ export function LoginForm() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full h-11 pl-10 pr-10 rounded-xl border border-stone-200 text-sm focus:border-stone-400 focus:ring-2 focus:ring-stone-100 outline-none"
+                  className="w-full h-12 pl-10 pr-10 rounded-xl border-2 border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all"
                 />
                 <button
                   type="button"
@@ -133,6 +178,7 @@ export function LoginForm() {
               </div>
             </div>
 
+            {/* Boton */}
             <button
               type="submit"
               disabled={loading}
@@ -144,11 +190,11 @@ export function LoginForm() {
             >
               {loading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Ingresando...
+                  <Loader2 className="h-4 w-4 animate-spin" /> INGRESANDO...
                 </>
               ) : (
                 <>
-                  <LogIn className="h-4 w-4" /> Ingresar al Panel
+                  <LogIn className="h-4 w-4" /> INGRESAR AL PANEL
                 </>
               )}
             </button>
@@ -162,16 +208,14 @@ export function LoginForm() {
           </div>
         </div>
 
-        {/* Contacto */}
-        <div className="mt-5 text-center text-xs space-y-1" style={{ color: "#D9B86B" }}>
-          <p>Tel: (0987) 700 707</p>
-          <p>Email: ventas.online@viza.com.py</p>
-          <p>Web: www.viza.com.py</p>
-          <p>@vizahome</p>
+        {/* Footer */}
+        <div className="mt-6 text-center text-xs space-y-1" style={{ color: "#D9B86B" }}>
+          <p>TEL: (0987) 700 707 | EMAIL: VENTAS.ONLINE@VIZA.COM.PY</p>
+          <p>WEB: WWW.VIZA.COM.PY | @VIZAHOME</p>
         </div>
 
-        <p className="text-center text-stone-300/80 text-xs mt-4">
-          VIZA HOME E.A.S © {new Date().getFullYear()} · Acceso solo para personal autorizado
+        <p className="text-center text-stone-300/80 text-[11px] mt-3">
+          VIZA HOME E.A.S © {new Date().getFullYear()} · ACCESO SOLO PARA PERSONAL AUTORIZADO
         </p>
       </div>
     </div>
