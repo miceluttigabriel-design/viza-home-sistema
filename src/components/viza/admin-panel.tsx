@@ -189,7 +189,6 @@ const COLUMNS: ColDef[] = [
   { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
   { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   { key: "costSistema", label: "COSTO SISTEMA", type: "num", group: "DATOS FINALES" },
-  { key: "safra", label: "SAFRA", type: "num", group: "DATOS FINALES" },
   { key: "productName", label: "PRODUCTO", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
@@ -220,6 +219,7 @@ const COLUMNS: ColDef[] = [
   { key: "pct14A30", label: "14 A 30", type: "pct", group: "BASES" },
   // Margenes y precios
   { key: "marginContado", label: "% CONTADO", type: "pct", group: "MARGENES" },
+  { key: "safra", label: "SAFRA", type: "num", group: "DATOS FINALES" },
   { key: "priceContado", label: "CONTADO", type: "calc", group: "PRECIOS" },
   ...Array.from({ length: 30 }, (_, i) => ({
     key: `marginC${i + 1}`,
