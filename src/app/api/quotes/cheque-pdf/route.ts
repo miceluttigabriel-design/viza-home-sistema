@@ -434,10 +434,20 @@ export async function POST(req: NextRequest) {
     doc.setTextColor(80, 80, 80);
     doc.text("TEL: (0987) 700 707", margin, y + 26);
     doc.text("EMAIL: VENTAS.ONLINE@VIZA.COM.PY", margin, y + 38);
+    doc.text("WEB: WWW.VIZA.COM.PY", margin, y + 50);
     doc.setTextColor(...COLOR_GOLD);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.text("TODO PARA TU HOGAR, EN UN SOLO LUGAR", pageW - margin - 220, y + 32);
+
+    // Validez del presupuesto
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text("Presupuesto valido por 10 dias desde la fecha de emision.", pageW - margin - 220, y + 44);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...COLOR_GOLD);
+    doc.text("Gracias por elegirnos!", pageW - margin - 220, y + 52);
 
     // Devolver PDF
     const pdfBuffer = doc.output("arraybuffer");

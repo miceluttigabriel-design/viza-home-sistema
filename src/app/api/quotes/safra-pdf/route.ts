@@ -606,7 +606,7 @@ export async function POST(req: NextRequest) {
       { align: "right" }
     );
     doc.text(
-      "Presupuesto válido por 7 días desde la fecha de emisión.",
+      "Presupuesto válido por 10 días desde la fecha de emisión.",
       pageW - margin,
       footerY + 22,
       { align: "right" }
