@@ -187,10 +187,6 @@ const COLUMNS: ColDef[] = [
   { key: "tipo", label: "TIPO", type: "text", group: "DATOS FINALES" },
   { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
   { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
-  { key: "valorTecnico", label: "VALOR TECNICO", type: "num", group: "DATOS FINALES" },
-  { key: "margenTecnico", label: "MARGEN TECNICO", type: "num", group: "DATOS FINALES" },
-  { key: "coluna1", label: "COLUNA1", type: "text", group: "DATOS FINALES" },
-  { key: "coluna2", label: "COLUNA2", type: "text", group: "DATOS FINALES" },
   { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   { key: "costSistema", label: "COSTO SISTEMA", type: "num", group: "DATOS FINALES" },
   { key: "safra", label: "SAFRA", type: "num", group: "DATOS FINALES" },
@@ -237,6 +233,11 @@ const COLUMNS: ColDef[] = [
     type: "calc" as const,
     group: "PRECIOS",
   })),
+  // VALOR TECNICO, MARGEN TECNICO, COLUNA1, COLUNA2 movidas al final
+  { key: "valorTecnico", label: "VALOR TECNICO", type: "num", group: "DATOS FINALES" },
+  { key: "margenTecnico", label: "MARGEN TECNICO", type: "num", group: "DATOS FINALES" },
+  { key: "coluna1", label: "COLUNA1", type: "text", group: "DATOS FINALES" },
+  { key: "coluna2", label: "COLUNA2", type: "text", group: "DATOS FINALES" },
 ];
 
 export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPanelProps) {
