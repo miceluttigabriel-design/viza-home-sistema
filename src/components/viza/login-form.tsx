@@ -72,43 +72,14 @@ export function LoginForm() {
           position: "absolute",
           top: 0,
           left: 0,
-          width: "200%",
-          height: "200%",
+          width: "100%",
+          height: "100%",
           background: "linear-gradient(135deg, #155789 0%, #0d3a5c 50%, #155789 100%)",
           backgroundSize: "200% 200%",
           animation: "gradientMove 15s ease infinite",
           zIndex: 1,
         }}
       />
-      <style>{`
-        @keyframes gradientMove {
-          0% { background-position: 0% 50%; transform: translate(0, 0); }
-          50% { background-position: 100% 50%; transform: translate(-25%, -10%); }
-          100% { background-position: 0% 50%; transform: translate(0, 0); }
-        }
-        @keyframes particleFloat {
-          0%, 100% { transform: translateY(0) translateX(0); }
-          25% { transform: translateY(-30px) translateX(20px); }
-          50% { transform: translateY(-20px) translateX(-20px); }
-          75% { transform: translateY(-40px) translateX(10px); }
-        }
-        @keyframes cardEntrance {
-          from { opacity: 0; transform: translateY(30px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes logoEntrance {
-          from { opacity: 0; transform: scale(0.8); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        @keyframes footerFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes waveMove {
-          0%, 100% { transform: translateX(0); }
-          50% { transform: translateX(-50px); }
-        }
-      `}</style>
 
       {/* Particulas doradas flotantes */}
       {particulas.map((p) => (
@@ -214,7 +185,7 @@ export function LoginForm() {
           alignItems: "center",
         }}
       >
-        {/* === LOGO VIZA HOME === */}
+        {/* === ANIMACIÓN LOGO VIZA HOME === */}
         <div
           style={{
             borderRadius: "16px",
@@ -222,32 +193,37 @@ export function LoginForm() {
             boxShadow: "0 10px 40px rgba(0,0,0,0.3)",
             border: "3px solid #D9B86B",
             animation: "logoEntrance 1s ease-out 0.2s both",
-            marginBottom: "25px",
+            marginBottom: "20px",
             width: "100%",
-            maxWidth: "320px",
+            maxWidth: "340px",
+            background: "#FFFFFF",
           }}
         >
-          {/* Parte superior: VIZA (fondo blanco) */}
-          <div
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            poster="/viza-home-logo-nuevo.png"
             style={{
-              background: "#FFFFFF",
-              padding: "25px 20px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              width: "100%",
+              height: "auto",
+              display: "block",
+              objectFit: "contain",
             }}
           >
+            <source src="/viza-home-animacion.mp4" type="video/mp4" />
+            {/* Fallback si el navegador no soporta video */}
             <img
               src="/viza-home-logo-nuevo.png"
               alt="VIZA HOME"
               style={{
-                maxWidth: "100%",
+                width: "100%",
                 height: "auto",
-                maxHeight: "100px",
-                objectFit: "contain",
+                display: "block",
               }}
             />
-          </div>
+          </video>
         </div>
 
         {/* Slogan */}
