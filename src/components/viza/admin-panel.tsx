@@ -735,14 +735,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 200px)" }}>
             <div className="overflow-auto">
               <table className="border-collapse text-xs">
-                <thead className="bg-stone-100 border-b-2 border-stone-300 sticky top-0 z-30">
+                <thead className="border-b-2 border-stone-300 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                   <tr>
                     {/* Columna acciones */}
-                    <th className="sticky left-0 z-20 bg-stone-100 px-2 py-2 text-center font-bold text-stone-700 border-r border-stone-300 min-w-[80px]">
+                    <th className="sticky left-0 z-20 px-2 py-2 text-center font-bold border-r border-stone-300 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                       ACCIONES
                     </th>
                     {/* SKU */}
-                    <th className="sticky left-[80px] z-20 bg-stone-100 px-2 py-2 text-left font-bold text-stone-700 border-r border-stone-300 min-w-[80px]">
+                    <th className="sticky left-[80px] z-20 px-2 py-2 text-left font-bold border-r border-stone-300 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                       SKU
                     </th>
                     {COLUMNS.map((col) => {
@@ -753,12 +753,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         <th
                           key={col.key}
                           className={`relative px-2 py-2 text-center font-bold border-r border-stone-200 whitespace-nowrap ${
-                            col.type === "calc" ? "bg-emerald-50 text-emerald-800" : "text-stone-700"
+                            col.type === "calc" ? "text-[#0d3d5e]" : "text-[#155789]"
                           }`}
+                          style={{ backgroundColor: "#D9B86B" }}
                         >
                           <div className="flex flex-col items-center">
                             {col.group && (
-                              <span className="text-[9px] text-stone-400 font-normal mb-0.5">
+                              <span className="text-[9px] font-normal mb-0.5" style={{ color: "#0d3d5e", opacity: 0.7 }}>
                                 {col.group}
                               </span>
                             )}
