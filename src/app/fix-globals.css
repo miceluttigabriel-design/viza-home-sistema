@@ -1,0 +1,533 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  /* VIZA home - Colores Corporativos */
+  --viza-azul: #155789;
+  --viza-dorado: #D9B86B;
+  --viza-azul-oscuro: #0d3d5e;
+  --viza-dorado-oscuro: #b89853;
+  --viza-crema: #faf6ed;
+  --radius: 0.625rem;
+  --background: #ffffff;
+  --foreground: #1a202c;
+  --card: #ffffff;
+  --card-foreground: #1a202c;
+  --popover: #ffffff;
+  --popover-foreground: #1a202c;
+  --primary: #155789;
+  --primary-foreground: #ffffff;
+  --secondary: #D9B86B;
+  --secondary-foreground: #1a202c;
+  --muted: #f7f5f0;
+  --muted-foreground: #4a5568;
+  --accent: #D9B86B;
+  --accent-foreground: #1a202c;
+  --destructive: #dc2626;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #155789;
+  --sidebar: #155789;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #D9B86B;
+  --sidebar-primary-foreground: #1a202c;
+  --sidebar-accent: #1e6ba8;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #2a7ab0;
+  --sidebar-ring: #D9B86B;
+  --chart-1: #155789;
+  --chart-2: #D9B86B;
+  --chart-3: #2a7ab0;
+  --chart-4: #e5cb8a;
+  --chart-5: #b89853;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Todo el texto del sistema VIZA HOME en mayúsculas */
+body {
+  text-transform: uppercase;
+}
+
+/* Los inputs donde el usuario escribe conservan su casing natural
+   (el valor real se guarda como el usuario lo tipea, pero al mostrarlo
+   en labels/placeholders sí se ve en mayúsculas por la regla de body) */
+input,
+textarea,
+input::placeholder,
+textarea::placeholder {
+  text-transform: none;
+}
+
+/* Los placeholders sí van en mayúsculas */
+input::placeholder,
+textarea::placeholder {
+  text-transform: uppercase;
+}
+
+/* ============================================
+   ETIQUETAS DE COLORES - FILAS DEL ADMIN PANEL
+   Colores intensos para máxima visibilidad
+   ============================================ */
+
+/* Fila etiquetada en VERDE - Producto Seleccionado */
+tr.fila-etiquetada-verde td,
+tr.fila-etiquetada-verde > td {
+  background-color: #A8E6A3 !important;
+  border-left: 5px solid #28A745 !important;
+  color: #1B5E20 !important; /* Texto verde oscuro */
+  font-weight: 600 !important; /* Texto un poco más grueso */
+}
+tr.fila-etiquetada-verde:hover td {
+  background-color: #81D87C !important;
+}
+
+/* Fila etiquetada en AZUL - Producto para Pedido */
+tr.fila-etiquetada-azul td,
+tr.fila-etiquetada-azul > td {
+  background-color: #90CAF9 !important;
+  border-left: 5px solid #007BFF !important;
+  color: #0D47A1 !important; /* Texto azul oscuro */
+  font-weight: 600 !important;
+}
+tr.fila-etiquetada-azul:hover td {
+  background-color: #64B5F6 !important;
+}
+
+/* Fila etiquetada en DORADO - Producto Descontinuado */
+tr.fila-etiquetada-dorado td,
+tr.fila-etiquetada-dorado > td {
+  background-color: #FFE082 !important;
+  border-left: 5px solid #FFC107 !important;
+  color: #5D4037 !important; /* Texto marrón oscuro */
+  font-weight: 600 !important;
+}
+tr.fila-etiquetada-dorado:hover td {
+  background-color: #FFD54F !important;
+}
+
+/* Fila etiquetada en ROJO - Producto Quema de Stock */
+tr.fila-etiquetada-rojo td,
+tr.fila-etiquetada-rojo > td {
+  background-color: #EF9A9A !important;
+  border-left: 5px solid #DC3545 !important;
+  color: #B71C1C !important; /* Texto rojo oscuro */
+  font-weight: 600 !important;
+}
+tr.fila-etiquetada-rojo:hover td {
+  background-color: #E57373 !important;
+}
+
+/* ============================================
+   FILTROS DE ETIQUETA - LEYENDA CLICKEABLE
+   ============================================ */
+.leyenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 5px;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  background: transparent;
+}
+
+.leyenda-item:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Estado activo del filtro (se reescribe con inline style por color) */
+.leyenda-item.filtro-activo {
+  font-weight: 700 !important;
+}
+
+/* ============================================
+   FILTRO EDITADOS - Hover y estado activo
+   ============================================ */
+.leyenda-item[data-filtro="editados"] {
+  cursor: pointer;
+  padding: 5px 12px;
+  border-radius: 5px;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #333;
+}
+
+.leyenda-item[data-filtro="editados"]:hover {
+  background-color: rgba(133, 100, 4, 0.1);
+}
+
+/* Estado activo del filtro EDITADOS */
+.leyenda-item[data-filtro="editados"].filtro-activo {
+  border-color: #856404 !important;
+  background-color: #FFF3CD !important;
+  color: #856404 !important;
+  font-weight: 700 !important;
+}
+
+/* ============================================
+   REDISENO VISUAL VIZA HOME v5.0
+   Animaciones, efectos y mejoras visuales
+   ============================================ */
+
+/* === ANIMACIONES GLOBALES === */
+@keyframes viza-fade-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes viza-slide-up {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes viza-pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 184, 107, 0.4); }
+  50% { box-shadow: 0 0 20px 5px rgba(217, 184, 107, 0.15); }
+}
+
+@keyframes viza-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes viza-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* === CLASES DE ANIMACION === */
+.viza-fade-in {
+  animation: viza-fade-in 0.5s ease-out;
+}
+
+.viza-slide-up {
+  animation: viza-slide-up 0.6s ease-out;
+}
+
+/* === TRANSICIONES SUAVES === */
+* {
+  transition: all 0.3s ease;
+}
+
+/* === EFECTOS HOVER EN BOTONES === */
+button:hover {
+  transform: translateY(-2px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+/* === SOMBRAS === */
+.viza-shadow-soft {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.viza-shadow-medium {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.viza-shadow-strong {
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.18);
+}
+
+.viza-shadow-gold {
+  box-shadow: 0 4px 15px rgba(217, 184, 107, 0.4);
+}
+
+.viza-shadow-blue {
+  box-shadow: 0 4px 15px rgba(21, 87, 137, 0.3);
+}
+
+/* === GLASSMORPHISM === */
+.viza-glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* === TEXTO GRADIENTE === */
+.viza-gradient-text {
+  background: linear-gradient(135deg, #155789 0%, #D9B86B 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* === BADGES === */
+.viza-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.viza-badge-green {
+  background: #28A745;
+  color: white;
+}
+
+.viza-badge-gold {
+  background: #D9B86B;
+  color: white;
+}
+
+.viza-badge-red {
+  background: #DC3545;
+  color: white;
+}
+
+.viza-badge-orange {
+  background: #E67E22;
+  color: white;
+}
+
+/* === SCROLLBAR PERSONALIZADO === */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #155789;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0d3d5e;
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 1024px) {
+  header {
+    padding: 15px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  header {
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 15px;
+  }
+}
+
+/* === TARJETAS (CARDS) === */
+.viza-card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.viza-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* === INPUTS === */
+.viza-input {
+  width: 100%;
+  padding: 15px;
+  border: 2px solid #E0E0E0;
+  border-radius: 10px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background: white;
+  color: #343A40;
+}
+
+.viza-input:focus {
+  border-color: #D9B86B;
+  box-shadow: 0 0 0 4px rgba(217, 184, 107, 0.1);
+  outline: none;
+}
+
+/* === BOTONES === */
+.viza-btn-primary {
+  background: linear-gradient(135deg, #155789 0%, #1e6ba8 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(21, 87, 137, 0.3);
+}
+
+.viza-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(21, 87, 137, 0.4);
+}
+
+.viza-btn-gold {
+  background: linear-gradient(135deg, #D9B86B 0%, #c9a55a 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(217, 184, 107, 0.4);
+}
+
+.viza-btn-gold:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(217, 184, 107, 0.5);
+}
+
+/* === LINEA DORADA DECORATIVA === */
+.viza-gold-line {
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #D9B86B 50%, transparent 100%);
+  border: none;
+  margin: 20px 0;
+}
+
+/* ============================================
+   LOGIN - ANIMACIONES (movidas de inline style)
+   ============================================ */
+
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes particleFloat {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(-30px) translateX(20px); }
+  50% { transform: translateY(-20px) translateX(-20px); }
+  75% { transform: translateY(-40px) translateX(10px); }
+}
+
+@keyframes cardEntrance {
+  from { opacity: 0; transform: translateY(30px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes logoEntrance {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes footerFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes waveMove {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-50px); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
