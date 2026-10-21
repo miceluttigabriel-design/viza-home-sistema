@@ -51,16 +51,16 @@ export async function PATCH(
       return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
     }
 
-    // Actualizar SOLO etiquetaColor + registrar trazabilidad de la edición manual.
-    // Ningún otro campo (costos, márgenes, precios, etc.) se toca.
-    // El badge de "última edición" sobre el SKU se actualiza con esta fecha/hora.
-    const editorName = (session.user as any)?.name || (session.user as any)?.email || "admin";
+    // REGLA DE ORO: ETIQUETAR != EDITAR.
+    // El endpoint de etiquetas SOLO actualiza etiquetaColor.
+    // NO toca ultimaEdicionAt ni ultimaEdicionPor (esos solo se actualizan
+    // al editar datos reales con PUT /api/products/[id]).
+    // El badge "📝 fecha" y el filtro EDITADOS solo aparecen al editar, NO al etiquetar.
     const updated = await db.product.update({
       where: { id },
       data: {
         etiquetaColor: color,
-        ultimaEdicionAt: new Date(),
-        ultimaEdicionPor: editorName,
+        // NO tocar ultimaEdicionAt ni ultimaEdicionPor aqui.
       },
       select: {
         id: true,
