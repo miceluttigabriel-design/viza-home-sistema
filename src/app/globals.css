@@ -253,3 +253,31 @@ tr.fila-etiquetada-rojo:hover td {
   color: #856404 !important;
   font-weight: 700 !important;
 }
+
+/* ============================================
+   FILAS DE DATOS - ALTURA REDUCIDA
+   Mismo padding que el encabezado (py-0.5)
+   ============================================ */
+.admin-table tbody tr,
+.admin-table tbody tr td {
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 32px !important;
+  padding: 2px 5px !important;
+  line-height: 1.1 !important;
+  vertical-align: middle !important;
+}
+
+.admin-table tbody tr td input,
+.admin-table tbody tr td select,
+.admin-table tbody tr td button,
+.admin-table tbody tr td .icon,
+.admin-table tbody tr td span {
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 24px !important;
+  padding: 0 4px !important;
+  margin: 0 !important;
+  font-size: 12px !important;
+  line-height: 1.1 !important;
+}

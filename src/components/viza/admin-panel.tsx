@@ -734,15 +734,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           {/* Tabla estilo Excel - edición directa */}
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 200px)" }}>
             <div className="overflow-auto">
-              <table className="border-collapse text-xs">
+              <table className="admin-table border-collapse text-xs">
                 <thead className="border-b-2 border-stone-300 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                   <tr>
                     {/* Columna acciones */}
-                    <th className="sticky left-0 z-20 px-2 py-2 text-center font-bold border-r border-stone-300 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                    <th className="sticky left-0 z-20 px-2 py-0.5 text-center font-bold border-r border-stone-300 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                       ACCIONES
                     </th>
                     {/* SKU */}
-                    <th className="sticky left-[80px] z-20 px-2 py-2 text-left font-bold border-r border-stone-300 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                    <th className="sticky left-[80px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-300 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                       SKU
                     </th>
                     {COLUMNS.map((col) => {
@@ -752,7 +752,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       return (
                         <th
                           key={col.key}
-                          className={`relative px-2 py-2 text-center font-bold border-r border-stone-200 whitespace-nowrap ${
+                          className={`relative px-2 py-0.5 text-center font-bold border-r border-stone-200 whitespace-nowrap ${
                             col.type === "calc" ? "text-[#0d3d5e]" : "text-[#155789]"
                           }`}
                           style={{ backgroundColor: "#D9B86B" }}
