@@ -117,27 +117,6 @@ export function LoginForm() {
               />
             </video>
           </div>
-          {/* Parte inferior: home + slogan (fondo dorado) */}
-          <div
-            style={{
-              background: "#D9B86B",
-              padding: "12px 20px",
-              textAlign: "center",
-            }}
-          >
-            <p
-              style={{
-                color: "#155789",
-                margin: 0,
-                fontSize: "12px",
-                fontWeight: 600,
-                letterSpacing: "1px",
-                textTransform: "uppercase",
-              }}
-            >
-              TODO PARA TU HOGAR, EN UN SOLO LUGAR
-            </p>
-          </div>
         </div>
 
         {/* === CUADRO DE LOGIN (mismo ancho que el del logo) === */}
