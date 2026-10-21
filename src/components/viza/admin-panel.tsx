@@ -987,7 +987,7 @@ const ExcelRow = memo(function ExcelRow({
       className={`border-b border-stone-100 ${currentStyle ? currentStyle.cellClass : ""}`}
     >
       {/* Acciones - sticky */}
-      <td className="sticky left-0 z-10 px-2 py-1 text-center border-r border-stone-200 bg-white">
+      <td className="sticky left-0 z-10 px-2 py-0.5 text-center border-r border-stone-200 bg-white">
         <div className="flex flex-col items-center justify-start gap-1 relative">
           <button
             id={`save-btn-${product.id}`}
@@ -1022,7 +1022,7 @@ const ExcelRow = memo(function ExcelRow({
         </div>
       </td>
       {/* SKU - sticky - con badge de última edición encima */}
-      <td className="sticky left-[80px] z-10 px-2 py-1 font-mono text-stone-700 font-semibold border-r border-stone-200 bg-white align-top">
+      <td className="sticky left-[80px] z-10 px-2 py-0.5 font-mono text-stone-700 font-semibold border-r border-stone-200 bg-white align-top">
         {/* Badge de última edición manual del admin */}
         {product.ultimaEdicionAt && (() => {
           const d = new Date(product.ultimaEdicionAt);
@@ -1179,7 +1179,7 @@ const Cell = memo(function Cell({
           : formatPYG(Number(value))
         : "—";
     return (
-      <td className="px-2 py-1 text-right tabular-nums bg-emerald-50/50 border-r border-stone-100 whitespace-nowrap text-stone-700">
+      <td className="px-2 py-0.5 text-right tabular-nums bg-emerald-50/50 border-r border-stone-100 whitespace-nowrap text-stone-700">
         {displayValue}
       </td>
     );
@@ -1196,7 +1196,7 @@ const Cell = memo(function Cell({
       : value ?? "";
 
   return (
-    <td className="px-1 py-0.5 border-r border-stone-100 bg-white">
+    <td className="px-1 py-0 border-r border-stone-100 bg-white">
       <input
         type={isNum || isPct ? "number" : "text"}
         step={isPct ? "0.01" : isNum ? "1" : undefined}
