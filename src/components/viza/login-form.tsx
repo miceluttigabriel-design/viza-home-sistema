@@ -82,26 +82,40 @@ export function LoginForm() {
             marginBottom: "20px",
           }}
         >
-          {/* Parte superior: VIZA (fondo blanco) */}
+          {/* Parte superior: VIZA (fondo blanco) con video animado */}
           <div
             style={{
               background: "#FFFFFF",
-              padding: "25px 20px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <img
-              src="/viza-home-logo-nuevo.png"
-              alt="VIZA HOME"
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              poster="/viza-home-logo-nuevo.png"
               style={{
-                maxWidth: "100%",
+                width: "100%",
                 height: "auto",
-                maxHeight: "100px",
+                display: "block",
                 objectFit: "contain",
               }}
-            />
+            >
+              <source src="/viza-home-animacion.mp4" type="video/mp4" />
+              {/* Fallback si el navegador no soporta video */}
+              <img
+                src="/viza-home-logo-nuevo.png"
+                alt="VIZA HOME"
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  display: "block",
+                }}
+              />
+            </video>
           </div>
           {/* Parte inferior: home + slogan (fondo dorado) */}
           <div
