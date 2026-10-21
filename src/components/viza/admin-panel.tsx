@@ -732,10 +732,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           </div>
 
           {/* Tabla estilo Excel - edición directa */}
-          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 200px)" }}>
+            <div className="overflow-auto">
               <table className="border-collapse text-xs">
-                <thead className="bg-stone-100 border-b-2 border-stone-300">
+                <thead className="bg-stone-100 border-b-2 border-stone-300 sticky top-0 z-30">
                   <tr>
                     {/* Columna acciones */}
                     <th className="sticky left-0 z-20 bg-stone-100 px-2 py-2 text-center font-bold text-stone-700 border-r border-stone-300 min-w-[80px]">
