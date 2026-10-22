@@ -347,12 +347,6 @@ export function PlanSafra() {
         />
         <div className="px-5 py-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div
-              className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
-            >
-              <Calendar className="h-5 w-5" />
-            </div>
             <div>
               <h2
                 className="text-lg sm:text-xl font-extrabold tracking-tight leading-none"
@@ -360,12 +354,6 @@ export function PlanSafra() {
               >
                 PLAN SAFRA
               </h2>
-              <p
-                className="text-[11px] font-medium mt-1"
-                style={{ color: DORADO_CLARO }}
-              >
-                Calculadora de pagos escalonados
-              </p>
             </div>
           </div>
         </div>
