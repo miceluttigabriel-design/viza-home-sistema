@@ -709,22 +709,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       <header className="sticky top-0 z-30 backdrop-blur shadow-md" style={{ backgroundColor: AZUL }}>
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="font-extrabold text-xl sm:text-2xl leading-none tracking-tight flex items-baseline gap-1">
-                <span className="text-white">VIZA</span>
-                <span style={{ color: DORADO }}>home</span>
-              </h1>
-              <p className="text-[11px] font-medium mt-1" style={{ color: DORADO_CLARO }}>
-                Todo para tu hogar, en un solo lugar.
-              </p>
-              <p className="text-[10px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: DORADO }}>
-                Cotizador
-              </p>
-            </div>
-          </div>
-
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-end gap-4">
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Reloj en tiempo real - DD/MM/AAAA - HH:MM:SS */}
             <div
