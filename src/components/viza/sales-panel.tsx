@@ -709,9 +709,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       <header className="sticky top-0 z-30 backdrop-blur shadow-md" style={{ backgroundColor: AZUL }}>
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 overflow-x-auto whitespace-nowrap">
-          {/* LADO IZQUIERDO: Reloj (PRIMERO, EXTREMO IZQUIERDO) + Cambiar contraseña + GESTIÓN ACCESOS + PANEL ADMIN + Tabs */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 flex-wrap">
+          {/* LADO IZQUIERDO: Reloj (PRIMERO, EXTREMO IZQUIERDO) + GESTIÓN ACCESOS + PANEL ADMIN + Tabs */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {/* Reloj en tiempo real - PRIMERO EN EL HEADER, EXTREMO IZQUIERDO - FONDO BLANCO TEXTO NEGRO */}
             <div
               className="hidden md:flex flex-col items-start text-left px-3 py-1.5 rounded-xl border"
@@ -738,19 +738,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 Hora local
               </span>
             </div>
-            <button
-              onClick={() => setCambiarContrasenaOpen(true)}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
-              style={{
-                backgroundColor: "rgba(217, 184, 107, 0.18)",
-                color: DORADO,
-                borderColor: "rgba(217,184,107,0.4)",
-              }}
-              title="Cambiar mi contraseña"
-              aria-label="Cambiar mi contraseña"
-            >
-              <KeyRound className="h-4 w-4" />
-            </button>
             {/* REGLA DE ORO: los botones de navegación dependen del ROL, no de la pantalla.
                 El supremo admin es supremo en TODAS las pantallas (admin, ventas, gestión). */}
             {isSupremoRole && onGoGestion && (
@@ -812,7 +799,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
           </div>
 
-          {/* LADO DERECHO: User info + Avatar + Cerrar sesión (AL LADO DEL USUARIO, LADO DERECHO) */}
+          {/* LADO DERECHO: User info + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión */}
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="hidden sm:flex flex-col items-end text-right">
               <span className="text-xs font-semibold text-white leading-none">
@@ -828,6 +815,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             >
               {(user.name || user.email).charAt(0).toUpperCase()}
             </div>
+            {/* Cambiar contraseña - ENTRE MEDIO del usuario y Cerrar sesión */}
+            <button
+              onClick={() => setCambiarContrasenaOpen(true)}
+              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
+              style={{
+                backgroundColor: "rgba(217, 184, 107, 0.18)",
+                color: DORADO,
+                borderColor: "rgba(217,184,107,0.4)",
+              }}
+              title="Cambiar mi contraseña"
+              aria-label="Cambiar mi contraseña"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
             {/* Cerrar sesión - AL LADO DEL USUARIO, LADO DERECHO (justo después del avatar) */}
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
