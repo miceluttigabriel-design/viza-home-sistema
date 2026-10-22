@@ -401,8 +401,8 @@ export async function POST(req: NextRequest) {
 
     // ===== LÓGICA CONDICIONAL v7.0 =====
     // incluirPrecioContado controla si se muestran las columnas de precios:
-    //   false → solo #, SKU, PRODUCTO, CANT. (4 columnas)
-    //   true  → #, SKU, PRODUCTO, CANT., P. CONTADO, SUBTOTAL (6 columnas)
+    //   false -> solo #, SKU, PRODUCTO, CANT. (4 columnas)
+    //   true  -> #, SKU, PRODUCTO, CANT., P. CONTADO, SUBTOTAL (6 columnas)
     // El bloque TOTAL CONTADO siempre se muestra (calculado por el frontend, correcto).
     // Los productos regalo (ej: casco) se muestran con su precio de lista pero NO se suman al total.
     const incluirPrecioContado = body.incluirPrecioContado === true;
@@ -488,25 +488,28 @@ export async function POST(req: NextRequest) {
       y += rowH;
     });
 
-    // ===== BLOQUE TOTAL CONTADO (SIEMPRE visible, valor del frontend es correcto) =====
-    // El frontend calcula contadoOriginal = suma de subtotales NO regalo (productos a cobrar)
-    // Los productos regalo (ej: casco) no se suman al total.
-    ensureSpace(90);
-    y += 14;
-    const mostrarAjustado =
-      body.contadoMarginPct > 0 && body.contadoAjustado !== body.contadoOriginal;
-    y = drawTotalBlock(
-      doc,
-      pageW,
-      margin,
-      contentW,
-      y,
-      "TOTAL CONTADO",
-      body.contadoOriginal,
-      mostrarAjustado ? "PRECIO FINAL CONTADO:" : undefined,
-      mostrarAjustado ? body.contadoAjustado : undefined
-    );
-    y += 20;
+    // ===== BLOQUE TOTAL CONTADO (condicional: SOLO si incluirPrecioContado=true) =====
+    // REGLA v7.1: Cuando el checkbox "Incluir precio de contado" está DESMARCADO,
+    // NO se muestran los precios ni el bloque TOTAL CONTADO.
+    // Cuando está MARCADO, se muestran los precios Y el bloque TOTAL CONTADO.
+    if (incluirPrecioContado) {
+      ensureSpace(90);
+      y += 14;
+      const mostrarAjustado =
+        body.contadoMarginPct > 0 && body.contadoAjustado !== body.contadoOriginal;
+      y = drawTotalBlock(
+        doc,
+        pageW,
+        margin,
+        contentW,
+        y,
+        "TOTAL CONTADO",
+        body.contadoOriginal,
+        mostrarAjustado ? "PRECIO FINAL CONTADO:" : undefined,
+        mostrarAjustado ? body.contadoAjustado : undefined
+      );
+      y += 20;
+    }
 
     // ===== OPCIONES DE FINANCIACIÓN =====
     ensureSpace(120);
