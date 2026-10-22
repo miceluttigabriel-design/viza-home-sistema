@@ -709,12 +709,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       <header className="sticky top-0 z-30 backdrop-blur shadow-md" style={{ backgroundColor: AZUL }}>
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2 flex-wrap lg:flex-nowrap">
           {/* LADO IZQUIERDO: Reloj (PRIMERO, EXTREMO IZQUIERDO) + GESTIÓN ACCESOS + PANEL ADMIN + Tabs */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap">
             {/* Reloj en tiempo real - PRIMERO EN EL HEADER, EXTREMO IZQUIERDO - FONDO BLANCO TEXTO NEGRO */}
             <div
-              className="hidden md:flex flex-col items-start text-left px-3 py-1.5 rounded-xl border"
+              className="hidden md:flex flex-col items-start text-left px-3 py-1.5 rounded-xl border shrink-0"
               style={{
                 backgroundColor: "#FFFFFF",
                 borderColor: "#000000",
@@ -743,7 +743,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             {isSupremoRole && onGoGestion && (
               <button
                 onClick={onGoGestion}
-                className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border shadow-sm hover:brightness-110"
+                className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border shadow-sm hover:brightness-110 shrink-0"
                 style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO, borderColor: DORADO_OSCURO }}
                 title="Gestión de Accesos y Contraseñas"
               >
@@ -755,7 +755,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             {isAdmin && onGoAdmin && (
               <button
                 onClick={onGoAdmin}
-                className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border border-transparent hover:brightness-95"
+                className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border border-transparent hover:brightness-95 shrink-0"
                 style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
                 title="Volver al Panel Admin"
               >
@@ -766,7 +766,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             {/* === TOGGLE MODO COTIZADOR / PLAN SAFRA / CON CHEQUE (al lado de PANEL ADMIN) === */}
             <button
               onClick={() => setViewMode("cotizador")}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
               style={
                 viewMode === "cotizador"
                   ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
@@ -777,7 +777,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
             <button
               onClick={() => setViewMode("safra")}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
               style={
                 viewMode === "safra"
                   ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
@@ -788,7 +788,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
             <button
               onClick={() => setViewMode("cheque")}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
               style={
                 viewMode === "cheque"
                   ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
@@ -799,18 +799,18 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
           </div>
 
-          {/* LADO DERECHO: User info + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* LADO DERECHO: User info + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión - TODO JUNTO EN UN BLOQUE */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto lg:ml-0">
             <div className="hidden sm:flex flex-col items-end text-right">
-              <span className="text-xs font-semibold text-white leading-none">
+              <span className="text-xs font-semibold text-white leading-none whitespace-nowrap">
                 {user.name || user.email}
               </span>
-              <span className="text-[10px] uppercase tracking-wide font-bold" style={{ color: isSupremoRole ? DORADO : DORADO_CLARO }}>
+              <span className="text-[10px] uppercase tracking-wide font-bold whitespace-nowrap" style={{ color: isSupremoRole ? DORADO : DORADO_CLARO }}>
                 {isSupremoRole ? "SUPREMO ADMIN" : isAdmin ? "ADMINISTRADOR" : "COLABORADOR"}
               </span>
             </div>
             <div
-              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold"
+              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
               style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
             >
               {(user.name || user.email).charAt(0).toUpperCase()}
@@ -818,7 +818,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             {/* Cambiar contraseña - ENTRE MEDIO del usuario y Cerrar sesión */}
             <button
               onClick={() => setCambiarContrasenaOpen(true)}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
+              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border shrink-0"
               style={{
                 backgroundColor: "rgba(217, 184, 107, 0.18)",
                 color: DORADO,
@@ -832,7 +832,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             {/* Cerrar sesión - AL LADO DEL USUARIO, LADO DERECHO (justo después del avatar) */}
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
+              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border shrink-0"
               style={{
                 backgroundColor: "rgba(255,255,255,0.08)",
                 color: DORADO_CLARO,

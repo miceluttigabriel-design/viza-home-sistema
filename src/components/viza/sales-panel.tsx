@@ -799,19 +799,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
           </div>
 
-          {/* LADO DERECHO: User info + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión - TODO JUNTO EN UN BLOQUE */}
+          {/* LADO DERECHO: Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión - TODO JUNTO EN UN BLOQUE */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto lg:ml-0">
-            <div className="hidden sm:flex flex-col items-end text-right">
-              <span className="text-xs font-semibold text-white leading-none whitespace-nowrap">
-                {user.name || user.email}
-              </span>
-              <span className="text-[10px] uppercase tracking-wide font-bold whitespace-nowrap" style={{ color: isSupremoRole ? DORADO : DORADO_CLARO }}>
-                {isSupremoRole ? "SUPREMO ADMIN" : isAdmin ? "ADMINISTRADOR" : "COLABORADOR"}
-              </span>
-            </div>
             <div
-              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 cursor-default"
               style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
+              title={`${user.name || user.email} · ${isSupremoRole ? "SUPREMO ADMIN" : isAdmin ? "ADMINISTRADOR" : "COLABORADOR"}`}
+              aria-label={user.name || user.email}
             >
               {(user.name || user.email).charAt(0).toUpperCase()}
             </div>
