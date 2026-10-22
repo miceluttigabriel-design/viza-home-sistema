@@ -710,22 +710,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 flex-wrap">
-          {/* LADO IZQUIERDO: User info + Avatar + Cambiar contraseña + GESTIÓN ACCESOS + PANEL ADMIN + Tabs */}
+          {/* LADO IZQUIERDO: Cambiar contraseña + GESTIÓN ACCESOS + PANEL ADMIN + Tabs */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <div className="hidden sm:flex flex-col items-end text-right">
-              <span className="text-xs font-semibold text-white leading-none">
-                {user.name || user.email}
-              </span>
-              <span className="text-[10px] uppercase tracking-wide font-bold" style={{ color: isSupremoRole ? DORADO : DORADO_CLARO }}>
-                {isSupremoRole ? "SUPREMO ADMIN" : isAdmin ? "ADMINISTRADOR" : "COLABORADOR"}
-              </span>
-            </div>
-            <div
-              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold"
-              style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
-            >
-              {(user.name || user.email).charAt(0).toUpperCase()}
-            </div>
             <button
               onClick={() => setCambiarContrasenaOpen(true)}
               className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
@@ -800,22 +786,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
           </div>
 
-          {/* LADO DERECHO: Cerrar sesión + Reloj (FONDO BLANCO, TEXTO NEGRO) */}
+          {/* LADO DERECHO: Reloj (FRENTE AL USUARIO LADO IZQUIERDO) + User info + Avatar + Cerrar sesión (LADO DERECHO) */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              onClick={() => signOut({ callbackUrl: "/" })}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
-              style={{
-                backgroundColor: "rgba(255,255,255,0.08)",
-                color: DORADO_CLARO,
-                borderColor: "rgba(217,184,107,0.4)",
-              }}
-              title="Cerrar sesión"
-              aria-label="Cerrar sesión"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-            {/* Reloj en tiempo real - AL LADO DERECHO DE CERRAR SESIÓN - FONDO BLANCO TEXTO NEGRO */}
+            {/* Reloj en tiempo real - PRIMERO, FRENTE AL USUARIO, LADO IZQUIERDO - FONDO BLANCO TEXTO NEGRO */}
             <div
               className="hidden md:flex flex-col items-end text-right px-3 py-1.5 rounded-xl border"
               style={{
@@ -841,6 +814,34 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 Hora local
               </span>
             </div>
+            <div className="hidden sm:flex flex-col items-end text-right">
+              <span className="text-xs font-semibold text-white leading-none">
+                {user.name || user.email}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide font-bold" style={{ color: isSupremoRole ? DORADO : DORADO_CLARO }}>
+                {isSupremoRole ? "SUPREMO ADMIN" : isAdmin ? "ADMINISTRADOR" : "COLABORADOR"}
+              </span>
+            </div>
+            <div
+              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold"
+              style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
+            >
+              {(user.name || user.email).charAt(0).toUpperCase()}
+            </div>
+            {/* Cerrar sesión - AL LADO DEL USUARIO, LADO DERECHO */}
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.08)",
+                color: DORADO_CLARO,
+                borderColor: "rgba(217,184,107,0.4)",
+              }}
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
