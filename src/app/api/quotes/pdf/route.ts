@@ -512,7 +512,22 @@ export async function POST(req: NextRequest) {
     }
 
     // ===== OPCIONES DE FINANCIACIÓN =====
+    // REGLA v7.2: Si NO se mostró el bloque TOTAL CONTADO (incluirPrecioContado=false),
+    // agregar espaciado vertical extra (40px) + línea divisoria sutil para separar
+    // visualmente "PRODUCTOS" de "FINANCIACIÓN".
     ensureSpace(120);
+
+    if (!incluirPrecioContado) {
+      // Espaciado extra + línea divisoria dorada sutil
+      y += 30;
+      doc.setDrawColor(...C_GOLD);
+      doc.setLineWidth(0.5);
+      // Línea más corta (solo 40% del ancho) para verse sutil y centrada
+      const lineW = contentW * 0.4;
+      const lineX = margin + (contentW - lineW) / 2;
+      doc.line(lineX, y, lineX + lineW, y);
+      y += 20;
+    }
 
     drawSectionTitle(doc, margin, contentW, y, "OPCIONES DE FINANCIACIÓN");
     y += 18;
