@@ -68,12 +68,13 @@ export function PlanSafra() {
     setCascoAplicado,
     setCascoValor,
     setCascoDescripcion,
-    // === Refuerzos (lista dinámica manual) ===
+    // === Refuerzos (v2.0: solo fecha, valor auto-calculado) ===
     refuerzos,
     addRefuerzo,
     removeRefuerzo,
     setRefuerzoMes,
     setRefuerzoValor,
+    setRefuerzoFecha,
     // === Cronograma y cálculos en tiempo real ===
     cronograma,
     totalContado,
@@ -704,39 +705,40 @@ export function PlanSafra() {
                     fueraDePlazo ? "border-rose-300 bg-rose-50" : "border-stone-200 bg-stone-50"
                   }`}
                 >
-                  {/* Mes */}
+                  {/* Fecha (v2.0 - reemplaza input de mes) */}
                   <div>
                     <label className="text-[10px] font-semibold text-stone-500 uppercase block mb-0.5">
-                      Mes (máx 18)
+                      Fecha de pago
                     </label>
                     <input
-                      type="number"
-                      min={1}
-                      max={18}
-                      step={1}
-                      value={r.mes || ""}
-                      onChange={(e) => setRefuerzoMes(r.id, Number(e.target.value))}
-                      className={`w-full h-10 px-2 rounded-md border-2 bg-white text-sm font-semibold outline-none tabular-nums ${
+                      type="date"
+                      value={r.fecha || ""}
+                      min={(() => {
+                        const d = new Date((fechaEmision || new Date().toISOString().slice(0,10)) + "T00:00:00");
+                        d.setMonth(d.getMonth() + 1);
+                        return d.toISOString().slice(0, 10);
+                      })()}
+                      max={(() => {
+                        const d = new Date((fechaEmision || new Date().toISOString().slice(0,10)) + "T00:00:00");
+                        d.setMonth(d.getMonth() + 18);
+                        return d.toISOString().slice(0, 10);
+                      })()}
+                      onChange={(e) => setRefuerzoFecha(r.id, e.target.value)}
+                      className={`w-full h-10 px-2 rounded-md border-2 bg-white text-sm font-semibold outline-none ${
                         fueraDePlazo
                           ? "border-rose-400 focus:ring-2 focus:ring-rose-100"
                           : "border-stone-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                       }`}
                     />
                   </div>
-                  {/* Valor */}
+                  {/* Valor (v2.0 - AUTO-CALCULADO, read-only) */}
                   <div>
                     <label className="text-[10px] font-semibold text-stone-500 uppercase block mb-0.5">
-                      Valor del pago (Gs)
+                      Valor (auto-calculado)
                     </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1000}
-                      value={r.valor || ""}
-                      onChange={(e) => setRefuerzoValor(r.id, Number(e.target.value))}
-                      placeholder="Ej: 100000"
-                      className="w-full h-10 px-2 rounded-md border-2 border-stone-200 bg-white text-sm font-semibold focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none tabular-nums"
-                    />
+                    <div className="h-10 px-2 rounded-md border-2 border-stone-200 bg-stone-100 text-sm font-bold text-stone-700 flex items-center tabular-nums">
+                      {r.valor > 0 ? formatPYG(r.valor) : "—"}
+                    </div>
                   </div>
                   {/* Eliminar */}
                   <div className="flex items-end">

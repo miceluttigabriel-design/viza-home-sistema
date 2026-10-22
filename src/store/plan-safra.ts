@@ -47,9 +47,10 @@ export interface SafraProducto {
 // Un pago manual hecho por el vendedor (entrada o refuerzo)
 export interface PagoManual {
   id: string;        // ID único
-  mes: number;       // 0 = entrada, 1-18 = refuerzos
-  valor: number;     // monto en Gs
+  mes: number;       // 0 = entrada, 1-18 = refuerzos (derivado de fecha)
+  valor: number;     // monto en Gs (AUTO-CALCULADO en v2.0)
   concepto: string;  // descripción (default "Refuerzo Mes N")
+  fecha?: string;    // ISO date (YYYY-MM-DD) - input del usuario (v2.0)
 }
 
 // Cronograma generado mes a mes con interés sobre saldo restante
@@ -99,6 +100,7 @@ export interface PlanSafraState {
   removeRefuerzo: (id: string) => void;
   setRefuerzoMes: (id: string, mes: number) => void;
   setRefuerzoValor: (id: string, valor: number) => void;
+  setRefuerzoFecha: (id: string, fecha: string) => void; // v2.0 - fecha deriva mes
 
   // === Cronograma calculado en tiempo real ===
   cronograma: FilaCronograma[];
@@ -212,9 +214,29 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   }
 
   // === CONSTRUIR MAPA DE PAGOS POR MES (refuerzos, mes 1-18) ===
+  // v2.0: AUTO-CALCULAR valores de refuerzos (usuario solo ingresa fecha)
+  // La lógica: distribuir (saldo restante + interés estimado) entre los refuerzos
+  // con redondeo hacia arriba (mínimo).
+  // PRESERVA la lógica de cálculo de intereses del cronograma (mes a mes sobre saldo).
+  const refuerzosCalculados = refuerzos.map(r => ({ ...r }));
+  if (refuerzosCalculados.length > 0 && saldoActual > 0) {
+    // Calcular mes máximo (último refuerzo)
+    const maxMes = Math.max(...refuerzosCalculados.map(r => Math.max(1, Math.min(18, r.mes))));
+    // Estimar interés total (worst case: sin pagos hasta el último mes)
+    const interesEstimado = saldoActual * (safraPctPromedio / 100) * maxMes;
+    // Total a pagar = saldo + interés estimado
+    const totalAPagar = saldoActual + interesEstimado;
+    // Valor por refuerzo (redondeo hacia arriba)
+    const valorPorRefuerzo = Math.ceil(totalAPagar / refuerzosCalculados.length);
+    // Asignar valores auto-calculados
+    refuerzosCalculados.forEach(r => {
+      r.valor = valorPorRefuerzo;
+    });
+  }
+
   // Suma todos los pagos de refuerzos que caen en el mismo mes
   const pagosPorMes: Record<number, number> = {};
-  refuerzos.forEach((r) => {
+  refuerzosCalculados.forEach((r) => {
     if (r.mes >= 1 && r.mes <= 18 && r.valor > 0) {
       pagosPorMes[r.mes] = (pagosPorMes[r.mes] || 0) + r.valor;
     }
@@ -266,6 +288,7 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   const cuadra = Math.abs(saldoActual) <= 1;
 
   return {
+    refuerzos: refuerzosCalculados,  // v2.0: devolver refuerzos con valores auto-calculados
     cronograma,
     totalContado,           // neto (después del casco)
     totalContadoBruto,      // bruto (sin casco) - para mostrar en el PDF
@@ -336,19 +359,21 @@ export const usePlanSafraStore = create<PlanSafraState>()(
       setCascoValor: (v) => set({ cascoValor: Math.max(0, v) }),
       setCascoDescripcion: (s) => set({ cascoDescripcion: s }),
 
-      // --- Refuerzos (lista dinámica manual) ---
+      // --- Refuerzos (lista dinámica, vendedor solo ingresa FECHA, valor es auto-calc) ---
       refuerzos: [],
       addRefuerzo: () =>
         set((state) => {
-          // Siguiente mes sugerido: el último mes + 1, o 1 si está vacío
+          // v2.0: Siguiente mes sugerido + fecha por defecto
           const ultimoMes = state.refuerzos.length > 0
             ? Math.max(...state.refuerzos.map((r) => r.mes))
             : 0;
           const nuevoMes = Math.min(18, ultimoMes + 1);
+          const fechaBase = state.fechaEmision || new Date().toISOString().slice(0, 10);
+          const nuevaFecha = addMonths(fechaBase, nuevoMes);
           return {
             refuerzos: [
               ...state.refuerzos,
-              { id: genId(), mes: nuevoMes, valor: 0, concepto: `Refuerzo Mes ${nuevoMes}` },
+              { id: genId(), mes: nuevoMes, valor: 0, concepto: `Refuerzo Mes ${nuevoMes}`, fecha: nuevaFecha },
             ],
           };
         }),
@@ -370,6 +395,28 @@ export const usePlanSafraStore = create<PlanSafraState>()(
             r.id === id ? { ...r, valor: Math.max(0, valor) } : r
           ),
         })),
+      // v2.0: setRefuerzoFecha - usuario ingresa fecha, sistema deriva mes
+      setRefuerzoFecha: (id, fecha) =>
+        set((state) => {
+          const fechaBase = state.fechaEmision || new Date().toISOString().slice(0, 10);
+          // Calcular diferencia en meses entre fechaBase y fecha
+          const dBase = new Date(fechaBase + "T00:00:00");
+          const dRefuerzo = new Date(fecha + "T00:00:00");
+          let mesCalculado = (dRefuerzo.getFullYear() - dBase.getFullYear()) * 12 + (dRefuerzo.getMonth() - dBase.getMonth());
+          // Si el día del refuerzo < día de la base, restar 1 (no completó el mes)
+          if (dRefuerzo.getDate() < dBase.getDate()) {
+            mesCalculado--;
+          }
+          // Validar: entre 1 y 18
+          mesCalculado = Math.max(1, Math.min(18, mesCalculado));
+          return {
+            refuerzos: state.refuerzos.map((r) =>
+              r.id === id
+                ? { ...r, fecha, mes: mesCalculado, concepto: `Refuerzo Mes ${mesCalculado}` }
+                : r
+            ),
+          };
+        }),
 
       // --- Cronograma y totales ---
       cronograma: [],
