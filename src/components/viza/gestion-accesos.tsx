@@ -17,6 +17,8 @@ import {
   Loader2,
   Copy,
   Check,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -100,8 +102,72 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
   const [destacadosIds, setDestacadosIds] = useState<Set<string>>(new Set());
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null);
   const [pollingActivo, setPollingActivo] = useState(true);
+  // Estado para sonido de notificaciones en tiempo real
+  const [sonidoActivo, setSonidoActivo] = useState(true);
   // Modal: cambiar mi propia contraseña (visible también para el supremo)
   const [cambiarContrasenaOpen, setCambiarContrasenaOpen] = useState(false);
+
+  // Función para reproducir un sonido de notificación usando Web Audio API
+  // (no requiere archivos externos - generado en runtime)
+  const tocarSonido = () => {
+    if (!sonidoActivo) return;
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const audioCtx = new AudioContextClass();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      // Tono de notificación: dos beeps ascendentes (C5 → E5)
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+      oscillator.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.15); // E5
+
+      gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.25, audioCtx.currentTime + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+      gainNode.gain.linearRampToValueAtTime(0.25, audioCtx.currentTime + 0.20);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+
+      oscillator.start(audioCtx.currentTime);
+      oscillator.stop(audioCtx.currentTime + 0.5);
+      // Cerrar contexto para liberar memoria
+      setTimeout(() => audioCtx.close(), 600);
+    } catch (e) {
+      console.warn("[gestion-accesos] No se pudo reproducir sonido:", e);
+    }
+  };
+
+  // Función para notificar cambios en tiempo real (toast + sonido)
+  const notificarCambio = (usuarioPrevio: Usuario, usuarioNuevo: Usuario) => {
+    const email = usuarioNuevo.email;
+    const nombre = usuarioNuevo.name || email;
+
+    // Detectar tipo de cambio
+    if (usuarioPrevio.contrasenaActual !== usuarioNuevo.contrasenaActual) {
+      const cambiadoPor = usuarioNuevo.cambiadoPor || "el usuario";
+      toast.success(`🔒 ${email} cambió su contraseña`, {
+        description: `Detectado en tiempo real · Cambio por: ${cambiadoPor}`,
+        duration: 6000,
+      });
+      tocarSonido();
+    } else if (usuarioPrevio.active !== usuarioNuevo.active) {
+      const accion = usuarioNuevo.active ? "ACTIVADO" : "DESACTIVADO";
+      toast.info(`${nombre} fue ${accion}`, {
+        description: `Usuario ${accion.toLowerCase()} en tiempo real`,
+        duration: 5000,
+      });
+      tocarSonido();
+    } else if (usuarioPrevio.role !== usuarioNuevo.role) {
+      toast.info(`🎭 ${email} cambió de rol`, {
+        description: `De ${usuarioPrevio.role} → ${usuarioNuevo.role}`,
+        duration: 5000,
+      });
+      tocarSonido();
+    }
+  };
 
   const cargar = async (silent: boolean = false) => {
     if (!silent) setLoading(true);
@@ -118,6 +184,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
       setUsuarios((prev) => {
         if (prev.length === 0) return nuevos;
         const cambios = new Set<string>();
+        const cambiosDetallados: Array<{ previo: Usuario; nuevo: Usuario }> = [];
         for (const n of nuevos) {
           const old = prev.find((p) => p.id === n.id);
           if (!old) {
@@ -128,12 +195,20 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
             old.role !== n.role
           ) {
             cambios.add(n.id);
+            cambiosDetallados.push({ previo: old, nuevo: n });
           }
         }
         if (cambios.size > 0) {
           setDestacadosIds(cambios);
           setUltimaActualizacion(new Date());
           setTimeout(() => setDestacadosIds(new Set()), 2500);
+          // Notificar cada cambio al usuario (toast + sonido)
+          // Usar setTimeout para no bloquear el render
+          setTimeout(() => {
+            for (const { previo, nuevo } of cambiosDetallados) {
+              notificarCambio(previo, nuevo);
+            }
+          }, 0);
         }
         return nuevos;
       });
@@ -516,6 +591,20 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           >
             <span className={`h-2 w-2 rounded-full ${pollingActivo ? "bg-green-500 animate-pulse" : "bg-stone-400"}`} />
             <span className="hidden sm:inline">{pollingActivo ? "AUTO ON" : "AUTO OFF"}</span>
+          </button>
+
+          <button
+            onClick={() => setSonidoActivo((v) => !v)}
+            title={sonidoActivo ? "Silenciar notificaciones de cambios" : "Activar sonido de notificaciones"}
+            className={`h-10 px-3 rounded-lg font-medium text-xs sm:text-sm flex items-center gap-2 border transition-colors ${
+              sonidoActivo
+                ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
+                : "bg-stone-100 text-stone-700 border-stone-300 hover:bg-stone-200"
+            }`}
+          >
+            {sonidoActivo ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            <span className="hidden sm:inline">{sonidoActivo ? "SONIDO ON" : "SONIDO OFF"}</span>
+            <span className="sm:hidden">{sonidoActivo ? "🔔" : "🔕"}</span>
           </button>
 
           <button
