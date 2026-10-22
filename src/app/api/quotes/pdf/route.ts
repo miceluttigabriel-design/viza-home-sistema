@@ -16,7 +16,6 @@ interface PdfPlan {
   total: number;
 }
 
-// Plan alternativo SIN ENTREGA inicial (con margen por diferido + fechas de cuotas)
 interface PdfPlanSinEntrega {
   letra: string;
   cuotas: number;
@@ -39,31 +38,19 @@ interface PdfPayload {
   contadoOriginal: number;
   contadoMarginPct: number;
   contadoAjustado: number;
-  // === DESCUENTO POR CASCO (regalo obligatorio de VIZA Home) ===
-  // Si cascoAplicado = true, el valor del descuento debe ser > 0.
-  // El sistema BLOQUEA la generación del PDF si no se cumple.
   cascoAplicado?: boolean;
   cascoValor?: number;
   cascoDescripcion?: string;
-  baseCalculo?: number; // contadoAjustado - descuentoCasco
-  // Indica si el precio de contado se incluye como "Plan A" en el presupuesto
+  baseCalculo?: number;
   incluirContadoEnPresupuesto?: boolean;
-  // Si true, muestra la columna "P. CONTADO" en la tabla de productos del PDF
-  // Por defecto es false (no muestra precio unitario)
-  incluirPrecioContado?: boolean;
-  // Tipo de entrega inicial (con/sin entrega)
+  incluirPrecioContado?: boolean; // Legacy - ahora SIEMPRE se muestran los precios
   tipoEntrega?: TipoEntregaPdf;
-  // Fecha de inicio de la primera cuota (ISO date) para sin_entrega
   fechaInicioPago?: string;
-  // Días diferidos calculados (hoy -> fechaInicioPago)
   diasDiferidos?: number | null;
-  // Margen aplicado sobre el valor base (0.05 o 0.10)
   margenAplicado?: number | null;
-  // Flags para mostrar/ocultar opciones en el presupuesto
   mostrarConEntrega?: boolean;
   mostrarSinEntrega?: boolean;
   planes: PdfPlan[];
-  // Planes alternativos sin entrega inicial (solo si tipoEntrega === "sin_entrega")
   planesSinEntrega?: PdfPlanSinEntrega[] | null;
 }
 
@@ -80,17 +67,12 @@ function formatDateEs(date: Date): string {
   });
 }
 
-// Formatea una fecha ISO ("YYYY-MM-DD") sin usar new Date(string) para evitar
-// el problema de zona horaria (UTC vs local) que puede cambiar el día.
-// CRÍTICO: Parsear manualmente para mantener la fecha EXACTA.
 function formatDateEsSafe(isoDate: string): string {
   if (!isoDate || isoDate.length < 10) return "-";
   const [año, mes, dia] = isoDate.split("-");
   return `${dia}/${mes}/${año}`;
 }
 
-// Formatea fecha Y hora en formato DD/MM/AAAA - HH:MM:SS (hora local del servidor)
-// Se usa para la "FECHA DE EMISIÓN" del PDF - refleja el momento exacto de generación
 function formatDateTimeEs(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   const fecha = `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
@@ -109,52 +91,27 @@ function generateQuoteNumber(): string {
 }
 
 // =====================================================================
-// DIBUJO COMPARTIDO — Estilo editorial VIZA HOME (Profesional)
+// PALETA CORPORATIVA VIZA HOME - Replica exacta de la referencia
 // =====================================================================
-// Paleta corporativa
-const C_BLUE: [number, number, number] = [21, 87, 137]; // #155789
-const C_GOLD: [number, number, number] = [217, 184, 107]; // #D9B86B
-const C_DARK_BLUE: [number, number, number] = [13, 61, 94]; // #0d3d5e
-const C_INK: [number, number, number] = [28, 25, 23]; // #1c1917
-const C_MUTED: [number, number, number] = [120, 113, 108]; // #78716c
-const C_ROW_ALT: [number, number, number] = [245, 245, 244]; // #f5f5f4
-const C_ROW_SIN: [number, number, number] = [255, 251, 235]; // #fffbeb
-const C_ROW_ENT: [number, number, number] = [240, 253, 244]; // #f0fdf4
-const C_CREAM: [number, number, number] = [255, 248, 231]; // #fff8e7
-const C_BOX_BG: [number, number, number] = [250, 250, 249]; // #fafaf9
-const C_BORDER: [number, number, number] = [214, 211, 209]; // #d6d3d1
-const C_BADGE_ENT: [number, number, number] = [40, 167, 69]; // verde
-const C_BADGE_SIN: [number, number, number] = [255, 193, 7]; // dorado fuerte
+const C_BLUE: [number, number, number] = [21, 87, 137]; // #155789 (header tablas + footer)
+const C_DARK_BLUE: [number, number, number] = [13, 74, 122]; // #0D4A7A (logo VIZA + precios - azul corporativo)
+const C_GOLD: [number, number, number] = [217, 184, 107]; // #D9B86B (acento dorado)
+const C_INK: [number, number, number] = [40, 40, 40]; // #282828 (texto principal)
+const C_MUTED: [number, number, number] = [102, 102, 102]; // #666 (slogan + textos secundarios)
+const C_LIGHT_BG: [number, number, number] = [240, 244, 248]; // #F0F4F8 (metadata)
+const C_CREAM: [number, number, number] = [255, 248, 231]; // #FFF8E7 (total contado)
+const C_BORDER_LIGHT: [number, number, number] = [224, 224, 224]; // #E0E0E0 (bordes sutiles)
+const C_ROW_ALT: [number, number, number] = [232, 236, 242]; // #E8ECF2 (zebra visible)
+const C_WHITE: [number, number, number] = [255, 255, 255]; // #FFFFFF
 
-// Dibuja el header VIZA HOME (logo + slogan + título derecho)
+// ===== HEADER ESTILO REFERENCIA: fondo blanco + logo azul + línea dorada inferior =====
 function drawVizaHeader(doc: jsPDF, pageW: number, margin: number, subtitulo: string) {
-  // Fondo azul corporativo
-  doc.setFillColor(...C_BLUE);
-  doc.rect(0, 0, pageW, 124, "F");
-
-  // Banda dorada superior (acento)
-  doc.setFillColor(...C_GOLD);
-  doc.rect(0, 0, pageW, 4, "F");
-
-  // Onda decorativa con triángulos en la base del header
-  const waveY = 120;
-  const triCount = 16;
-  const triW = pageW / triCount;
-  for (let i = 0; i < triCount; i++) {
-    const x0 = i * triW;
-    if (i % 2 === 0) {
-      doc.setFillColor(...C_BLUE);
-      doc.triangle(x0, waveY, x0 + triW / 2, waveY + 8, x0 + triW, waveY, "F");
-    } else {
-      doc.setFillColor(...C_GOLD);
-      doc.triangle(x0, waveY, x0 + triW / 2, waveY + 6, x0 + triW, waveY, "F");
-    }
-  }
+  // Fondo BLANCO (sin relleno azul). El blanco es el default de la página.
 
   // Ícono de grilla (2x2 cuadrados dorados) - reemplaza la "A" de VIZA
   const gridX = margin;
-  const gridY = 32;
-  const sqSize = 11;
+  const gridY = 28;
+  const sqSize = 12;
   const sqGap = 3;
   doc.setFillColor(...C_GOLD);
   doc.rect(gridX, gridY, sqSize, sqSize, "F");
@@ -162,35 +119,40 @@ function drawVizaHeader(doc: jsPDF, pageW: number, margin: number, subtitulo: st
   doc.rect(gridX, gridY + sqSize + sqGap, sqSize, sqSize, "F");
   doc.rect(gridX + sqSize + sqGap, gridY + sqSize + sqGap, sqSize, sqSize, "F");
 
-  // Texto "VIZA" blanco + " home" dorado
+  // Texto "VIZA" azul oscuro + " home" dorado
   const txtX = gridX + sqSize * 2 + sqGap + 12;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(26);
-  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(28);
+  doc.setTextColor(...C_DARK_BLUE);
   const vizaTxt = "VIZA";
   doc.text(vizaTxt, txtX, 56);
   const vizaW = doc.getTextWidth(vizaTxt);
   doc.setTextColor(...C_GOLD);
   doc.text(" home", txtX + vizaW, 56);
 
-  // Slogan en dorado itálico
+  // Slogan en gris medio, debajo del logo
   doc.setFont("helvetica", "italic");
   doc.setFontSize(10);
-  doc.setTextColor(...C_GOLD);
+  doc.setTextColor(...C_MUTED);
   doc.text("Todo para tu hogar, en un solo lugar.", txtX, 72);
 
-  // Título "PRESUPUESTO" (dorado) + subtítulo (blanco) a la derecha
+  // Título "PRESUPUESTO" + subtitulo alineado a la derecha (azul oscuro)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(20);
-  doc.setTextColor(...C_GOLD);
-  doc.text("PRESUPUESTO", pageW - margin, 56, { align: "right" });
+  doc.setTextColor(...C_DARK_BLUE);
+  doc.text("PRESUPUESTO", pageW - margin, 50, { align: "right" });
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(12);
-  doc.setTextColor(255, 255, 255);
-  doc.text(subtitulo, pageW - margin, 74, { align: "right" });
+  doc.setFontSize(13);
+  doc.setTextColor(...C_DARK_BLUE);
+  doc.text(subtitulo, pageW - margin, 70, { align: "right" });
+
+  // Línea dorada inferior que atraviesa todo el ancho
+  doc.setDrawColor(...C_GOLD);
+  doc.setLineWidth(2);
+  doc.line(0, 86, pageW, 86);
 }
 
-// Dibuja el bloque de metadata (número + fecha de emisión) estilo editorial
+// ===== METADATA BOX: fondo gris claro, SIN borde visible, dos columnas =====
 function drawMetaBox(
   doc: jsPDF,
   margin: number,
@@ -199,67 +161,56 @@ function drawMetaBox(
   numeroPresupuesto: string,
   fechaEmision: string
 ): number {
-  const boxH = 42;
-  // Fondo crema muy claro
-  doc.setFillColor(...C_BOX_BG);
-  doc.roundedRect(margin, yStart, contentW, boxH, 6, 6, "F");
-  // Borde fino
-  doc.setDrawColor(...C_BORDER);
-  doc.setLineWidth(1);
-  doc.roundedRect(margin, yStart, contentW, boxH, 6, 6, "D");
-  // Pequeño acento dorado a la izquierda
-  doc.setFillColor(...C_GOLD);
-  doc.rect(margin, yStart, 4, boxH, "F");
+  const boxH = 38;
+
+  // Fondo gris azulado claro (sin borde visible)
+  doc.setFillColor(...C_LIGHT_BG);
+  doc.rect(margin, yStart, contentW, boxH, "F");
 
   const colGap = contentW / 2;
 
   // Columna izquierda: N° PRESUPUESTO
-  doc.setFont("helvetica", "normal");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
-  doc.setTextColor(...C_MUTED);
-  doc.text("N° PRESUPUESTO", margin + 14, yStart + 15);
+  doc.setTextColor(...C_DARK_BLUE);
+  doc.text("N° PRESUPUESTO", margin + 14, yStart + 14);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setTextColor(...C_INK);
-  doc.text(numeroPresupuesto, margin + 14, yStart + 32);
+  doc.text(numeroPresupuesto, margin + 14, yStart + 30);
 
   // Columna derecha: FECHA DE EMISIÓN
-  doc.setFont("helvetica", "normal");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
-  doc.setTextColor(...C_MUTED);
-  doc.text("FECHA DE EMISIÓN", margin + colGap + 14, yStart + 15);
+  doc.setTextColor(...C_DARK_BLUE);
+  doc.text("FECHA DE EMISIÓN", margin + colGap + 14, yStart + 14);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setTextColor(...C_INK);
-  doc.text(fechaEmision, margin + colGap + 14, yStart + 32);
+  doc.text(fechaEmision, margin + colGap + 14, yStart + 30);
 
   return yStart + boxH;
 }
 
-// Dibuja título de sección con subrayado dorado estilo editorial
+// ===== TÍTULO DE SECCIÓN: solo texto azul oscuro, SIN subrayado =====
 function drawSectionTitle(
   doc: jsPDF,
   margin: number,
-  contentW: number,
+  _contentW: number,
   y: number,
   texto: string,
-  weight: "bold" | "normal" = "bold",
   size: number = 12
 ): number {
-  doc.setFont("helvetica", weight);
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(size);
-  doc.setTextColor(...C_INK);
+  doc.setTextColor(...C_DARK_BLUE);
   doc.text(texto, margin, y);
-  const txtW = doc.getTextWidth(texto);
-  doc.setDrawColor(...C_GOLD);
-  doc.setLineWidth(2);
-  doc.line(margin, y + 4, margin + Math.min(txtW + 30, contentW), y + 4);
   return y;
 }
 
-// Dibuja el bloque TOTAL destacado (estilo editorial: cream + borde dorado)
+// ===== BLOQUE TOTAL CONTADO: crema + borde RECTO dorado 2px =====
 function drawTotalBlock(
   doc: jsPDF,
   pageW: number,
@@ -277,26 +228,26 @@ function drawTotalBlock(
 
   // Fondo crema pálido
   doc.setFillColor(...C_CREAM);
-  doc.roundedRect(boxX, y, boxW, boxH, 6, 6, "F");
-  // Borde dorado
+  doc.rect(boxX, y, boxW, boxH, "F");
+  // Borde dorado RECTO (no redondeado) - 2px
   doc.setDrawColor(...C_GOLD);
   doc.setLineWidth(2);
-  doc.roundedRect(boxX, y, boxW, boxH, 6, 6, "D");
+  doc.rect(boxX, y, boxW, boxH, "D");
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.setTextColor(...C_DARK_BLUE);
+  doc.setTextColor(...C_INK);
   doc.text(etiqueta, boxX + 16, y + 22);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
+  doc.setFontSize(20);
   doc.setTextColor(...C_DARK_BLUE);
   doc.text(formatPYG(valor), boxX + boxW - 16, y + 26, { align: "right" });
 
   if (etiquetaSecundaria && valorSecundario !== undefined) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.setTextColor(...C_GOLD);
+    doc.setTextColor(...C_MUTED);
     doc.text(etiquetaSecundaria, boxX + 16, y + 50);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
@@ -307,7 +258,7 @@ function drawTotalBlock(
   return y + boxH;
 }
 
-// Dibuja el footer VIZA HOME (banda azul + contacto + validez + agradecimiento)
+// ===== FOOTER: azul + banda dorada superior + "¡Gracias!" dorado =====
 function drawVizaFooter(
   doc: jsPDF,
   pageW: number,
@@ -322,24 +273,14 @@ function drawVizaFooter(
   doc.setFillColor(...C_BLUE);
   doc.rect(0, footerY, pageW, footerH, "F");
 
-  // Banda dorada superior del footer
+  // Banda dorada superior del footer (3-4px)
   doc.setFillColor(...C_GOLD);
-  doc.rect(0, footerY, pageW, 3, "F");
+  doc.rect(0, footerY, pageW, 3.5, "F");
 
-  // Mini logo: grilla dorada + texto "VIZA home"
-  const fGridX = margin;
-  const fGridY = footerY + 14;
-  const fSqSize = 6;
-  const fSqGap = 1.5;
-  doc.setFillColor(...C_GOLD);
-  doc.rect(fGridX, fGridY, fSqSize, fSqSize, "F");
-  doc.rect(fGridX + fSqSize + fSqGap, fGridY, fSqSize, fSqSize, "F");
-  doc.rect(fGridX, fGridY + fSqSize + fSqGap, fSqSize, fSqSize, "F");
-  doc.rect(fGridX + fSqSize + fSqGap, fGridY + fSqSize + fSqGap, fSqSize, fSqSize, "F");
-
-  const fTxtX = fGridX + fSqSize * 2 + fSqGap + 6;
+  // Mini logo VIZA home (texto, sin grilla decorativa)
+  const fTxtX = margin;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
+  doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
   const fViza = "VIZA";
   doc.text(fViza, fTxtX, footerY + 22);
@@ -347,46 +288,54 @@ function drawVizaFooter(
   doc.setTextColor(...C_GOLD);
   doc.text(" home", fTxtX + fVizaW, footerY + 22);
 
-  // Slogan
+  // Slogan en blanco/gris claro
   doc.setFont("helvetica", "italic");
-  doc.setFontSize(7);
-  doc.setTextColor(...C_GOLD);
-  doc.text("Todo para tu hogar, en un solo lugar.", fTxtX, footerY + 32);
+  doc.setFontSize(8);
+  doc.setTextColor(204, 204, 204);
+  doc.text("Todo para tu hogar, en un solo lugar.", fTxtX, footerY + 34);
 
-  // Información de contacto (texto plano, sin emojis)
+  // Información de contacto (texto plano)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-  doc.text("Tel: (0987) 700 707", fTxtX, footerY + 44);
-  doc.text("Email: ventas.online@viza.com.py", fTxtX, footerY + 54);
-  doc.text("Web: www.viza.com.py   ·   Redes: @vizahome", fTxtX, footerY + 64);
+  doc.setTextColor(238, 238, 238);
+  doc.text("Tel: (0987) 700 707", fTxtX, footerY + 46);
+  doc.text("Email: ventas.online@viza.com.py", fTxtX, footerY + 56);
+  doc.text("Web: www.viza.com.py   ·   Redes: @vizahome", fTxtX, footerY + 66);
 
   // Texto legal + validez + agradecimiento (a la derecha)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.setTextColor(220, 220, 220);
+  doc.setTextColor(204, 204, 204);
   doc.text(textoLegal, pageW - margin, footerY + 14, { align: "right" });
   doc.text("Presupuesto válido por 10 días desde la fecha de emisión.", pageW - margin, footerY + 26, { align: "right" });
 
+  // "¡Gracias por elegirnos!" en DORADO bold (no blanco)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(...C_GOLD);
-  doc.text("¡Gracias por elegirnos!", pageW - margin, footerY + 42, { align: "right" });
+  doc.text("¡Gracias por elegirnos!", pageW - margin, footerY + 44, { align: "right" });
 
-  // Número de página si tiene múltiples páginas
   const totalPages = doc.getNumberOfPages();
   if (totalPages > 1) {
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
-      doc.setTextColor(220, 220, 220);
-      doc.text(`Página ${i} de ${totalPages}`, pageW - margin, footerY + 64, { align: "right" });
+      doc.setTextColor(204, 204, 204);
+      doc.text(`Página ${i} de ${totalPages}`, pageW - margin, footerY + 66, { align: "right" });
     }
   }
 }
 
-// POST /api/quotes/pdf - genera PDF del presupuesto profesional (estilo editorial VIZA HOME)
+// POST /api/quotes/pdf - genera PDF del presupuesto profesional (estilo referencia VIZA HOME)
+// REGLA v6.0: Réplica exacta del diseño de referencia - estilo LIMPIO y MINIMALISTA
+// - Header fondo BLANCO + logo azul + línea dorada inferior
+// - Metadata SIN borde, fondo gris claro
+// - Títulos SIN subrayado
+// - Tabla productos filas TODAS blancas (sin zebra)
+// - Bloque TOTAL CONTADO con borde RECTO (no redondeado)
+// - Tabla financiación modalidades TEXTO PLANO (no badges), línea dorada separa grupos
+// - SIEMPRE muestra P. CONTADO, SUBTOTAL y bloque TOTAL CONTADO
 export async function POST(req: NextRequest) {
   try {
     const body: PdfPayload = await req.json();
@@ -400,17 +349,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "BLOQUEO DE SEGURIDAD: No se puede generar el PDF. El casco es un regalo de Viza Home y es OBLIGATORIO aplicar el valor del descuento del casco. Complete el valor del descuento o desmarque el casco.",
+            "BLOQUEO DE SEGURIDAD: No se puede generar el PDF. El casco es un regalo de Viza Home y es OBLIGATORIO aplicar el valor del descuento del casco.",
         },
         { status: 400 }
       );
     }
     if (body.cascoAplicado && body.cascoValor && body.cascoValor > (body.contadoOriginal || 0)) {
       return NextResponse.json(
-        {
-          error:
-            "BLOQUEO DE SEGURIDAD: El valor del descuento por casco no puede ser mayor al total de productos.",
-        },
+        { error: "BLOQUEO DE SEGURIDAD: El valor del descuento por casco no puede ser mayor al total de productos." },
         { status: 400 }
       );
     }
@@ -423,11 +369,11 @@ export async function POST(req: NextRequest) {
 
     let y = 0;
 
-    // ===== HEADER EDITORIAL =====
+    // ===== HEADER (fondo blanco + logo azul + línea dorada) =====
     drawVizaHeader(doc, pageW, margin, "DE VENTA");
 
-    // ===== BLOQUE N° PRESUPUESTO + FECHA =====
-    y = 150;
+    // ===== METADATA (caja gris, sin borde) =====
+    y = 100;
     y = drawMetaBox(
       doc,
       margin,
@@ -437,33 +383,8 @@ export async function POST(req: NextRequest) {
       formatDateTimeEs(new Date())
     );
 
-    // ===== DATOS DEL CLIENTE (si hay) =====
-    y += 24;
-    if (body.cliente && body.cliente.nombre) {
-      drawSectionTitle(doc, margin, contentW, y, "CLIENTE");
-      y += 22;
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.setTextColor(...C_INK);
-      doc.text(body.cliente.nombre, margin, y);
-      y += 16;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(...C_MUTED);
-
-      const clienteLines: string[] = [];
-      if (body.cliente.telefono) clienteLines.push(`Teléfono/WhatsApp: ${body.cliente.telefono}`);
-      if (body.cliente.documento) clienteLines.push(`Documento: ${body.cliente.documento}`);
-      clienteLines.forEach((line, idx) => {
-        doc.text(line, margin, y + idx * 12);
-      });
-      y += Math.max(clienteLines.length * 12, 12);
-    }
-
     // ===== TABLA DE PRODUCTOS =====
-    y += 18;
+    y += 30;
 
     const ensureSpace = (min: number) => {
       if (y > pageH - min) {
@@ -474,51 +395,47 @@ export async function POST(req: NextRequest) {
 
     ensureSpace(180);
 
+    // Título de sección SIN subrayado
     drawSectionTitle(doc, margin, contentW, y, "PRODUCTOS DE LA COTIZACIÓN");
-    y += 22;
+    y += 18;
 
-    // REGLA: Si incluirPrecioContado === false, solo mostrar #, SKU, PRODUCTO, CANT.
-    // Si incluirPrecioContado === true, mostrar todas las columnas + bloque TOTAL
-    const incluirPrecioContado = body.incluirPrecioContado === true;
+    // 6 COLUMNAS (siempre): #, SKU, PRODUCTO, CANT., P. CONTADO, SUBTOTAL
     const colN = 25;
     const colSku = 70;
-    const colCant = 50;
-    const colPU = 110;
-    const colSub = 110;
-    const colName = incluirPrecioContado
-      ? contentW - colN - colSku - colCant - colPU - colSub
-      : contentW - colN - colSku - colCant;
+    const colCant = 45;
+    const colPU = 105;
+    const colSub = 105;
+    const colName = contentW - colN - colSku - colCant - colPU - colSub;
 
     // Header tabla (fondo azul, texto blanco, bold)
     doc.setFillColor(...C_BLUE);
-    doc.rect(margin, y, contentW, 26, "F");
+    doc.rect(margin, y, contentW, 24, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
 
     let xx = margin + 8;
-    doc.text("#", xx, y + 17);
+    doc.text("#", xx, y + 16);
     xx += colN;
-    doc.text("SKU", xx, y + 17);
+    doc.text("SKU", xx, y + 16);
     xx += colSku;
-    doc.text("PRODUCTO", xx, y + 17);
+    doc.text("PRODUCTO", xx, y + 16);
     xx += colName;
-    doc.text("CANT.", xx, y + 17);
+    doc.text("CANT.", xx, y + 16);
     xx += colCant;
-    if (incluirPrecioContado) {
-      doc.text("P. CONTADO", xx, y + 17);
-      xx += colPU;
-      doc.text("SUBTOTAL", xx + colSub - 8, y + 17, { align: "right" });
-    }
+    doc.text("P. CONTADO", xx, y + 16);
+    xx += colPU;
+    doc.text("SUBTOTAL", xx + colSub - 8, y + 16, { align: "right" });
 
-    y += 26;
+    y += 24;
 
-    // Filas productos - alternando blanco / gris muy claro
+    // Filas productos - con zebra sutil (alternando blanco y gris muy claro)
     doc.setFontSize(9);
     body.items.forEach((it, idx) => {
       ensureSpace(60);
-      const rowH = 30;
+      const rowH = 28;
 
+      // Zebra: filas pares con fondo gris muy claro, impares blancas
       if (idx % 2 === 0) {
         doc.setFillColor(...C_ROW_ALT);
         doc.rect(margin, y, contentW, rowH, "F");
@@ -544,177 +461,199 @@ export async function POST(req: NextRequest) {
       doc.setTextColor(...C_INK);
       doc.text(String(it.quantity), xxx, y + 18);
 
-      if (incluirPrecioContado) {
-        xxx += colCant;
-        doc.setTextColor(...C_INK);
-        doc.text(formatPYG(it.priceContado), xxx, y + 18);
-        xxx += colPU;
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(...C_DARK_BLUE);
-        doc.text(formatPYG(it.subtotalContado), xxx + colSub - 8, y + 18, { align: "right" });
-      }
+      // SIEMPRE mostrar P. CONTADO y SUBTOTAL
+      xxx += colCant;
+      doc.setTextColor(...C_INK);
+      doc.text(formatPYG(it.priceContado), xxx, y + 18);
+      xxx += colPU;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...C_DARK_BLUE);
+      doc.text(formatPYG(it.subtotalContado), xxx + colSub - 8, y + 18, { align: "right" });
 
       y += rowH;
     });
 
-    // Solo mostrar bloque TOTAL CONTADO si incluirPrecioContado es true
-    if (incluirPrecioContado) {
-      ensureSpace(90);
-      y += 14;
-      const mostrarAjustado =
-        body.contadoMarginPct > 0 && body.contadoAjustado !== body.contadoOriginal;
-      y = drawTotalBlock(
-        doc,
-        pageW,
-        margin,
-        contentW,
-        y,
-        "TOTAL CONTADO",
-        body.contadoOriginal,
-        mostrarAjustado ? "PRECIO FINAL CONTADO:" : undefined,
-        mostrarAjustado ? body.contadoAjustado : undefined
-      );
-      y += 20;
-    } else {
-      y += 14;
-    }
+    // ===== BLOQUE TOTAL CONTADO (siempre visible, borde RECTO) =====
+    ensureSpace(90);
+    y += 14;
+    const mostrarAjustado =
+      body.contadoMarginPct > 0 && body.contadoAjustado !== body.contadoOriginal;
+    y = drawTotalBlock(
+      doc,
+      pageW,
+      margin,
+      contentW,
+      y,
+      "TOTAL CONTADO",
+      body.contadoOriginal,
+      mostrarAjustado ? "PRECIO FINAL CONTADO:" : undefined,
+      mostrarAjustado ? body.contadoAjustado : undefined
+    );
+    y += 20;
 
-    // ===== OPCIONES DE FINANCIACIÓN (PLANES) =====
+    // ===== OPCIONES DE FINANCIACIÓN =====
     ensureSpace(120);
 
     drawSectionTitle(doc, margin, contentW, y, "OPCIONES DE FINANCIACIÓN");
-    y += 22;
+    y += 18;
 
-    // Columnas más anchas para evitar superposición
-    const pColBadge = 90;
-    const pColCuotas = 140;
-    const pColValor = 160;
-    const pColTotal = contentW - pColBadge - pColCuotas - pColValor;
+    // 5 COLUMNAS: PLAN | MODALIDAD | CUOTAS | VALOR POR CUOTA | TOTAL DEL PLAN
+    const pColBadge = 40;       // PLAN (letra)
+    const pColModalidad = 100;  // MODALIDAD (texto plano)
+    const pColCuotas = 170;     // CUOTAS (texto)
+    const pColValor = 130;      // VALOR POR CUOTA
+    const pColTotal = contentW - pColBadge - pColModalidad - pColCuotas - pColValor;
 
     const hayPlanesConEntrega = body.mostrarConEntrega !== false && body.planes && body.planes.length > 0;
     const hayPlanesSinEntrega = body.mostrarSinEntrega !== false && body.planesSinEntrega && body.planesSinEntrega.length > 0;
 
     if (!hayPlanesConEntrega && !hayPlanesSinEntrega) {
       ensureSpace(50);
-      doc.setFillColor(...C_BOX_BG);
-      doc.setDrawColor(...C_BORDER);
-      doc.setLineWidth(1);
-      doc.roundedRect(margin, y, contentW, 40, 4, 4, "FD");
+      doc.setFillColor(...C_LIGHT_BG);
+      doc.rect(margin, y, contentW, 36, "F");
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
       doc.setTextColor(...C_MUTED);
-      doc.text("CONSULTE OPCIONES DE FINANCIACIÓN", margin + contentW / 2, y + 24, { align: "center" });
-      y += 48;
+      doc.text("CONSULTE OPCIONES DE FINANCIACIÓN", margin + contentW / 2, y + 22, { align: "center" });
+      y += 44;
     } else {
-      // Header de tabla (estilo editorial: azul, blanco, bold)
+      // Header de tabla (fondo azul, blanco, bold) - 5 columnas
       doc.setFillColor(...C_BLUE);
-      doc.rect(margin, y, contentW, 26, "F");
+      doc.rect(margin, y, contentW, 24, "F");
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       let pp = margin + 8;
-      doc.text("PLAN", pp, y + 17);
+      doc.text("PLAN", pp, y + 16);
       pp += pColBadge;
-      doc.text("MODALIDAD", pp, y + 17);
+      doc.text("MODALIDAD", pp, y + 16);
+      pp += pColModalidad;
+      doc.text("CUOTAS", pp, y + 16);
       pp += pColCuotas;
-      doc.text("VALOR POR CUOTA", pp, y + 17);
+      doc.text("VALOR POR CUOTA", pp, y + 16);
       pp += pColValor;
-      doc.text("TOTAL DEL PLAN", pp + pColTotal - 8, y + 17, { align: "right" });
-      y += 26;
+      doc.text("TOTAL DEL PLAN", pp + pColTotal - 8, y + 16, { align: "right" });
+      y += 24;
 
-      const rowH = 32;
+      const rowH = 28;
       let rowIdx = 0;
+      let tuvoConEntrega = false;
 
-      // ===== CON ENTREGA (saltar si cuotas === 1) =====
+      // ===== CON ENTREGA (texto plano, sin badges) =====
       if (body.mostrarConEntrega !== false && body.planes) {
-        body.planes.forEach((plan) => {
+        body.planes.forEach((plan, idxCe) => {
           if (plan.cuotas === 1) return;
           ensureSpace(rowH);
-          if (rowIdx % 2 === 0) {
+
+          // Zebra: filas pares con fondo gris visible, impares blancas
+          if (idxCe % 2 === 0) {
             doc.setFillColor(...C_ROW_ALT);
             doc.rect(margin, y, contentW, rowH, "F");
           }
-          // Columna 1: Letra + Badge
+
+          // Col 1: Letra (PLAN)
           let pp2 = margin + 8;
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(13);
-          doc.setTextColor(...C_GOLD);
-          doc.text(plan.letra, pp2, y + 20);
-          // Badge CON ENTREGA (caja con fondo verde)
-          doc.setFillColor(...C_BADGE_ENT);
-          doc.rect(pp2 + 16, y + 11, 65, 14, "F");
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(7);
-          doc.setTextColor(255, 255, 255);
-          doc.text("CON ENTREGA", pp2 + 19, y + 21);
-          // Columna 2: Modalidad
-          pp2 += pColBadge;
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(10);
-          doc.setTextColor(...C_INK);
-          doc.text(`1 ENTRADA + ${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`, pp2, y + 21);
-          // Columna 3: Valor por cuota
-          pp2 += pColCuotas;
           doc.setFont("helvetica", "bold");
           doc.setFontSize(11);
           doc.setTextColor(...C_DARK_BLUE);
-          doc.text(formatPYG(plan.valorPorCuota), pp2, y + 21);
-          // Columna 4: Total
+          doc.text(plan.letra, pp2, y + 18);
+
+          // Col 2: MODALIDAD - TEXTO PLANO (sin badge)
+          pp2 += pColBadge;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9);
+          doc.setTextColor(...C_INK);
+          doc.text("CON ENTREGA", pp2, y + 18);
+
+          // Col 3: CUOTAS
+          pp2 += pColModalidad;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(...C_INK);
+          doc.text(`1 ENTRADA + ${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`, pp2, y + 18);
+
+          // Col 4: VALOR POR CUOTA
+          pp2 += pColCuotas;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor(...C_DARK_BLUE);
+          doc.text(formatPYG(plan.valorPorCuota), pp2, y + 18);
+
+          // Col 5: TOTAL DEL PLAN
           pp2 += pColValor;
           doc.setFont("helvetica", "bold");
           doc.setTextColor(...C_DARK_BLUE);
-          doc.text(formatPYG(plan.total), pp2 + pColTotal - 8, y + 21, { align: "right" });
+          doc.text(formatPYG(plan.total), pp2 + pColTotal - 8, y + 18, { align: "right" });
           y += rowH;
           rowIdx++;
+          tuvoConEntrega = true;
         });
       }
 
-      // ===== SIN ENTREGA (misma tabla) =====
+      // ===== LÍNEA DORADA separadora entre CON ENTREGA y SIN ENTREGA =====
+      if (tuvoConEntrega && hayPlanesSinEntrega) {
+        doc.setDrawColor(...C_GOLD);
+        doc.setLineWidth(2);
+        doc.line(margin, y, margin + contentW, y);
+        y += 4;
+      }
+
+      // ===== SIN ENTREGA (texto plano, sin badges) =====
       if (hayPlanesSinEntrega && body.planesSinEntrega) {
-        body.planesSinEntrega.forEach((plan) => {
+        body.planesSinEntrega.forEach((plan, idxSe) => {
           ensureSpace(rowH);
-          if (rowIdx % 2 === 0) {
-            doc.setFillColor(...C_ROW_SIN);
+
+          // Zebra: filas pares con fondo gris visible, impares blancas
+          if (idxSe % 2 === 0) {
+            doc.setFillColor(...C_ROW_ALT);
             doc.rect(margin, y, contentW, rowH, "F");
           }
+
+          // Col 1: Letra
           let pp2 = margin + 8;
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(13);
-          doc.setTextColor(...C_GOLD);
-          doc.text(plan.letra, pp2, y + 20);
-          // Badge SIN ENTREGA
-          doc.setFillColor(...C_BADGE_SIN);
-          doc.rect(pp2 + 16, y + 11, 65, 14, "F");
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(7);
-          doc.setTextColor(...C_INK);
-          doc.text("SIN ENTREGA", pp2 + 19, y + 21);
-          pp2 += pColBadge;
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(10);
-          doc.setTextColor(...C_INK);
-          doc.text(plan.cuotas === 1 ? "1 PAGO" : `${plan.cuotas} CUOTAS`, pp2, y + 21);
-          pp2 += pColCuotas;
           doc.setFont("helvetica", "bold");
           doc.setFontSize(11);
           doc.setTextColor(...C_DARK_BLUE);
-          doc.text(formatPYG(plan.valorPorCuota), pp2, y + 21);
+          doc.text(plan.letra, pp2, y + 18);
+
+          // Col 2: MODALIDAD - TEXTO PLANO
+          pp2 += pColBadge;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9);
+          doc.setTextColor(...C_INK);
+          doc.text("SIN ENTREGA", pp2, y + 18);
+
+          // Col 3: CUOTAS
+          pp2 += pColModalidad;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(...C_INK);
+          doc.text(plan.cuotas === 1 ? "1 PAGO" : `${plan.cuotas} CUOTAS`, pp2, y + 18);
+
+          // Col 4: VALOR POR CUOTA
+          pp2 += pColCuotas;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor(...C_DARK_BLUE);
+          doc.text(formatPYG(plan.valorPorCuota), pp2, y + 18);
+
+          // Col 5: TOTAL DEL PLAN
           pp2 += pColValor;
           doc.setFont("helvetica", "bold");
           doc.setTextColor(...C_DARK_BLUE);
-          doc.text(formatPYG(plan.total), pp2 + pColTotal - 8, y + 21, { align: "right" });
+          doc.text(formatPYG(plan.total), pp2 + pColTotal - 8, y + 18, { align: "right" });
           y += rowH;
           rowIdx++;
         });
       }
     }
 
-    // ===== OBSERVACIONES =====
+    // ===== OBSERVACIONES (si hay) =====
     if (body.cliente && body.cliente.observaciones && body.cliente.observaciones.trim()) {
       ensureSpace(80);
       y += 16;
       drawSectionTitle(doc, margin, contentW, y, "OBSERVACIONES");
-      y += 20;
+      y += 18;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(...C_MUTED);
@@ -723,7 +662,7 @@ export async function POST(req: NextRequest) {
       y += obsLines.length * 12;
     }
 
-    // ===== FOOTER EDITORIAL =====
+    // ===== FOOTER =====
     drawVizaFooter(
       doc,
       pageW,
@@ -732,7 +671,6 @@ export async function POST(req: NextRequest) {
       "VIZA HOME E.A.S · Muebles, Electrodomésticos y Motos"
     );
 
-    // Generar buffer
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
 
     return new NextResponse(pdfBuffer, {
