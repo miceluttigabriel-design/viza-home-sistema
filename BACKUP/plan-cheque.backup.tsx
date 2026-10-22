@@ -124,15 +124,6 @@ export function PlanCheque() {
 
   return (
     <div className="space-y-5">
-      {/* HEADER */}
-      <section className="rounded-2xl shadow-md overflow-hidden border" style={{ background: `linear-gradient(135deg, ${AZUL} 0%, ${AZUL_OSCURO} 100%)`, borderColor: DORADO }}>
-        <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="px-6 py-4">
-          <h1 className="font-extrabold text-xl text-white">PLAN CON CHEQUE</h1>
-          <p className="text-[11px] mt-1" style={{ color: DORADO_CLARO }}>Financiación con cheques de pago diferido</p>
-        </div>
-      </section>
-
       {/* BUSCADOR */}
       <div className="max-w-7xl mx-auto px-4 pb-3">
         <div ref={searchRef} className="relative">

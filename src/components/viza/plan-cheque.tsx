@@ -124,13 +124,14 @@ export function PlanCheque() {
 
   return (
     <div className="space-y-5">
-      {/* BUSCADOR */}
-      <div className="max-w-7xl mx-auto px-4 pb-3">
-        <div ref={searchRef} className="relative">
+      {/* PRODUCTOS AGREGADOS (con buscador integrado) */}
+      <Section title={`PRODUCTOS AGREGADOS (${productos.length})`} icon={<Package className="h-4 w-4" />}>
+        {/* Buscador integrado dentro del cuadro PRODUCTOS AGREGADOS */}
+        <div ref={searchRef} className="relative mb-4">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400" />
           <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); setShowResults(true); }}
             placeholder="Buscar producto por nombre, SKU o marca..."
-            className="w-full h-14 pl-12 pr-4 rounded-xl border-2 bg-white text-base font-medium focus:outline-none shadow-sm focus:ring-4" style={{ borderColor: "#e7e5e4" }} />
+            className="w-full h-12 pl-12 pr-4 rounded-xl border-2 bg-white text-base font-medium focus:outline-none shadow-sm focus:ring-4" style={{ borderColor: "#e7e5e4" }} />
           {showResults && search.trim() && (
             <div className="absolute z-40 top-full mt-2 w-full bg-white rounded-xl border border-stone-200 shadow-2xl max-h-96 overflow-y-auto">
               {loadingSearch ? <div className="p-4 text-sm text-stone-500 text-center">Buscando...</div> :
@@ -144,10 +145,7 @@ export function PlanCheque() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* PRODUCTOS */}
-      <Section title={`PRODUCTOS AGREGADOS (${productos.length})`} icon={<Package className="h-4 w-4" />}>
         {productos.length === 0 ? (
           <div className="py-6 text-center"><Package className="h-10 w-10 text-stone-300 mx-auto mb-2" /><p className="text-sm font-medium text-stone-500">No hay productos agregados</p></div>
         ) : (
