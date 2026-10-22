@@ -1,159 +1,201 @@
+// Prisma schema - VIZA HOME E.A.S - Panel de Ventas
+// Compatible con SQLite (desarrollo local) y PostgreSQL (Vercel+Neon producción)
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
+  // SQLite para desarrollo local, PostgreSQL para producción (Vercel+Neon)
+  // El provider se elige automáticamente según la DATABASE_URL:
+  //   - Si DATABASE_URL empieza con "file:" → SQLite
+  //   - Si DATABASE_URL empieza con "postgresql:" o "postgres:" → PostgreSQL
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Para soportar también SQLite en desarrollo:
+  // uncomment la siguiente línea para usar sqlite local
+  // directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  name         String?
-  password     String
-  role         String        @default("colaborador")
-  active       Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      String   @default("colaborador") // "supremo_admin" | "admin" | "colaborador"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotes Quote[]
   passwordLogs PasswordLog[]
-  quotes       Quote[]
 }
 
+// Bitácora de contraseñas - solo el SUPREMO_ADMIN puede verla
 model PasswordLog {
-  id                   String   @id @default(cuid())
-  userId               String
-  email                String
-  contrasenaTextoPlano String
-  fechaCambio          DateTime @default(now())
-  cambiadoPor          String   @default("SISTEMA")
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                     String   @id @default(cuid())
+  userId                 String
+  email                  String
+  contrasenaTextoPlano   String   // Contraseña legible para recuperación
+  fechaCambio            DateTime @default(now())
+  cambiadoPor            String   @default("SISTEMA") // "SISTEMA", "SUPREMO_ADMIN", "USUARIO"
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([email])
 }
 
 model Product {
-  id               String      @id @default(cuid())
-  sku              String      @unique
-  name             String
-  description      String?
-  category         String?
-  subcategory      String?
-  brand            String?
-  model            String?
-  imageUrl         String?
-  showInCatalog    Boolean     @default(true)
-  obs              String?
-  costBR           Float?
-  rsToGs           Float?
-  costUS           Float?
-  usToGs           Float?
-  costGs           Float?
-  rsNoUS           Float?
-  usNoGs           Float?
-  subCost          Float?
-  discountPct      Float?
-  minusDisc        Float?
-  addPct           Float?
-  plusAdd          Float?
-  admPct           Float?
-  plusAdd2         Float?
-  valorDesc        Float?
-  minusDescV       Float?
-  valorAdd         Float?
-  costProd         Float?
-  referencia       String?
-  codViza          String?
-  codShow          String?
-  pct1A6           Float?
-  pct7A13          Float?
-  pct14A30         Float?
-  marginContado    Float?
-  marginC1         Float?
-  marginC2         Float?
-  marginC3         Float?
-  marginC4         Float?
-  marginC5         Float?
-  marginC6         Float?
-  marginC7         Float?
-  marginC8         Float?
-  marginC9         Float?
-  marginC10        Float?
-  marginC11        Float?
-  marginC12        Float?
-  marginC13        Float?
-  marginC14        Float?
-  marginC15        Float?
-  marginC16        Float?
-  marginC17        Float?
-  marginC18        Float?
-  marginC19        Float?
-  marginC20        Float?
-  marginC21        Float?
-  marginC22        Float?
-  marginC23        Float?
-  marginC24        Float?
-  marginC25        Float?
-  marginC26        Float?
-  marginC27        Float?
-  marginC28        Float?
-  marginC29        Float?
-  marginC30        Float?
-  priceContado     Float?
-  price1           Float?
-  price2           Float?
-  price3           Float?
-  price4           Float?
-  price5           Float?
-  price6           Float?
-  price7           Float?
-  price8           Float?
-  price9           Float?
-  price10          Float?
-  price11          Float?
-  price12          Float?
-  price13          Float?
-  price14          Float?
-  price15          Float?
-  price16          Float?
-  price17          Float?
-  price18          Float?
-  price19          Float?
-  price20          Float?
-  price21          Float?
-  price22          Float?
-  price23          Float?
-  price24          Float?
-  price25          Float?
-  price26          Float?
-  price27          Float?
-  price28          Float?
-  price29          Float?
-  price30          Float?
-  safra            String?
-  productName      String?
-  fabricante       String?
-  subGrupo         String?
-  categoria        String?
-  division         String?
-  tipo             String?
-  marca            String?
-  modelo           String?
-  valorTecnico     Float?
-  margenTecnico    Float?
-  coluna1          String?
-  coluna2          String?
-  stock            Int         @default(0)
-  costSistema      Float?
-  price            Float       @default(0)
-  cost             Float       @default(0)
-  etiquetaColor    String?
+  id            String   @id @default(cuid())
+  sku           String   @unique
+  name          String
+
+  description   String?
+  category      String?
+  subcategory   String?
+  brand         String?
+  model         String?
+  imageUrl      String?
+  showInCatalog Boolean  @default(true)
+
+  // B (col 2): OBS
+  obs           String?
+  // Costos (cols C..T)
+  costBR       Float? // C - Costo R$ (input)
+  rsToGs       Float? // D - R$ A GS (calc = C * 1100)
+  costUS       Float? // E - Costo US$ (input)
+  usToGs       Float? // F - US$ A GS (calc = E * 6000)
+  costGs       Float? // G - Costo Gs (input)
+  rsNoUS       Float? // H - R$ NO US$ (calc IF D>0, D, F)
+  usNoGs       Float? // I - US$ NO GS (calc)
+  subCost      Float? // J - Sub-Costo (= I o G)
+  discountPct  Float? // K - % Descuento (input)
+  minusDisc    Float? // L - MENOS DESC. % (calc = J - J*K)
+  addPct       Float? // M - % Add (input)
+  plusAdd      Float? // N - MAIS % ADD (calc = L + L*M)
+  admPct       Float? // O - Gastos ADM (input)
+  plusAdd2     Float? // P - MAIS % ADD 2 (calc = N + N*O)
+  valorDesc    Float? // Q - Valor Descuento (input)
+  minusDescV   Float? // R - MENOS DESC. V (calc = P - Q)
+  valorAdd     Float? // S - Valor Add (input)
+  costProd     Float? // T - Costo Prod. (calc ROUND((R+S)/1000)*1000)
+
+  // Datos del producto (cols U..X)
+  referencia   String? // U - REFERENCIA
+  codViza      String? // V - COD VIZA (input, unique key - sku replica)
+  codShow      String? // W - COD SHOW (input)
+  // X - DESCRIPCION es `name`
+
+  // Bases de porcentajes (cols Y..AA)
+  pct1A6       Float? // Y - % 1 A 6 (input)
+  pct7A13      Float? // Z - % 7 A 13 (input)
+  pct14A30     Float? // AA - % 14 A 30 (input)
+
+  // Márgenes (cols AB..BF) - AB input, AC..BF calculados
+  marginContado Float? // AB - Contado (input initial margin)
+  marginC1      Float? // AC - 1 Cuota (calc = AB + Y)
+  marginC2      Float? // AD - 2 Cuota (calc = AC + Y)
+  marginC3      Float? // AE - 3 Cuota
+  marginC4      Float? // AF - 4 Cuota
+  marginC5      Float? // AG - 5 Cuota
+  marginC6      Float? // AH - 6 Cuota (último con Y)
+  marginC7      Float? // AI - 7 Cuota (calc = AH + Z)
+  marginC8      Float? // AJ - 8 Cuota
+  marginC9      Float? // AK - 9 Cuota
+  marginC10     Float? // AL - 10 Cuota
+  marginC11     Float? // AM - 11 Cuota
+  marginC12     Float? // AN - 12 Cuota
+  marginC13     Float? // AO - 13 Cuota (último con Z)
+  marginC14     Float? // AP - 14 Cuota (calc = AO + AA)
+  marginC15     Float? // AQ - 15 Cuota
+  marginC16     Float? // AR - 16 Cuota
+  marginC17     Float? // AS - 17 Cuota
+  marginC18     Float? // AT - 18 Cuota
+  marginC19     Float? // AU - 19 Cuota
+  marginC20     Float? // AV - 20 Cuota
+  marginC21     Float? // AW - 21 Cuota
+  marginC22     Float? // AX - 22 Cuota
+  marginC23     Float? // AY - 23 Cuota
+  marginC24     Float? // AZ - 24 Cuota
+  marginC25     Float? // BA - 25 Cuota
+  marginC26     Float? // BB - 26 Cuota
+  marginC27     Float? // BC - 27 Cuota
+  marginC28     Float? // BD - 28 Cuota
+  marginC29     Float? // BE - 29 Cuota
+  marginC30     Float? // BF - 30 Cuota (último con AA)
+
+  // Precios finales (cols BG..CK) - todos calculados
+  priceContado Float? // BG - Valor Al Contado
+  price1       Float? // BH - Valor Cuota 1
+  price2       Float? // BI - Valor Cuota 2
+  price3       Float? // BJ - Valor Cuota 3
+  price4       Float? // BK - Valor Cuota 4
+  price5       Float? // BL - Valor Cuota 5
+  price6       Float? // BM - Valor Cuota 6
+  price7       Float? // BN - Valor Cuota 7
+  price8       Float? // BO - Valor Cuota 8
+  price9       Float? // BP - Valor Cuota 9
+  price10      Float? // BQ - Valor Cuota 10
+  price11      Float? // BR - Valor Cuota 11
+  price12      Float? // BS - Valor Cuota 12
+  price13      Float? // BT - Valor Cuota 13
+  price14      Float? // BU - Valor Cuota 14
+  price15      Float? // BV - Valor Cuota 15
+  price16      Float? // BW - Valor Cuota 16
+  price17      Float? // BX - Valor Cuota 17
+  price18      Float? // BY - Valor Cuota 18
+  price19      Float? // BZ - Valor Cuota 19
+  price20      Float? // CA - Valor Cuota 20
+  price21      Float? // CB - Valor Cuota 21
+  price22      Float? // CC - Valor Cuota 22
+  price23      Float? // CD - Valor Cuota 23
+  price24      Float? // CE - Valor Cuota 24
+  price25      Float? // CF - Valor Cuota 25
+  price26      Float? // CG - Valor Cuota 26
+  price27      Float? // CH - Valor Cuota 27
+  price28      Float? // CI - Valor Cuota 28
+  price29      Float? // CJ - Valor Cuota 29
+  price30      Float? // CK - Valor Cuota 30
+
+  // Datos adicionales (cols CL..DA)
+  safra         String? // CL - SAFRA
+  productName   String? // CM - Producto
+  fabricante    String? // CO - Fabricante
+  subGrupo      String? // CP - Sub-Grupo
+  categoria     String? // CQ - Categoria
+  division      String? // CR - Division
+  tipo          String? // CS - Tipo
+  marca         String? // CT - Marca
+  modelo        String? // CU - Modelo
+  valorTecnico  Float? // CV - Valor Para Tecnico
+  margenTecnico Float? // CW - Margen P/Tecnico
+  coluna1       String? // CX - Coluna1
+  coluna2       String? // CY - Coluna2
+  stock         Int      @default(0) // CZ - Stock
+  costSistema   Float? // DA - Costo sistema
+
+  // Campos legados (compatibilidad catálogo vendedor)
+  price       Float    @default(0) // = priceContado
+  cost        Float    @default(0) // = costProd
+
+  // Etiqueta de color asignada por el admin (persistente)
+  // Valores: "verde" | "azul" | "dorado" | "rojo" | null
+  // REGLA DE ORO: Una vez asignada, sobrevive a recargas, ediciones de celdas e importaciones Excel.
+  // Solo se borra si el usuario la quita manualmente.
+  etiquetaColor String?
+
+  // Registro de trazabilidad: última edición manual del admin
+  // Se actualiza automáticamente cada vez que el admin guarda una edición (PUT o etiqueta).
+  // Sobrevive a importaciones Excel (no se toca en import route).
+  // Se muestra como badge sobre el SKU en la tabla de gestión.
   ultimaEdicionAt  DateTime?
-  ultimaEdicionPor String?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  quoteItems       QuoteItem[]
+  ultimaEdicionPor  String?  // nombre o email del admin que editó
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  quoteItems QuoteItem[]
 
   @@index([category])
   @@index([name])
@@ -161,40 +203,42 @@ model Product {
 }
 
 model Quote {
-  id              String      @id @default(cuid())
-  quoteNumber     String      @unique
-  customerName    String
-  customerPhone   String?
-  customerEmail   String?
+  id            String      @id @default(cuid())
+  quoteNumber   String      @unique
+  customerName  String
+  customerPhone String?
+  customerEmail String?
   customerAddress String?
-  vendorName      String      @default("Vendedor VIZA")
-  notes           String?
-  subtotal        Float
-  discount        Float       @default(0)
-  taxRate         Float       @default(0)
-  total           Float
-  status          String      @default("borrador")
-  userId          String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  user            User?       @relation(fields: [userId], references: [id])
-  items           QuoteItem[]
+  vendorName    String      @default("Vendedor VIZA")
+  notes         String?
+  subtotal      Float
+  discount      Float       @default(0)
+  taxRate       Float       @default(0) // Porcentaje IVA
+  total         Float
+  status        String      @default("borrador") // borrador, enviada, aprobada, rechazada
+  userId        String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  items QuoteItem[]
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
 }
 
 model QuoteItem {
-  id          String   @id @default(cuid())
-  quoteId     String
-  productId   String
+  id         String   @id @default(cuid())
+  quoteId    String
+  productId  String
   productName String
-  productSku  String
-  quantity    Int      @default(1)
-  unitPrice   Float
-  subtotal    Float
-  createdAt   DateTime @default(now())
-  product     Product  @relation(fields: [productId], references: [id])
-  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productSku String
+  quantity   Int      @default(1)
+  unitPrice  Float
+  subtotal   Float
+  createdAt  DateTime @default(now())
+
+  quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 
   @@index([quoteId])
 }
