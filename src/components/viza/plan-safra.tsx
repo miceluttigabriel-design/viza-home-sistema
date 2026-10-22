@@ -1014,8 +1014,9 @@ export function PlanSafra() {
           disabled={productos.length === 0}
           className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.01] hover:brightness-110"
           style={{
-            backgroundImage: `linear-gradient(to right, ${AZUL}, #2d82b5)`,
-            boxShadow: "0 10px 25px -8px rgba(21, 87, 137, 0.45)",
+            backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
+            color: AZUL_OSCURO,
+            boxShadow: "0 10px 25px -8px rgba(217, 184, 107, 0.55)",
           }}
         >
           <Calculator className="h-5 w-5" />
@@ -1041,8 +1042,9 @@ export function PlanSafra() {
           disabled={generatingPdf || productos.length === 0 || !cumple50 || !cuadra || refuerzos.some(r => r.mes > 18 || r.mes < 1)}
           className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:brightness-110"
           style={{
-            backgroundImage: `linear-gradient(to right, ${AZUL_OSCURO}, ${AZUL})`,
-            boxShadow: "0 8px 20px -8px rgba(13, 61, 94, 0.5)",
+            backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
+            color: AZUL_OSCURO,
+            boxShadow: "0 8px 20px -8px rgba(217, 184, 107, 0.55)",
           }}
         >
           {generatingPdf ? (
