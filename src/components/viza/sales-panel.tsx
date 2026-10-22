@@ -1461,44 +1461,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         </>
         )}
       </main>
-
-      <footer className="mt-auto" style={{ backgroundColor: AZUL }}>
-        {/* Banda dorada superior */}
-        <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-            {/* Logo + slogan */}
-            <div>
-              <h2 className="font-extrabold text-2xl leading-none tracking-tight flex items-baseline gap-1">
-                <span className="text-white">VIZA</span>
-                <span style={{ color: DORADO }}>home</span>
-              </h2>
-              <p className="text-[12px] font-medium mt-2" style={{ color: DORADO_CLARO }}>
-                Todo para tu hogar, en un solo lugar.
-              </p>
-            </div>
-
-            {/* Contacto */}
-            <div className="text-sm space-y-1" style={{ color: DORADO_CLARO }}>
-              <p className="font-bold uppercase text-[11px] tracking-wider mb-2" style={{ color: DORADO }}>
-                Contacto
-              </p>
-              <p>Tel: (0987) 700 707</p>
-              <p>Email: ventas.online@viza.com.py</p>
-              <p>Web: www.viza.com.py</p>
-            </div>
-
-            {/* Redes */}
-            <div className="text-sm space-y-1 md:text-right" style={{ color: DORADO_CLARO }}>
-              <p className="font-bold uppercase text-[11px] tracking-wider mb-2 md:text-right" style={{ color: DORADO }}>
-                Seguinos
-              </p>
-              <p>@vizahome (Facebook / Instagram)</p>
-              <p className="text-[11px] mt-2 opacity-80">© {new Date().getFullYear()} VIZA home. Todos los derechos reservados.</p>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
