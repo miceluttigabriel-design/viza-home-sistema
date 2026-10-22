@@ -710,8 +710,34 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 flex-wrap">
-          {/* LADO IZQUIERDO: Cambiar contraseña + GESTIÓN ACCESOS + PANEL ADMIN + Tabs */}
+          {/* LADO IZQUIERDO: Reloj (PRIMERO, EXTREMO IZQUIERDO) + Cambiar contraseña + GESTIÓN ACCESOS + PANEL ADMIN + Tabs */}
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            {/* Reloj en tiempo real - PRIMERO EN EL HEADER, EXTREMO IZQUIERDO - FONDO BLANCO TEXTO NEGRO */}
+            <div
+              className="hidden md:flex flex-col items-start text-left px-3 py-1.5 rounded-xl border"
+              style={{
+                backgroundColor: "#FFFFFF",
+                borderColor: "#000000",
+                color: "#000000",
+              }}
+              title="Fecha y hora actual (se actualiza cada segundo)"
+            >
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3 w-3" style={{ color: "#000000" }} />
+                <span
+                  className="text-xs font-bold tabular-nums tracking-tight"
+                  style={{ color: "#000000" }}
+                >
+                  {formatearReloj(relojAhora)}
+                </span>
+              </div>
+              <span
+                className="text-[9px] uppercase tracking-wider mt-0.5"
+                style={{ color: "#000000" }}
+              >
+                Hora local
+              </span>
+            </div>
             <button
               onClick={() => setCambiarContrasenaOpen(true)}
               className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
@@ -786,34 +812,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
           </div>
 
-          {/* LADO DERECHO: Reloj (FRENTE AL USUARIO LADO IZQUIERDO) + User info + Avatar + Cerrar sesión (LADO DERECHO) */}
+          {/* LADO DERECHO: User info + Avatar + Cerrar sesión (AL LADO DEL USUARIO, LADO DERECHO) */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Reloj en tiempo real - PRIMERO, FRENTE AL USUARIO, LADO IZQUIERDO - FONDO BLANCO TEXTO NEGRO */}
-            <div
-              className="hidden md:flex flex-col items-end text-right px-3 py-1.5 rounded-xl border"
-              style={{
-                backgroundColor: "#FFFFFF",
-                borderColor: "#000000",
-                color: "#000000",
-              }}
-              title="Fecha y hora actual (se actualiza cada segundo)"
-            >
-              <div className="flex items-center gap-1.5">
-                <Clock className="h-3 w-3" style={{ color: "#000000" }} />
-                <span
-                  className="text-xs font-bold tabular-nums tracking-tight"
-                  style={{ color: "#000000" }}
-                >
-                  {formatearReloj(relojAhora)}
-                </span>
-              </div>
-              <span
-                className="text-[9px] uppercase tracking-wider mt-0.5"
-                style={{ color: "#000000" }}
-              >
-                Hora local
-              </span>
-            </div>
             <div className="hidden sm:flex flex-col items-end text-right">
               <span className="text-xs font-semibold text-white leading-none">
                 {user.name || user.email}
@@ -828,7 +828,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             >
               {(user.name || user.email).charAt(0).toUpperCase()}
             </div>
-            {/* Cerrar sesión - AL LADO DEL USUARIO, LADO DERECHO */}
+            {/* Cerrar sesión - AL LADO DEL USUARIO, LADO DERECHO (justo después del avatar) */}
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
               className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
