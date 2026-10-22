@@ -218,20 +218,14 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   // La lógica: distribuir (saldo restante + interés estimado) entre los refuerzos
   // con redondeo hacia arriba (mínimo).
   // PRESERVA la lógica de cálculo de intereses del cronograma (mes a mes sobre saldo).
+  // FIX v2.0.1: NO devolver refuerzos en el return para evitar loop infinito.
   const refuerzosCalculados = refuerzos.map(r => ({ ...r }));
   if (refuerzosCalculados.length > 0 && saldoActual > 0) {
-    // Calcular mes máximo (último refuerzo)
     const maxMes = Math.max(...refuerzosCalculados.map(r => Math.max(1, Math.min(18, r.mes))));
-    // Estimar interés total (worst case: sin pagos hasta el último mes)
     const interesEstimado = saldoActual * (safraPctPromedio / 100) * maxMes;
-    // Total a pagar = saldo + interés estimado
     const totalAPagar = saldoActual + interesEstimado;
-    // Valor por refuerzo (redondeo hacia arriba)
     const valorPorRefuerzo = Math.ceil(totalAPagar / refuerzosCalculados.length);
-    // Asignar valores auto-calculados
-    refuerzosCalculados.forEach(r => {
-      r.valor = valorPorRefuerzo;
-    });
+    refuerzosCalculados.forEach(r => { r.valor = valorPorRefuerzo; });
   }
 
   // Suma todos los pagos de refuerzos que caen en el mismo mes
@@ -288,7 +282,7 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   const cuadra = Math.abs(saldoActual) <= 1;
 
   return {
-    refuerzos: refuerzosCalculados,  // v2.0: devolver refuerzos con valores auto-calculados
+    // v2.0 FIX: NO devolver refuerzos aquí para evitar loop infinito
     cronograma,
     totalContado,           // neto (después del casco)
     totalContadoBruto,      // bruto (sin casco) - para mostrar en el PDF
@@ -359,11 +353,10 @@ export const usePlanSafraStore = create<PlanSafraState>()(
       setCascoValor: (v) => set({ cascoValor: Math.max(0, v) }),
       setCascoDescripcion: (s) => set({ cascoDescripcion: s }),
 
-      // --- Refuerzos (lista dinámica, vendedor solo ingresa FECHA, valor es auto-calc) ---
+      // --- Refuerzos (v2.0: solo fecha, valor auto-calculado) ---
       refuerzos: [],
       addRefuerzo: () =>
         set((state) => {
-          // v2.0: Siguiente mes sugerido + fecha por defecto
           const ultimoMes = state.refuerzos.length > 0
             ? Math.max(...state.refuerzos.map((r) => r.mes))
             : 0;
@@ -399,15 +392,10 @@ export const usePlanSafraStore = create<PlanSafraState>()(
       setRefuerzoFecha: (id, fecha) =>
         set((state) => {
           const fechaBase = state.fechaEmision || new Date().toISOString().slice(0, 10);
-          // Calcular diferencia en meses entre fechaBase y fecha
           const dBase = new Date(fechaBase + "T00:00:00");
           const dRefuerzo = new Date(fecha + "T00:00:00");
           let mesCalculado = (dRefuerzo.getFullYear() - dBase.getFullYear()) * 12 + (dRefuerzo.getMonth() - dBase.getMonth());
-          // Si el día del refuerzo < día de la base, restar 1 (no completó el mes)
-          if (dRefuerzo.getDate() < dBase.getDate()) {
-            mesCalculado--;
-          }
-          // Validar: entre 1 y 18
+          if (dRefuerzo.getDate() < dBase.getDate()) { mesCalculado--; }
           mesCalculado = Math.max(1, Math.min(18, mesCalculado));
           return {
             refuerzos: state.refuerzos.map((r) =>
