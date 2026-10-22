@@ -704,27 +704,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
   };
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: CREMA }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: AZUL }}>
       {/* Header */}
       <header className="sticky top-0 z-30 backdrop-blur shadow-md" style={{ backgroundColor: AZUL }}>
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="font-extrabold text-xl sm:text-2xl leading-none tracking-tight flex items-baseline gap-1">
-                <span className="text-white">VIZA</span>
-                <span style={{ color: DORADO }}>home</span>
-              </h1>
-              <p className="text-[11px] font-medium mt-1" style={{ color: DORADO_CLARO }}>
-                Todo para tu hogar, en un solo lugar.
-              </p>
-              <p className="text-[10px] font-semibold uppercase tracking-wider mt-0.5" style={{ color: DORADO }}>
-                Cotizador
-              </p>
-            </div>
-          </div>
-
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-end gap-4">
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Reloj en tiempo real - DD/MM/AAAA - HH:MM:SS */}
             <div
@@ -1258,8 +1243,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
           disabled={items.length === 0 || planes.length === 0}
           className="w-full h-16 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.01] hover:brightness-110"
           style={{
-            backgroundImage: `linear-gradient(to right, ${AZUL}, #2d82b5)`,
-            boxShadow: "0 10px 25px -8px rgba(21, 87, 137, 0.45)",
+            backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
+            color: AZUL_OSCURO,
+            boxShadow: "0 10px 25px -8px rgba(217, 184, 107, 0.55)",
           }}
         >
           <Calculator className="h-6 w-6" />
@@ -1461,44 +1447,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         </>
         )}
       </main>
-
-      <footer className="mt-auto" style={{ backgroundColor: AZUL }}>
-        {/* Banda dorada superior */}
-        <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-            {/* Logo + slogan */}
-            <div>
-              <h2 className="font-extrabold text-2xl leading-none tracking-tight flex items-baseline gap-1">
-                <span className="text-white">VIZA</span>
-                <span style={{ color: DORADO }}>home</span>
-              </h2>
-              <p className="text-[12px] font-medium mt-2" style={{ color: DORADO_CLARO }}>
-                Todo para tu hogar, en un solo lugar.
-              </p>
-            </div>
-
-            {/* Contacto */}
-            <div className="text-sm space-y-1" style={{ color: DORADO_CLARO }}>
-              <p className="font-bold uppercase text-[11px] tracking-wider mb-2" style={{ color: DORADO }}>
-                Contacto
-              </p>
-              <p>Tel: (0987) 700 707</p>
-              <p>Email: ventas.online@viza.com.py</p>
-              <p>Web: www.viza.com.py</p>
-            </div>
-
-            {/* Redes */}
-            <div className="text-sm space-y-1 md:text-right" style={{ color: DORADO_CLARO }}>
-              <p className="font-bold uppercase text-[11px] tracking-wider mb-2 md:text-right" style={{ color: DORADO }}>
-                Seguinos
-              </p>
-              <p>@vizahome (Facebook / Instagram)</p>
-              <p className="text-[11px] mt-2 opacity-80">© {new Date().getFullYear()} VIZA home. Todos los derechos reservados.</p>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

@@ -908,9 +908,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                           <span className="font-bold text-rose-600 text-sm whitespace-nowrap">
                             {p.priceContado ? formatPYG(p.priceContado) : "—"}
                           </span>
-                          <div className="h-7 w-7 rounded-lg bg-rose-500 text-white flex items-center justify-center">
-                            <Plus className="h-4 w-4" />
-                          </div>
                         </div>
                       </button>
                     ))}
