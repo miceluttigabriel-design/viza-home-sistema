@@ -704,7 +704,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
   };
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: CREMA }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: AZUL }}>
       {/* Header */}
       <header className="sticky top-0 z-30 backdrop-blur shadow-md" style={{ backgroundColor: AZUL }}>
         {/* Banda dorada superior */}
@@ -1243,8 +1243,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
           disabled={items.length === 0 || planes.length === 0}
           className="w-full h-16 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.01] hover:brightness-110"
           style={{
-            backgroundImage: `linear-gradient(to right, ${AZUL}, #2d82b5)`,
-            boxShadow: "0 10px 25px -8px rgba(21, 87, 137, 0.45)",
+            backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
+            color: AZUL_OSCURO,
+            boxShadow: "0 10px 25px -8px rgba(217, 184, 107, 0.55)",
           }}
         >
           <Calculator className="h-6 w-6" />
