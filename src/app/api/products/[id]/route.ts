@@ -156,17 +156,54 @@ export async function PUT(
     }
 
     // Registrar trazabilidad de la edición manual del admin
-    // Esto se hace DESPUÉS de construir `data` con los campos editados, así
-    // no se incluye en el `shouldRecalc` ni en ninguna otra lógica previa.
-    // Sobrescribe el registro anterior (solo guardamos la ÚLTIMA edición).
+    // REGLA DE ORO: ETIQUETAR != EDITAR.
+    // Esta linea SOLO se ejecuta en el PUT (edicion real de datos).
+    // El endpoint de etiquetas (PATCH /label) NO toca estos campos.
     const editorName = (session.user as any)?.name || (session.user as any)?.email || "admin";
+    const editorEmail = (session.user as any)?.email || "admin";
     data.ultimaEdicionAt = new Date();
     data.ultimaEdicionPor = editorName;
+
+    // Obtener producto anterior para comparar cambios
+    const beforeUpdate = await db.product.findUnique({ where: { id } });
 
     const updated = await db.product.update({
       where: { id },
       data,
     });
+
+    // === MONITOR DE EDICIONES ===
+    // Registrar cada campo que cambio en ActivityLog
+    if (beforeUpdate) {
+      const camposEditados: string[] = [];
+      for (const key of Object.keys(body)) {
+        if (key === "id" || key === "createdAt" || key === "updatedAt") continue;
+        const oldVal = String((beforeUpdate as any)[key] ?? "");
+        const newVal = String(body[key] ?? "");
+        if (oldVal !== newVal) {
+          camposEditados.push(key);
+        }
+      }
+      // Si hubo cambios reales, registrar en ActivityLog
+      if (camposEditados.length > 0) {
+        try {
+          await db.activityLog.create({
+            data: {
+              usuarioAdmin: editorEmail,
+              usuarioNombre: editorName,
+              productId: id,
+              skuProducto: beforeUpdate.sku || "",
+              productoNombre: beforeUpdate.name || "",
+              campoEditado: camposEditados.join(", "),
+              valorAnterior: camposEditados.map(k => `${k}=${(beforeUpdate as any)[k] ?? ""}`).join(" | "),
+              valorNuevo: camposEditados.map(k => `${k}=${body[k] ?? ""}`).join(" | "),
+            },
+          });
+        } catch (logErr) {
+          console.error("[activity-log] Error registrando edicion:", logErr);
+        }
+      }
+    }
 
     return NextResponse.json({ product: updated });
   } catch (error) {
