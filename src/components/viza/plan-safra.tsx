@@ -636,8 +636,8 @@ export function PlanSafra() {
         </Section>
       )}
 
-            {/* === D. PAGO INICIAL / ENTRADA (manual) === */}
-      <Section title="PAGO INICIAL / ENTRADA" icon={<Calculator className="h-4 w-4" />}>
+            {/* === D. ENTRADA (manual) === */}
+      <Section title="ENTRADA" icon={<Calculator className="h-4 w-4" />}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div className="sm:col-span-1">
             <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">

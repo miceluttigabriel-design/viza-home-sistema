@@ -205,7 +205,7 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     cronograma.push({
       mes: 0,
       fecha: addMonths(fechaEmision, 0),
-      concepto: "Entrada / Pago Inicial",
+      concepto: "ENTRADA",
       saldoInicial: saldoInicialMes0,
       pago: entradaValor,
       interes: 0, // No hay interés en la entrada (es pago inicial)
@@ -306,7 +306,7 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
       cronograma.push({
         mes: 0,
         fecha: addMonths(fechaEmision, 0),
-        concepto: "Entrada / Pago Inicial",
+        concepto: "ENTRADA",
         saldoInicial: Math.round(totalContado),
         pago: entradaValor,
         interes: 0,
