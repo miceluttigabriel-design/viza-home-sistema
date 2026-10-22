@@ -848,10 +848,50 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
           </button>
         </div>
 
-        {/* Buscador con dropdown - solo en modo cotizador */}
+      </header>
+
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+        {viewMode === "safra" && <PlanSafra />}
+        {viewMode === "cheque" && <PlanCheque />}
+
         {viewMode === "cotizador" && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-3">
-          <div ref={searchRef} className="relative">
+        <>
+        {/* 1. CLIENTE (OPCIONAL) */}
+        <Section title="CLIENTE (OPCIONAL)" icon={<User className="h-4 w-4" />}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="Nombre completo" value={cliente.nombre} onChange={(v) => setClienteField("nombre", v)} placeholder="Juan Pérez" />
+            <Field label="Teléfono / WhatsApp" value={cliente.telefono} onChange={(v) => setClienteField("telefono", v)} placeholder="+598 99 123 456" />
+            <Field label="Documento (opcional)" value={cliente.documento} onChange={(v) => setClienteField("documento", v)} placeholder="CI o RUC" />
+          </div>
+          {/* OBSERVACIONES COMERCIALES - ahora ocupa todo el ancho disponible
+               (antes compartía la fila con el campo FECHA que fue eliminado
+               por ser redundante con el reloj en tiempo real del header) */}
+          <div className="mt-3">
+            <Field label="Observaciones comerciales" value={cliente.observaciones} onChange={(v) => setClienteField("observaciones", v)} placeholder="Forma de pago, plazo de entrega, etc." textarea />
+          </div>
+          <p className="text-[11px] text-stone-400 mt-2">
+            Todos los campos del cliente son opcionales. La cotización se puede armar sin estos datos.
+          </p>
+        </Section>
+
+        {/* 2. PRODUCTOS AGREGADOS (con buscador integrado) */}
+        <Section
+          title={`PRODUCTOS AGREGADOS (${items.length})`}
+          icon={<Package className="h-4 w-4" />}
+          action={
+            (items.length > 0 || planes.length > 0) ? (
+              <button
+                onClick={handleLimpiar}
+                className="text-[11px] font-semibold text-stone-500 hover:text-rose-600 transition-colors flex items-center gap-1"
+              >
+                <Trash2 className="h-3 w-3" />
+                Vaciar
+              </button>
+            ) : null
+          }
+        >
+          {/* Buscador integrado dentro del cuadro PRODUCTOS AGREGADOS */}
+          <div ref={searchRef} className="relative mb-4">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400" />
             <input
               ref={searchInputRef}
@@ -862,9 +902,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 setShowResults(true);
               }}
               placeholder="Buscar producto por nombre, SKU o marca... (ej: heladera, sofá, moto 110cc)"
-              className="w-full h-14 pl-12 pr-4 rounded-xl border-2 border-stone-200 bg-white text-base font-medium focus:outline-none shadow-sm focus:ring-4"
+              className="w-full h-12 pl-12 pr-4 rounded-xl border-2 border-stone-200 bg-white text-base font-medium focus:outline-none shadow-sm focus:ring-4"
               style={{
-                // keep white background on the input itself
                 borderColor: "#e7e5e4",
               }}
               onFocus={(e) => {
@@ -916,50 +955,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
               </div>
             )}
           </div>
-        </div>
-        )}
-      </header>
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {viewMode === "safra" && <PlanSafra />}
-        {viewMode === "cheque" && <PlanCheque />}
-
-        {viewMode === "cotizador" && (
-        <>
-        {/* 1. CLIENTE (OPCIONAL) */}
-        <Section title="CLIENTE (OPCIONAL)" icon={<User className="h-4 w-4" />}>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Nombre completo" value={cliente.nombre} onChange={(v) => setClienteField("nombre", v)} placeholder="Juan Pérez" />
-            <Field label="Teléfono / WhatsApp" value={cliente.telefono} onChange={(v) => setClienteField("telefono", v)} placeholder="+598 99 123 456" />
-            <Field label="Documento (opcional)" value={cliente.documento} onChange={(v) => setClienteField("documento", v)} placeholder="CI o RUC" />
-          </div>
-          {/* OBSERVACIONES COMERCIALES - ahora ocupa todo el ancho disponible
-               (antes compartía la fila con el campo FECHA que fue eliminado
-               por ser redundante con el reloj en tiempo real del header) */}
-          <div className="mt-3">
-            <Field label="Observaciones comerciales" value={cliente.observaciones} onChange={(v) => setClienteField("observaciones", v)} placeholder="Forma de pago, plazo de entrega, etc." textarea />
-          </div>
-          <p className="text-[11px] text-stone-400 mt-2">
-            Todos los campos del cliente son opcionales. La cotización se puede armar sin estos datos.
-          </p>
-        </Section>
-
-        {/* 2. PRODUCTOS AGREGADOS */}
-        <Section
-          title={`PRODUCTOS AGREGADOS (${items.length})`}
-          icon={<Package className="h-4 w-4" />}
-          action={
-            (items.length > 0 || planes.length > 0) ? (
-              <button
-                onClick={handleLimpiar}
-                className="text-[11px] font-semibold text-stone-500 hover:text-rose-600 transition-colors flex items-center gap-1"
-              >
-                <Trash2 className="h-3 w-3" />
-                Vaciar
-              </button>
-            ) : null
-          }
-        >
           {items.length === 0 ? (
             <div className="py-8 text-center">
               <Package className="h-10 w-10 text-stone-300 mx-auto mb-2" />
