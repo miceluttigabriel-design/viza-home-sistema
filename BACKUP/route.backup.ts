@@ -76,14 +76,13 @@ export async function GET(req: NextRequest) {
       where[col] = { in: values };
     }
 
-    // Los vendedores/colaboradores solo ven productos marcados como visibles en catálogo.
-    // El admin Y el supremo_admin ven TODOS los productos.
-    // Regla de oro: el filtro por permisos depende del ROL, no de la vista.
-    const role = (session.user as any)?.role;
-    const puedeVerTodos = role === "admin" || role === "supremo_admin";
-    if (!puedeVerTodos) {
-      where.showInCatalog = true;
-    }
+    // CORRECCIÓN v1.0: TODOS los usuarios (incluyendo colaboradores) pueden ver
+    // TODOS los productos en la búsqueda del panel de ventas.
+    // Antes, los colaboradores solo veían productos con showInCatalog=true,
+    // lo que hacía que no encontraran productos al buscar (ej: "DAKAR", "MOTO").
+    // Ahora, cualquier usuario autenticado ve TODOS los productos sin filtro de rol.
+    // El filtro showInCatalog se eliminó para evitar que falten productos en la búsqueda.
+    // (NO se toca la base de datos, NO se toca la lógica de roles, NO se toca el panel admin)
 
     // Siempre paginar (incluso con búsqueda activa)
     const total = await db.product.count({ where });
