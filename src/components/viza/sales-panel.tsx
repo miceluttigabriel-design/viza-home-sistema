@@ -773,7 +773,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                   : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
               }
             >
-              COTIZACION NORMAL
+              CUOTAS
             </button>
             <button
               onClick={() => setViewMode("safra")}
@@ -784,7 +784,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                   : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
               }
             >
-              PLAN SAFRA
+              SAFRA
             </button>
             <button
               onClick={() => setViewMode("cheque")}
@@ -795,7 +795,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                   : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
               }
             >
-              CON CHEQUE
+              CHEQUE
             </button>
           </div>
 
