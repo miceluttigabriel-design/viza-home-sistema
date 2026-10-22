@@ -660,13 +660,6 @@ export function PlanSafra() {
                   <strong>Entrada actual:</strong> {formatPYG(entradaValor)}{" "}
                   ({((entradaValor / totalContado) * 100).toFixed(1)}% del total)
                 </p>
-                <p className="mt-1">
-                  Para cumplir la regla del 50% en 6 meses, te falta pagar{" "}
-                  <strong className={faltanPara50 > 0 ? "text-rose-600" : "text-emerald-700"}>
-                    {formatPYG(faltanPara50)}
-                  </strong>{" "}
-                  en la entrada + refuerzos de los meses 1-6.
-                </p>
               </>
             )}
           </div>
