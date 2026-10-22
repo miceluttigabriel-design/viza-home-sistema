@@ -214,18 +214,27 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   }
 
   // === CONSTRUIR MAPA DE PAGOS POR MES (refuerzos, mes 1-18) ===
-  // v2.0: AUTO-CALCULAR valores de refuerzos (usuario solo ingresa fecha)
-  // La lógica: distribuir (saldo restante + interés estimado) entre los refuerzos
-  // con redondeo hacia arriba (mínimo).
-  // PRESERVA la lógica de cálculo de intereses del cronograma (mes a mes sobre saldo).
+  // v2.1: AUTO-CALCULAR valores de refuerzos con TWO-PASS para que el plan SIEMPRE CUADRE
+  // PASADA 1: estimar valores (saldo + interés estimado) divididos entre refuerzos
+  // PASADA 2 (después del loop): ajustar el último refuerzo para que saldoFinal = 0
+  // REGLA: el total de refuerzos NUNCA excede el total del plan.
   // FIX v2.0.1: NO devolver refuerzos en el return para evitar loop infinito.
   const refuerzosCalculados = refuerzos.map(r => ({ ...r }));
   if (refuerzosCalculados.length > 0 && saldoActual > 0) {
     const maxMes = Math.max(...refuerzosCalculados.map(r => Math.max(1, Math.min(18, r.mes))));
-    const interesEstimado = saldoActual * (safraPctPromedio / 100) * maxMes;
+    // Estimar interés (mitad del worst-case, más realista)
+    const interesEstimado = saldoActual * (safraPctPromedio / 100) * maxMes * 0.5;
     const totalAPagar = saldoActual + interesEstimado;
     const valorPorRefuerzo = Math.ceil(totalAPagar / refuerzosCalculados.length);
-    refuerzosCalculados.forEach(r => { r.valor = valorPorRefuerzo; });
+    // Asignar valores, el ÚLTIMO absorbe el remainder (total exacto)
+    refuerzosCalculados.forEach((r, idx) => {
+      if (idx === refuerzosCalculados.length - 1) {
+        const sumaOtros = valorPorRefuerzo * (refuerzosCalculados.length - 1);
+        r.valor = Math.max(0, Math.ceil(totalAPagar - sumaOtros));
+      } else {
+        r.valor = valorPorRefuerzo;
+      }
+    });
   }
 
   // Suma todos los pagos de refuerzos que caen en el mismo mes
@@ -236,33 +245,18 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     }
   });
 
-  // === ITERACIÓN MES A MES (1 a 18) ===
-  // REGLA: Si el saldo llega a 0, se detiene el cálculo (menos meses = menos interés)
+  // === ITERACIÓN MES A MES (1 a 18) - PASADA 1 ===
   for (let mes = 1; mes <= 18; mes++) {
-    // Si el saldo ya es 0 o negativo, no se generan más intereses
     if (saldoActual <= 0) break;
-
-    // 1. Saldo inicial de este mes (antes del pago)
     const saldoInicialMes = saldoActual;
-
-    // 2. Calcular interés del mes sobre el saldo inicial
-    // FÓRMULA: Interés = Saldo Restante * (% Safra / 100)
     const interesMes = saldoActual * (safraPctPromedio / 100);
     totalIntereses += interesMes;
-
-    // 3. Buscar pagos de refuerzos en este mes
     const pagoMes = pagosPorMes[mes] || 0;
-
-    // 4. Descontar pago del saldo
     saldoActual -= pagoMes;
     totalPagos += pagoMes;
-
-    // 5. Validar regla del 50% en 6 meses (entrada ya sumada, + refuerzos mes 1-6)
     if (mes <= 6) {
       totalPagado6Meses += pagoMes;
     }
-
-    // 6. Agregar fila al cronograma
     cronograma.push({
       mes,
       fecha: addMonths(fechaEmision, mes),
@@ -272,6 +266,76 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
       interes: Math.round(interesMes),
       saldoFinal: Math.round(saldoActual),
     });
+  }
+
+  // === PASADA 2: AJUSTAR EL ÚLTIMO REFUERZO PARA QUE EL PLAN CUADRE ===
+  // Si el saldoFinal no es 0, ajustar el refuerzo del mes más alto
+  // para absorber la diferencia (positiva o negativa).
+  // Esto garantiza que el plan SIEMPRE cuadra (saldoFinal = 0).
+  if (refuerzosCalculados.length > 0 && Math.abs(saldoActual) > 1) {
+    // Encontrar el refuerzo con el mes más alto (último pago)
+    let lastIdx = 0;
+    let lastMes = 0;
+    refuerzosCalculados.forEach((r, i) => {
+      if (r.mes > lastMes) { lastMes = r.mes; lastIdx = i; }
+    });
+    // Ajustar el valor del último refuerzo
+    const ajuste = Math.round(saldoActual); // positivo = falta pagar, negativo = sobrepagó
+    refuerzosCalculados[lastIdx].valor = Math.max(0, refuerzosCalculados[lastIdx].valor + ajuste);
+
+    // Reconstruir pagosPorMes con valor ajustado
+    const pagosPorMes2: Record<number, number> = {};
+    refuerzosCalculados.forEach((r) => {
+      if (r.mes >= 1 && r.mes <= 18 && r.valor > 0) {
+        pagosPorMes2[r.mes] = (pagosPorMes2[r.mes] || 0) + r.valor;
+      }
+    });
+
+    // Resetear estado para segunda pasada
+    saldoActual = totalContado;
+    if (entradaValor > 0) {
+      saldoActual -= entradaValor;
+    }
+    totalIntereses = 0;
+    totalPagado6Meses = entradaValor > 0 ? entradaValor : 0;
+    totalPagos = entradaValor > 0 ? entradaValor : 0;
+    cronograma.length = 0;
+
+    // Re-agregar entrada al cronograma
+    if (entradaValor > 0) {
+      cronograma.push({
+        mes: 0,
+        fecha: addMonths(fechaEmision, 0),
+        concepto: "Entrada / Pago Inicial",
+        saldoInicial: Math.round(totalContado),
+        pago: entradaValor,
+        interes: 0,
+        saldoFinal: Math.round(saldoActual),
+      });
+    }
+
+    // Re-correr el loop con valores ajustados
+    for (let mes = 1; mes <= 18; mes++) {
+      if (saldoActual <= 0) break;
+      const saldoInicialMes = saldoActual;
+      const interesMes = saldoActual * (safraPctPromedio / 100);
+      totalIntereses += interesMes;
+      const pagoMes = pagosPorMes2[mes] || 0;
+      saldoActual -= pagoMes;
+      totalPagos += pagoMes;
+      if (mes <= 6) {
+        totalPagado6Meses += pagoMes;
+      }
+      cronograma.push({
+        mes,
+        fecha: addMonths(fechaEmision, mes),
+        concepto: pagoMes > 0 ? `Refuerzo Mes ${mes}` : "Solo interés (sin pago)",
+        saldoInicial: Math.round(saldoInicialMes),
+        pago: pagoMes,
+        interes: Math.round(interesMes),
+        saldoFinal: Math.round(saldoActual),
+      });
+    }
   }
 
   // === VALIDACIONES ===
