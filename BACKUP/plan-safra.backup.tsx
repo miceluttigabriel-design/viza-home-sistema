@@ -332,33 +332,6 @@ export function PlanSafra() {
   return (
     <div className="space-y-5">
       {/* === A. HEADER === */}
-      <section
-        className="rounded-2xl shadow-md overflow-hidden border"
-        style={{
-          background: `linear-gradient(135deg, ${AZUL} 0%, ${AZUL_OSCURO} 100%)`,
-          borderColor: DORADO,
-        }}
-      >
-        <div
-          className="h-1.5 w-full"
-          style={{
-            backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
-          }}
-        />
-        <div className="px-5 py-4 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div>
-              <h2
-                className="text-lg sm:text-xl font-extrabold tracking-tight leading-none"
-                style={{ color: "#fff" }}
-              >
-                PLAN SAFRA
-              </h2>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* === B. CLIENTE (OPCIONAL) === */}
       <Section title="CLIENTE (OPCIONAL)" icon={<User className="h-4 w-4" />}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -686,13 +659,6 @@ export function PlanSafra() {
                 <p>
                   <strong>Entrada actual:</strong> {formatPYG(entradaValor)}{" "}
                   ({((entradaValor / totalContado) * 100).toFixed(1)}% del total)
-                </p>
-                <p className="mt-1">
-                  Para cumplir la regla del 50% en 6 meses, te falta pagar{" "}
-                  <strong className={faltanPara50 > 0 ? "text-rose-600" : "text-emerald-700"}>
-                    {formatPYG(faltanPara50)}
-                  </strong>{" "}
-                  en la entrada + refuerzos de los meses 1-6.
                 </p>
               </>
             )}

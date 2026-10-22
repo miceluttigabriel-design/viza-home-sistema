@@ -764,94 +764,63 @@ export function PlanSafra() {
         </p>
       </Section>
 
-      {/* === F. CRONOGRAMA Y CÁLCULOS EN TIEMPO REAL === */}
+      {/* === F. RESUMEN DEL PLAN SAFRA === */}
       {productos.length > 0 && (entradaValor > 0 || refuerzos.length > 0) && (
-        <Section title="CRONOGRAMA Y CÁLCULOS EN TIEMPO REAL" icon={<FileText className="h-4 w-4" />}>
-          {/* Tabla del cronograma */}
-          {cronograma.length > 0 && (
-            <div className="overflow-x-auto mb-4">
-              <table className="w-full text-sm border border-stone-200 rounded-lg overflow-hidden">
-                <thead className="bg-stone-100 border-b border-stone-200">
-                  <tr>
-                    <th className="text-left font-bold text-stone-700 px-3 py-2">MES</th>
-                    <th className="text-left font-bold text-stone-700 px-3 py-2">CONCEPTO</th>
-                    <th className="text-left font-bold text-stone-700 px-3 py-2">FECHA</th>
-                    <th className="text-right font-bold text-stone-700 px-3 py-2">SALDO INICIAL</th>
-                    <th className="text-right font-bold text-stone-700 px-3 py-2">PAGO DEL MES</th>
-                    <th className="text-right font-bold text-stone-700 px-3 py-2">INTERÉS (Saldo × %)</th>
-                    <th className="text-right font-bold text-stone-700 px-3 py-2">SALDO FINAL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cronograma.map((c, idx) => {
-                    const esEntrada = c.mes === 0;
-                    const esMes6 = c.mes >= 1 && c.mes <= 6;
-                    return (
-                      <tr
-                        key={idx}
-                        className={`border-b border-stone-100 last:border-0 ${
-                          esEntrada
-                            ? "bg-emerald-50/60 hover:bg-emerald-50"
-                            : esMes6
-                            ? "bg-amber-50/40 hover:bg-amber-50"
-                            : "hover:bg-stone-50"
-                        }`}
-                      >
-                        <td className="px-3 py-2 font-mono text-stone-700 font-bold">
-                          {esEntrada ? "0 (ENTRADA)" : c.mes}
-                        </td>
-                        <td className="px-3 py-2 text-stone-700">{c.concepto}</td>
-                        <td className="px-3 py-2 text-stone-700 tabular-nums">
-                          {c.fecha ? new Date(c.fecha + "T00:00:00").toLocaleDateString("es-PY", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                          }) : "-"}
-                        </td>
-                        <td className="px-3 py-2 text-right text-stone-600 tabular-nums">
-                          {formatPYG(c.saldoInicial)}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-stone-900 tabular-nums">
-                          {c.pago > 0 ? formatPYG(c.pago) : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right text-rose-600 tabular-nums">
-                          {c.interes > 0 ? `+${formatPYG(c.interes)}` : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-stone-900 tabular-nums">
-                          {formatPYG(c.saldoFinal)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot className="bg-stone-100 border-t-2 border-stone-300">
-                  <tr>
-                    <td colSpan={4} className="px-3 py-2 font-bold text-stone-700 uppercase text-[11px]">
-                      TOTALES
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold text-stone-900 tabular-nums">
-                      {formatPYG(cronograma.reduce((s, c) => s + c.pago, 0))}
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold text-rose-700 tabular-nums">
-                      +{formatPYG(totalIntereses)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold text-stone-700 tabular-nums">
-                      {formatPYG(saldoFinal)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
+        <Section title="RESUMEN DEL PLAN SAFRA" icon={<FileText className="h-4 w-4" />}>
+          {/* Lista simplificada: solo pagos reales (sin "SOLO INTERÉS") */}
+          {cronograma.length > 0 && (() => {
+            // Filtrar SOLO los meses donde hay pago real (entrada + refuerzos)
+            const pagosReales = cronograma.filter(c => c.pago > 0);
+            const totalPagos = pagosReales.reduce((s, c) => s + c.pago, 0);
+            return (
+              <div className="space-y-2 mb-4">
+                {pagosReales.map((c, idx) => {
+                  const esEntrada = c.mes === 0;
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
+                        esEntrada
+                          ? "bg-emerald-50 border-emerald-200"
+                          : "bg-stone-50 border-stone-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                          esEntrada ? "bg-emerald-500 text-white" : "bg-stone-700 text-white"
+                        }`}>
+                          {esEntrada ? "0" : c.mes}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-stone-900">{c.concepto}</p>
+                          <p className="text-[11px] text-stone-500 tabular-nums">
+                            {c.fecha ? new Date(c.fecha + "T00:00:00").toLocaleDateString("es-PY", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            }) : "-"}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-sm font-bold text-stone-900 tabular-nums whitespace-nowrap">
+                        {formatPYG(c.pago)}
+                      </p>
+                    </div>
+                  );
+                })}
+                {/* Total de pagos */}
+                <div className="flex items-center justify-between gap-3 p-3 rounded-lg border-2" style={{ backgroundColor: CREMA, borderColor: DORADO }}>
+                  <p className="text-sm font-bold uppercase text-stone-700">Total del Plan</p>
+                  <p className="text-lg font-extrabold tabular-nums" style={{ color: AZUL }}>
+                    {formatPYG(totalPlan)}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
 
-          {/* Panel de cálculos en tiempo real */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-lg bg-stone-100 p-3">
-              <p className="text-[10px] font-semibold text-stone-500 uppercase">Subtotal Productos</p>
-              <p className="text-base font-bold text-stone-900 mt-1 tabular-nums">
-                {formatPYG(totalContadoBruto)}
-              </p>
-            </div>
+          {/* Panel de resumen (sin mostrar intereses) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {descuentoCasco > 0 && (
               <div className="rounded-lg bg-emerald-50 p-3 border border-emerald-200">
                 <p className="text-[10px] font-semibold text-emerald-700 uppercase">Descuento Casco</p>
@@ -868,12 +837,6 @@ export function PlanSafra() {
                 {formatPYG(totalContado)}
               </p>
             </div>
-            <div className="rounded-lg bg-rose-50 p-3 border border-rose-200">
-              <p className="text-[10px] font-semibold text-rose-700 uppercase">Interés Total</p>
-              <p className="text-base font-bold text-rose-700 mt-1 tabular-nums">
-                +{formatPYG(totalIntereses)}
-              </p>
-            </div>
             <div className="rounded-lg p-3 border-2" style={{ backgroundColor: CREMA, borderColor: DORADO }}>
               <p className="text-[10px] font-semibold uppercase" style={{ color: AZUL_OSCURO }}>
                 Total del Plan
@@ -884,10 +847,10 @@ export function PlanSafra() {
             </div>
             <div className={`rounded-lg p-3 border ${cuadra ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-300"}`}>
               <p className={`text-[10px] font-semibold uppercase ${cuadra ? "text-emerald-700" : "text-amber-700"}`}>
-                Saldo Final
+                Estado del Plan
               </p>
-              <p className={`text-base font-bold mt-1 tabular-nums ${cuadra ? "text-emerald-700" : "text-amber-700"}`}>
-                {formatPYG(saldoFinal)}
+              <p className={`text-base font-bold mt-1 ${cuadra ? "text-emerald-700" : "text-amber-700"}`}>
+                {cuadra ? "CUADRA ✓" : "Falta ajustar"}
               </p>
             </div>
           </div>
@@ -919,12 +882,6 @@ export function PlanSafra() {
                   Pagado en meses 0-6: <strong>{formatPYG(totalPagado6Meses)}</strong>
                   {" "}
                   ({((totalPagado6Meses / Math.max(1, totalContado)) * 100).toFixed(1)}% del total)
-                  {!cumple50 && (
-                    <>
-                      {" · Faltan: "}
-                      <strong className="text-rose-600">{formatPYG(faltanPara50)}</strong>
-                    </>
-                  )}
                 </p>
               </div>
             </div>
@@ -937,7 +894,7 @@ export function PlanSafra() {
                 <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700">
-                    El saldo final no es 0
+                    El plan no cuadra
                   </p>
                   <p className="text-[10px] text-stone-600 mt-1 tabular-nums">
                     {saldoFinal > 0
