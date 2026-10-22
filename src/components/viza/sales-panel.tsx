@@ -773,7 +773,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                   : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
               }
             >
-              CUOTAS
+              CUOTA
             </button>
             <button
               onClick={() => setViewMode("safra")}
