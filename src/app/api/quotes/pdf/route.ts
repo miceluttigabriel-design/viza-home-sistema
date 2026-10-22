@@ -399,13 +399,23 @@ export async function POST(req: NextRequest) {
     drawSectionTitle(doc, margin, contentW, y, "PRODUCTOS DE LA COTIZACIÓN");
     y += 18;
 
-    // 6 COLUMNAS (siempre): #, SKU, PRODUCTO, CANT., P. CONTADO, SUBTOTAL
-    const colN = 25;
-    const colSku = 70;
-    const colCant = 45;
-    const colPU = 105;
-    const colSub = 105;
-    const colName = contentW - colN - colSku - colCant - colPU - colSub;
+    // ===== LÓGICA CONDICIONAL v7.0 =====
+    // incluirPrecioContado controla si se muestran las columnas de precios:
+    //   false → solo #, SKU, PRODUCTO, CANT. (4 columnas)
+    //   true  → #, SKU, PRODUCTO, CANT., P. CONTADO, SUBTOTAL (6 columnas)
+    // El bloque TOTAL CONTADO siempre se muestra (calculado por el frontend, correcto).
+    // Los productos regalo (ej: casco) se muestran con su precio de lista pero NO se suman al total.
+    const incluirPrecioContado = body.incluirPrecioContado === true;
+
+    // Anchos de columnas (se ajustan según si precios visibles o no)
+    const colN = 25;       // #
+    const colSku = 70;     // SKU
+    const colCant = 45;    // CANT.
+    const colPU = 105;     // P. CONTADO (solo si incluirPrecioContado=true)
+    const colSub = 105;     // SUBTOTAL   (solo si incluirPrecioContado=true)
+    const colName = incluirPrecioContado
+      ? contentW - colN - colSku - colCant - colPU - colSub
+      : contentW - colN - colSku - colCant; // si no hay precios, PRODUCTO toma todo el espacio
 
     // Header tabla (fondo azul, texto blanco, bold)
     doc.setFillColor(...C_BLUE);
@@ -422,10 +432,13 @@ export async function POST(req: NextRequest) {
     doc.text("PRODUCTO", xx, y + 16);
     xx += colName;
     doc.text("CANT.", xx, y + 16);
-    xx += colCant;
-    doc.text("P. CONTADO", xx, y + 16);
-    xx += colPU;
-    doc.text("SUBTOTAL", xx + colSub - 8, y + 16, { align: "right" });
+    // Solo agregar columnas de precios si incluirPrecioContado=true
+    if (incluirPrecioContado) {
+      xx += colCant;
+      doc.text("P. CONTADO", xx, y + 16);
+      xx += colPU;
+      doc.text("SUBTOTAL", xx + colSub - 8, y + 16, { align: "right" });
+    }
 
     y += 24;
 
@@ -435,7 +448,7 @@ export async function POST(req: NextRequest) {
       ensureSpace(60);
       const rowH = 28;
 
-      // Zebra: filas pares con fondo gris muy claro, impares blancas
+      // Zebra: filas pares con fondo gris visible, impares blancas
       if (idx % 2 === 0) {
         doc.setFillColor(...C_ROW_ALT);
         doc.rect(margin, y, contentW, rowH, "F");
@@ -461,19 +474,23 @@ export async function POST(req: NextRequest) {
       doc.setTextColor(...C_INK);
       doc.text(String(it.quantity), xxx, y + 18);
 
-      // SIEMPRE mostrar P. CONTADO y SUBTOTAL
-      xxx += colCant;
-      doc.setTextColor(...C_INK);
-      doc.text(formatPYG(it.priceContado), xxx, y + 18);
-      xxx += colPU;
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(...C_DARK_BLUE);
-      doc.text(formatPYG(it.subtotalContado), xxx + colSub - 8, y + 18, { align: "right" });
+      // Solo dibujar P. CONTADO y SUBTOTAL si incluirPrecioContado=true
+      if (incluirPrecioContado) {
+        xxx += colCant;
+        doc.setTextColor(...C_INK);
+        doc.text(formatPYG(it.priceContado), xxx, y + 18);
+        xxx += colPU;
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(...C_DARK_BLUE);
+        doc.text(formatPYG(it.subtotalContado), xxx + colSub - 8, y + 18, { align: "right" });
+      }
 
       y += rowH;
     });
 
-    // ===== BLOQUE TOTAL CONTADO (siempre visible, borde RECTO) =====
+    // ===== BLOQUE TOTAL CONTADO (SIEMPRE visible, valor del frontend es correcto) =====
+    // El frontend calcula contadoOriginal = suma de subtotales NO regalo (productos a cobrar)
+    // Los productos regalo (ej: casco) no se suman al total.
     ensureSpace(90);
     y += 14;
     const mostrarAjustado =
