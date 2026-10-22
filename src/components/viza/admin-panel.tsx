@@ -251,10 +251,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // Modal de cambio de contraseña propia (visible para todos los roles autenticados)
   const [cambiarContrasenaOpen, setCambiarContrasenaOpen] = useState(false);
   const onOpenCambiarContrasena = () => setCambiarContrasenaOpen(true);
-  // Monitor de Ediciones (solo supremo)
-  const [monitorOpen, setMonitorOpen] = useState(false);
-  const [activityLogs, setActivityLogs] = useState<any[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
   // Etiquetas de colores por producto: { [productId]: "verde" | "azul" | "dorado" | "rojo" }
   const [productLabels, setProductLabels] = useState<Record<string, string>>({});
   const [openLabelMenu, setOpenLabelMenu] = useState<string | null>(null);
@@ -265,22 +261,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // Filtro activo de etiqueta de color: "verde" | "azul" | "dorado" | "rojo" | null
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
 
-  // === MONITOR DE EDICIONES - cargar logs (solo supremo) ===
-  const cargarLogs = async () => {
-    setLoadingLogs(true);
-    try {
-      const res = await fetch("/api/admin/activity-logs?limit=100");
-      if (res.ok) {
-        const data = await res.json();
-        setActivityLogs(data.logs || []);
-      }
-    } catch {
-      // silent
-    } finally {
-      setLoadingLogs(false);
-    }
-  };
-
   const fetchProducts = useCallback(async () => {
     setLoadingProducts(true);
     try {
@@ -289,13 +269,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       if (labelFilter) params.set("etiquetaColor", labelFilter);
       params.set("page", String(page));
       params.set("pageSize", String(PAGE_SIZE));
+      // Enviar filtros de columna como JSON
       const activeFilters = Object.fromEntries(
         Object.entries(columnFilters).filter(([, v]) => Array.isArray(v) && v.length > 0)
       );
       if (Object.keys(activeFilters).length > 0) {
         params.set("filters", JSON.stringify(activeFilters));
       }
-
       const res = await fetch(`/api/products?${params.toString()}`);
       const data = await res.json();
       setProducts(data.products || []);
@@ -453,17 +433,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
             {isSupremo && onGoGestion && (
               <button
-                onClick={() => { setMonitorOpen(true); cargarLogs(); }}
-                className="h-10 px-3 sm:px-4 rounded-xl text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors shadow-sm hover:brightness-110"
-                style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
-                title="Monitor de Ediciones"
-              >
-                <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">MONITOR</span>
-              </button>
-            )}
-            {isSupremo && onGoGestion && (
-              <button
                 onClick={onGoGestion}
                 className="h-10 px-3 sm:px-4 rounded-xl text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors shadow-sm hover:brightness-110"
                 style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
@@ -503,53 +472,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         open={cambiarContrasenaOpen}
         onClose={() => setCambiarContrasenaOpen(false)}
       />
-
-      {/* === MODAL: MONITOR DE EDICIONES (solo supremo) === */}
-      {monitorOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setMonitorOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b flex items-center justify-between" style={{ backgroundColor: "#155789" }}>
-              <h3 className="text-white font-bold text-base">MONITOR DE EDICIONES</h3>
-              <div className="flex items-center gap-2">
-                <button onClick={async () => { if (confirm("¿Borrar TODOS los registros?")) { await fetch("/api/admin/activity-logs", { method: "DELETE" }); setActivityLogs([]); toast.success("Historial limpiado"); } }} className="h-8 px-3 rounded-lg bg-red-500 text-white text-xs font-bold hover:bg-red-600">LIMPIAR TODO</button>
-                <button onClick={() => setMonitorOpen(false)} className="h-8 w-8 rounded-lg flex items-center justify-center text-white hover:bg-white/10">✕</button>
-              </div>
-            </div>
-            <div className="overflow-y-auto p-4">
-              {loadingLogs ? (
-                <div className="text-center py-8 text-stone-500">Cargando...</div>
-              ) : activityLogs.length === 0 ? (
-                <div className="text-center py-8 text-stone-500">No hay ediciones registradas.</div>
-              ) : (
-                <table className="w-full text-xs">
-                  <thead><tr style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
-                    <th className="text-left px-2 py-2 font-bold">FECHA/HORA</th>
-                    <th className="text-left px-2 py-2 font-bold">USUARIO</th>
-                    <th className="text-left px-2 py-2 font-bold">SKU</th>
-                    <th className="text-left px-2 py-2 font-bold">PRODUCTO</th>
-                    <th className="text-left px-2 py-2 font-bold">CAMPO</th>
-                    <th className="text-center px-2 py-2 font-bold">DEL</th>
-                  </tr></thead>
-                  <tbody>
-                    {activityLogs.map((log, i) => (
-                      <tr key={log.id} className={i % 2 === 0 ? "bg-white" : "bg-stone-50"}>
-                        <td className="px-2 py-1 text-stone-600">{new Date(log.fechaHora).toLocaleString("es-PY")}</td>
-                        <td className="px-2 py-1 font-semibold text-stone-700">{log.usuarioNombre || log.usuarioAdmin}</td>
-                        <td className="px-2 py-1 font-mono text-stone-600">{log.skuProducto || "—"}</td>
-                        <td className="px-2 py-1 text-stone-700" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.productoNombre || "—"}</td>
-                        <td className="px-2 py-1 text-stone-600" style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.campoEditado || "—"}</td>
-                        <td className="px-2 py-1 text-center">
-                          <button onClick={async () => { await fetch(`/api/admin/activity-logs/${log.id}`, { method: "DELETE" }); setActivityLogs(prev => prev.filter(l => l.id !== log.id)); toast.success("Registro eliminado"); }} className="h-6 w-6 rounded bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center">🗑</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       <main className="flex-1 max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-4">

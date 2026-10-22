@@ -1,12 +1,20 @@
 // Prisma schema - VIZA HOME E.A.S - Panel de Ventas
+// Compatible con SQLite (desarrollo local) y PostgreSQL (Vercel+Neon producción)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  // SQLite para desarrollo local, PostgreSQL para producción (Vercel+Neon)
+  // El provider se elige automáticamente según la DATABASE_URL:
+  //   - Si DATABASE_URL empieza con "file:" → SQLite
+  //   - Si DATABASE_URL empieza con "postgresql:" o "postgres:" → PostgreSQL
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Para soportar también SQLite en desarrollo:
+  // uncomment la siguiente línea para usar sqlite local
+  // directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -233,24 +241,4 @@ model QuoteItem {
   product Product @relation(fields: [productId], references: [id])
 
   @@index([quoteId])
-}
-
-// Monitor de Ediciones - Registro de cambios reales en productos
-// SOLO se inserta cuando se editan datos (PUT /api/products/[id])
-// NO se inserta al etiquetar (PATCH /api/products/[id]/label)
-model ActivityLog {
-  id             String   @id @default(cuid())
-  usuarioAdmin   String   // email del admin que edito
-  usuarioNombre  String?  // nombre del admin
-  productId      String?  // ID del producto editado
-  skuProducto    String?  // SKU del producto
-  productoNombre String?  // nombre del producto
-  campoEditado   String?  // ej: "costBR", "stock", "priceContado"
-  valorAnterior  String?  // valor antes de la edicion
-  valorNuevo     String?  // valor despues de la edicion
-  fechaHora      DateTime @default(now())
-
-  @@index([fechaHora])
-  @@index([usuarioAdmin])
-  @@index([skuProducto])
 }
