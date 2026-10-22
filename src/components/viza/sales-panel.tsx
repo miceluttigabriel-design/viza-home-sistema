@@ -709,33 +709,44 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       <header className="sticky top-0 z-30 backdrop-blur shadow-md" style={{ backgroundColor: AZUL }}>
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-end gap-4">
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Reloj en tiempo real - DD/MM/AAAA - HH:MM:SS */}
-            <div
-              className="hidden md:flex flex-col items-end text-right px-3 py-1.5 rounded-xl border"
-              style={{
-                backgroundColor: "rgba(255,255,255,0.08)",
-                borderColor: "rgba(217,184,107,0.4)",
-              }}
-              title="Fecha y hora actual (se actualiza cada segundo)"
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 flex-wrap">
+          {/* LADO IZQUIERDO: Tabs + botones de navegación admin */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* === TOGGLE MODO COTIZADOR / PLAN SAFRA / CON CHEQUE === */}
+            <button
+              onClick={() => setViewMode("cotizador")}
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
+              style={
+                viewMode === "cotizador"
+                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
+                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
+              }
             >
-              <div className="flex items-center gap-1.5">
-                <Clock className="h-3 w-3" style={{ color: DORADO }} />
-                <span
-                  className="text-xs font-bold tabular-nums tracking-tight"
-                  style={{ color: DORADO }}
-                >
-                  {formatearReloj(relojAhora)}
-                </span>
-              </div>
-              <span
-                className="text-[9px] uppercase tracking-wider mt-0.5"
-                style={{ color: DORADO_CLARO }}
-              >
-                Hora local
-              </span>
-            </div>
+              COTIZACION NORMAL
+            </button>
+            <button
+              onClick={() => setViewMode("safra")}
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
+              style={
+                viewMode === "safra"
+                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
+                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
+              }
+            >
+              PLAN SAFRA
+            </button>
+            <button
+              onClick={() => setViewMode("cheque")}
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
+              style={
+                viewMode === "cheque"
+                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
+                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
+              }
+            >
+              CON CHEQUE
+            </button>
+
             {/* REGLA DE ORO: los botones de navegación dependen del ROL, no de la pantalla.
                 El supremo admin es supremo en TODAS las pantallas (admin, ventas, gestión). */}
             {isSupremoRole && onGoGestion && (
@@ -761,6 +772,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 <span className="sm:hidden">ADMIN</span>
               </button>
             )}
+          </div>
+
+          {/* LADO DERECHO: User info + Avatar + Cambiar contraseña + Reloj + Cerrar sesión */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="hidden sm:flex flex-col items-end text-right">
               <span className="text-xs font-semibold text-white leading-none">
                 {user.name || user.email}
@@ -788,6 +803,31 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             >
               <KeyRound className="h-4 w-4" />
             </button>
+            {/* Reloj en tiempo real - AHORA AL LADO DE CERRAR SESIÓN */}
+            <div
+              className="hidden md:flex flex-col items-end text-right px-3 py-1.5 rounded-xl border"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.08)",
+                borderColor: "rgba(217,184,107,0.4)",
+              }}
+              title="Fecha y hora actual (se actualiza cada segundo)"
+            >
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3 w-3" style={{ color: DORADO }} />
+                <span
+                  className="text-xs font-bold tabular-nums tracking-tight"
+                  style={{ color: DORADO }}
+                >
+                  {formatearReloj(relojAhora)}
+                </span>
+              </div>
+              <span
+                className="text-[9px] uppercase tracking-wider mt-0.5"
+                style={{ color: DORADO_CLARO }}
+              >
+                Hora local
+              </span>
+            </div>
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
               className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border"
@@ -810,44 +850,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         open={cambiarContrasenaOpen}
         onClose={() => setCambiarContrasenaOpen(false)}
       />
-
-        {/* === TOGGLE MODO COTIZADOR / PLAN SAFRA / CON CHEQUE === */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-1 pb-2 flex items-center gap-2">
-          <button
-            onClick={() => setViewMode("cotizador")}
-            className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
-            style={
-              viewMode === "cotizador"
-                ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
-                : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
-            }
-          >
-            COTIZACION NORMAL
-          </button>
-          <button
-            onClick={() => setViewMode("safra")}
-            className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
-            style={
-              viewMode === "safra"
-                ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
-                : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
-            }
-          >
-            PLAN SAFRA
-          </button>
-          <button
-            onClick={() => setViewMode("cheque")}
-            className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border"
-            style={
-              viewMode === "cheque"
-                ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
-                : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
-            }
-          >
-            CON CHEQUE
-          </button>
-        </div>
-
       </header>
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
