@@ -236,7 +236,7 @@ export function PlanCheque() {
       {/* BOTÓN CALCULAR */}
       <button onClick={handleCalcular} disabled={productos.length === 0 || fechasCheques.filter(f => f).length === 0}
         className="w-full h-16 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.01] hover:brightness-110"
-        style={{ backgroundImage: `linear-gradient(to right, ${AZUL}, #2d82b5)`, boxShadow: "0 10px 25px -8px rgba(21, 87, 137, 0.45)" }}>
+        style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`, color: AZUL_OSCURO, boxShadow: "0 10px 25px -8px rgba(217, 184, 107, 0.55)" }}>
         <Calculator className="h-6 w-6" />CALCULAR CHEQUES
       </button>
 
@@ -277,12 +277,13 @@ export function PlanCheque() {
       {/* BOTONES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <button onClick={() => { if (confirm("¿Vaciar el plan con cheque?")) { clear(); toast.success("Plan vaciado"); } }}
-          className="h-14 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 border-2 border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors">
+          className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all hover:scale-[1.01] hover:brightness-110"
+          style={{ backgroundColor: "#b91c1c", boxShadow: "0 10px 25px -8px rgba(185, 28, 28, 0.45)" }}>
           <Trash2 className="h-4 w-4" />LIMPIAR
         </button>
         <button onClick={handleGenerarPDF} disabled={generatingPdf || resultados.length === 0}
           className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:brightness-110"
-          style={{ backgroundImage: `linear-gradient(to right, ${AZUL_OSCURO}, ${AZUL})` }}>
+          style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`, color: AZUL_OSCURO, boxShadow: "0 8px 20px -8px rgba(217, 184, 107, 0.55)" }}>
           <FileText className="h-4 w-4" />GENERAR PDF
         </button>
       </div>
