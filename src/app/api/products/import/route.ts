@@ -70,7 +70,9 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer);
+    // El tipo Buffer de exceljs entra en conflicto con el de @types/node
+    // (Buffer<ArrayBuffer> vs Buffer), por eso el cast.
+    await wb.xlsx.load(buffer as any);
 
     const ws = wb.getWorksheet("PRODUCTOS") || wb.worksheets[0];
     if (!ws) return NextResponse.json({ error: "No se encontro hoja" }, { status: 400 });

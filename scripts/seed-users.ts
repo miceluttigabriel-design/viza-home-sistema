@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 
 const db = new PrismaClient();
 
@@ -10,27 +11,25 @@ interface UserDef {
   password: string;
 }
 
-// Generar contraseña segura: VizaHome + Año + 3 caracteres aleatorios
+// Generar contraseña segura: VizaHome + sufijo aleatorio criptográfico
 function genPassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  let suffix = "";
-  for (let i = 0; i < 4; i++) {
-    suffix += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return `VizaHome2026!${suffix}`;
+  // randomBytes evita el patrón predecible de Math.random()
+  return `VizaHome2026!${randomBytes(4).toString("base64url")}`;
 }
 
 // 4 USUARIOS ESPECIALES (Acceso Total: Admin + Ventas)
+// IMPORTANTE: no hardcodear contraseñas. Se pueden fijar por variables de
+// entorno (ej: SEED_ADMIN_PASSWORD) o se genera una aleatoria por usuario.
 const adminUsers: UserDef[] = [
-  { email: "viza@viza.com.py", name: "VILMAR CESAR ZAGO PEREIRA", role: "admin", password: "vilmarrepresentante1*" },
+  { email: "viza@viza.com.py", name: "VILMAR CESAR ZAGO PEREIRA", role: "admin", password: process.env.SEED_ADMIN_PASSWORD || genPassword() },
   { email: "baltazar@viza.com.py", name: "BALTAZAR ALFREDO PALUDO GONCALVES", role: "admin", password: genPassword() },
   { email: "viza.compras@viza.com.py", name: "ADRIANO RUIZ GOMEZ", role: "admin", password: genPassword() },
-  { email: "viza.cobranza@viza.com.py", name: "GABRIEL HENRIQUE MICELUTTI DA SILVA", role: "supremo_admin", password: "VizaSupremo2026!Cob" },
+  { email: "viza.cobranza@viza.com.py", name: "GABRIEL HENRIQUE MICELUTTI DA SILVA", role: "supremo_admin", password: process.env.SEED_SUPREMO_PASSWORD || genPassword() },
 ];
 
 // USUARIOS REGULARES (Solo Ventas - representante)
 const regularUsers: UserDef[] = [
-  { email: "ventas.online@viza.com.py", name: "ADRIANO RUIZ GOMEZ", role: "representante", password: "vendedor1*" },
+  { email: "ventas.online@viza.com.py", name: "ADRIANO RUIZ GOMEZ", role: "representante", password: process.env.SEED_VENDEDOR_PASSWORD || genPassword() },
   { email: "juliane@viza.com.py", name: "JULIANE TEXEIRA CALAZANS", role: "representante", password: genPassword() },
   { email: "larazago@viza.com.py", name: "LARA EDUARDA NZAGO TEXEIRA", role: "representante", password: genPassword() },
   { email: "juliozago@viza.com.py", name: "JULIO CESAR ZAGO TEXEIRA", role: "representante", password: genPassword() },

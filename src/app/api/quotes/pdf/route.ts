@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../lib/pdf/vizaLogo";
 
 interface PdfItem {
@@ -300,6 +302,11 @@ function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: number, co
 // POST /api/quotes/pdf - genera PDF del presupuesto profesional
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
     const body: PdfPayload = await req.json();
 
     if (!body.items || body.items.length === 0) {

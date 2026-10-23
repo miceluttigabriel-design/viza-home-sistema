@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 const GREEN: [number, number, number] = [40, 167, 69];
 const RED: [number, number, number] = [220, 53, 69];
@@ -70,6 +72,11 @@ function generarNumeroPresupuesto(): string {
 // Solo mostrar: #, SKU, DESCRIPCIÓN, CANT. (igual que en safra-pdf).
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
     const body: ChequePdfPayload = await req.json();
 
     if (!body.productos || body.productos.length === 0) {

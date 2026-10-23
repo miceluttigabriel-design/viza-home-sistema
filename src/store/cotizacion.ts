@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { userScopedStorage } from "@/lib/user-scoped-storage";
+import { createUserScopedStorage } from "@/lib/user-scoped-storage";
 
 export interface CotizacionItem {
   productId: string;
@@ -287,6 +287,6 @@ export const useCotizacionStore = create<CotizacionState>()(
           cascoDescripcion: "",
         }),
     }),
-    { name: "viza-cotizacion-storage", storage: userScopedStorage }
+    { name: "viza-cotizacion-storage", storage: createUserScopedStorage<CotizacionState>() }
   )
 );

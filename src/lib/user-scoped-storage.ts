@@ -17,6 +17,8 @@
  * sufijo temporal, y cuando el usuario se loguea, se migran sus datos.
  */
 
+import type { PersistStorage, StorageValue } from "zustand/middleware";
+
 // Clave donde el cliente setea el userId actual (lo hace SalesPanel desde useSession)
 const USER_ID_KEY = "viza-current-user-id";
 
@@ -27,6 +29,41 @@ function getCurrentUserId(): string {
   } catch {
     return "anon";
   }
+}
+
+/**
+ * Storage con JSON para usar con `persist` de Zustand.
+ *
+ * IMPORTANTE: `persist` espera un `PersistStorage<S>`, es decir, un storage
+ * que reciba/entregue objetos (`{ state, version }`), no strings.
+ * Antes los stores pasaban `userScopedStorage` directamente (string-based),
+ * por lo que Zustand guardaba `"[object Object]"` en localStorage y al
+ * recargar la página NUNCA restauraba el carrito / plan.
+ *
+ * Este helper hace el JSON.stringify/parse correcto manteniendo el aislamiento
+ * por usuario.
+ */
+export function createUserScopedStorage<S>(): PersistStorage<S> {
+  return {
+    getItem: (name) => {
+      const raw = userScopedStorage.getItem(name);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as StorageValue<S>;
+      } catch {
+        // Valor viejo o corrupto (ej: "[object Object]"): se ignora y el
+        // store arranca con el estado inicial.
+        userScopedStorage.removeItem(name);
+        return null;
+      }
+    },
+    setItem: (name, value) => {
+      userScopedStorage.setItem(name, JSON.stringify(value));
+    },
+    removeItem: (name) => {
+      userScopedStorage.removeItem(name);
+    },
+  };
 }
 
 export const userScopedStorage = {

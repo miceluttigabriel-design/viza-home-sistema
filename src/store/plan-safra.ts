@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { userScopedStorage } from "@/lib/user-scoped-storage";
+import { createUserScopedStorage } from "@/lib/user-scoped-storage";
 
 // === HELPERS ===
 
@@ -394,8 +394,23 @@ const initialCliente = {
   fechaEmision: new Date().toISOString().slice(0, 10),
 };
 
+// Campos que se guardan en localStorage (el resto son funciones/derivados)
+type PlanSafraPersistedState = Pick<
+  PlanSafraState,
+  | "productos"
+  | "clienteNombre"
+  | "clienteTelefono"
+  | "clienteObservaciones"
+  | "fechaEmision"
+  | "entradaValor"
+  | "cascoAplicado"
+  | "cascoValor"
+  | "cascoDescripcion"
+  | "refuerzos"
+>;
+
 export const usePlanSafraStore = create<PlanSafraState>()(
-  persist(
+  persist<PlanSafraState, [], [], PlanSafraPersistedState>(
     (set, get) => ({
       // --- Productos ---
       productos: [],
@@ -543,7 +558,7 @@ export const usePlanSafraStore = create<PlanSafraState>()(
     }),
     {
       name: "viza-plan-safra",
-      storage: userScopedStorage,
+      storage: createUserScopedStorage<PlanSafraPersistedState>(),
       partialize: (state) => ({
         productos: state.productos,
         clienteNombre: state.clienteNombre,

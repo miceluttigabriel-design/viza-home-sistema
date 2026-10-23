@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 
 // === Tipos del payload del Plan Safra ===
@@ -78,6 +80,11 @@ function generateQuoteNumber(): string {
 // POST /api/quotes/safra-pdf - genera PDF del presupuesto SAFRA
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
     const body: SafraPdfPayload = await req.json();
 
     if (!body.productos || body.productos.length === 0) {

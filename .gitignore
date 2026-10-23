@@ -68,3 +68,7 @@ upload/*.xlsx
 
 # NO subir archivos temporales de scripts
 scripts/.tmp_*
+
+# Exportaciones con contraseñas (script export-users-txt.ts)
+LISTADO-USUARIOS-VIZA-HOME.txt
+

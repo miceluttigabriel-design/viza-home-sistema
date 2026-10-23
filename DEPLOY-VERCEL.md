@@ -103,7 +103,17 @@ Como el Excel .xlsm no se sube a GitHub (es privado), para refrescar productos:
 - HTTPS gratis
 - Mantenés tu cPanel para emails @viza.com.py
 
-## 🔐 CREDENCIALES INICIALES
-- Supremo: viza.cobranza@viza.com.py / VizaSupremo2026!Cob
-- Admin: viza@viza.com.py / vilmarrepresentante1*
-- Colaborador: ventas.online@viza.com.py / vendedor1*
+## 🔐 PRIMER ACCESO (crear el supremo admin)
+
+Por seguridad, este repositorio **no contiene contraseñas**. Para crear o
+resetear el supremo admin usá el script (te pide / genera la contraseña):
+
+```bash
+SUPREMO_EMAIL="tu@email.com" bunx tsx scripts/resetear-supremo-admin.ts
+```
+
+- Si no pasás `SUPREMO_PASSWORD`, el script genera una aleatoria y la muestra una sola vez.
+- Después entrá al sistema y cambiá la contraseña desde el panel.
+
+> ⚠️ Si alguna contraseña estuvo publicada en este archivo o en scripts del repo,
+> considerala comprometida y cambiala. Ver `SECURITY.md`.

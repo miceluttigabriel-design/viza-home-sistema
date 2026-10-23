@@ -94,9 +94,20 @@ export async function POST(req: NextRequest) {
 }
 
 // GET /api/quotes - lista presupuestos guardados
+// Admin y supremo_admin ven todos; un colaborador ve solo los propios.
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const role = (session.user as any)?.role;
+    const userId = (session.user as any)?.id;
+    const isAdmin = role === "admin" || role === "supremo_admin";
+
     const quotes = await db.quote.findMany({
+      where: isAdmin ? {} : { userId },
       include: { items: true },
       orderBy: { createdAt: "desc" },
       take: 50,

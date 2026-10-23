@@ -71,10 +71,16 @@ async function main() {
   const output = lines.join("\n");
   console.log(output);
 
-  // Guardar archivo
+  // Guardar archivo FUERA del repositorio: contiene contraseñas legibles.
+  // Podés cambiar la ruta con la variable USERS_EXPORT_PATH.
   const fs = await import("fs");
-  fs.writeFileSync("/home/z/my-project/download/LISTADO-USUARIOS-VIZA-HOME.txt", output);
-  console.log("\n>>> Archivo guardado: download/LISTADO-USUARIOS-VIZA-HOME.txt");
+  const path = await import("path");
+  const outputPath =
+    process.env.USERS_EXPORT_PATH ||
+    path.join(process.cwd(), "..", "LISTADO-USUARIOS-VIZA-HOME.txt");
+  fs.writeFileSync(outputPath, output);
+  console.log(`\n>>> Archivo guardado: ${outputPath}`);
+  console.log(">>> ⚠️  Archivo confidencial: no lo subas a GitHub ni lo compartas.");
 
   await db.$disconnect();
 }

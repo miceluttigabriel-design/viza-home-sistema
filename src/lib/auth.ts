@@ -2,6 +2,42 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit";
+
+// Durante `next build` no hay request real: permitimos que el build termine
+// aunque falte el secreto. En runtime de produccion SI es obligatorio.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
+/**
+ * El secreto firma los JWT de sesión. Si queda hardcodeado, cualquiera con
+ * acceso al código puede falsificar un token de SUPREMO_ADMIN.
+ */
+function resolveSecret(): string {
+  const fromEnv = process.env.NEXTAUTH_SECRET;
+
+  if (fromEnv && fromEnv.length >= 16) return fromEnv;
+
+  if (process.env.NODE_ENV === "production" && !isBuildPhase) {
+    throw new Error(
+      "[auth] NEXTAUTH_SECRET no está configurado o es demasiado corto. " +
+        "Generá uno con `openssl rand -base64 32` y agregalo en las variables " +
+        "de entorno (local y Vercel) antes de arrancar el servidor."
+    );
+  }
+
+  // Solo desarrollo local / build. NUNCA usar esto en producción.
+  return "viza-home-dev-secret-solo-para-desarrollo";
+}
+
+/** IP del cliente detrás de Vercel / proxy. */
+function getClientIp(req: unknown): string {
+  const headers = (req as { headers?: Record<string, unknown> } | undefined)?.headers;
+  if (!headers) return "desconocida";
+  const forwarded = headers["x-forwarded-for"];
+  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  if (typeof raw !== "string") return "desconocida";
+  return raw.split(",")[0].trim() || "desconocida";
+}
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -15,37 +51,39 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email", placeholder: "admin@vizahome.com" },
         password: { label: "Contraseña", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         try {
           if (!credentials?.email || !credentials?.password) {
-            console.log("[auth] Faltan credenciales");
             return null;
           }
 
           const email = credentials.email.toLowerCase().trim();
-          console.log("[auth] Intentando login para:", email);
+          const ip = getClientIp(req);
 
-          const user = await db.user.findUnique({
-            where: { email },
-          });
-
-          if (!user) {
-            console.log("[auth] Usuario no encontrado");
+          // Anti fuerza bruta: 5 intentos cada 15 minutos por IP + email.
+          // Al superar el límite se devuelve null (mismo error genérico que
+          // una contraseña incorrecta, para no filtrar información).
+          const rateKey = `login:${ip}:${email}`;
+          const rate = checkRateLimit(rateKey, 5, 15 * 60 * 1000);
+          if (!rate.ok) {
+            console.warn(`[auth] Demasiados intentos de login para ${email} (IP ${ip})`);
             return null;
           }
 
-          if (!user.active) {
-            console.log("[auth] Usuario inactivo");
+          const user = await db.user.findUnique({ where: { email } });
+
+          if (!user || !user.active) {
             return null;
           }
 
           const valid = await bcrypt.compare(credentials.password, user.password);
           if (!valid) {
-            console.log("[auth] Password incorrecto");
             return null;
           }
 
-          console.log("[auth] Login OK:", user.email, "rol:", user.role);
+          // Login correcto: liberamos el contador de esa IP + email.
+          resetRateLimit(rateKey);
+
           return {
             id: user.id,
             email: user.email,
@@ -78,5 +116,5 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/",
   },
-  secret: process.env.NEXTAUTH_SECRET || "viza-home-secret-development-key-change-in-prod",
+  secret: resolveSecret(),
 };

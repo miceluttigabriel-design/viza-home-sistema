@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { userScopedStorage } from "@/lib/user-scoped-storage";
+import { createUserScopedStorage } from "@/lib/user-scoped-storage";
 
 export interface CartItem {
   productId: string;
@@ -116,7 +116,7 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: "viza-cart-storage",
-      storage: userScopedStorage,
+      storage: createUserScopedStorage<CartState>(),
     }
   )
 );

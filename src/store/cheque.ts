@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { userScopedStorage } from "@/lib/user-scoped-storage";
+import { createUserScopedStorage } from "@/lib/user-scoped-storage";
 
 function parseSafra(safra: string | null | undefined): number {
   if (!safra) return 0;
@@ -131,8 +131,20 @@ const initialCliente = {
   fechaEmision: new Date().toISOString().slice(0, 10),
 };
 
+// Campos que se guardan en localStorage (el resto son funciones/derivados)
+type ChequePersistedState = Pick<
+  ChequeState,
+  | "productos"
+  | "clienteNombre"
+  | "clienteTelefono"
+  | "clienteObservaciones"
+  | "fechaEmision"
+  | "cantidadCheques"
+  | "fechasCheques"
+>;
+
 export const useChequeStore = create<ChequeState>()(
-  persist(
+  persist<ChequeState, [], [], ChequePersistedState>(
     (set) => ({
       productos: [],
       addProducto: (p) => set((s) => {
@@ -174,7 +186,7 @@ export const useChequeStore = create<ChequeState>()(
     }),
     {
       name: "viza-plan-cheque",
-      storage: userScopedStorage,
+      storage: createUserScopedStorage<ChequePersistedState>(),
       partialize: (s) => ({
         productos: s.productos, clienteNombre: s.clienteNombre, clienteTelefono: s.clienteTelefono,
         clienteObservaciones: s.clienteObservaciones, fechaEmision: s.fechaEmision,

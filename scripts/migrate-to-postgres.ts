@@ -61,38 +61,44 @@ async function main() {
   const users = await pgClient.user.count();
   console.log(`  Usuarios existentes en PG: ${users}`);
 
-  // Datos hardcodeados de usuarios (los 62)
-  // (estos son los usuarios con sus hashes bcrypt ya generados)
+  // Usuarios iniciales de respaldo (el listado real se migra desde SQLite o
+  // con scripts/seed-users.ts).
+  // Las contraseñas NO se hardcodean: vienen de variables de entorno o se
+  // generan aleatoriamente y se muestran una sola vez.
+  const supremoPassword = process.env.BOOTSTRAP_SUPREMO_PASSWORD;
+  const adminPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+
   const adminUsers = [
-    { email: "viza@viza.com.py", name: "VILMAR CESAR ZAGO PEREIRA", role: "admin", password: "vilmarrepresentante1*" },
-    { email: "baltazar@viza.com.py", name: "BALTAZAR ALFREDO PALUDO GONCALVES", role: "admin", password: "VizaHome2026!bR5K" },
-    { email: "viza.compras@viza.com.py", name: "ADRIANO RUIZ GOMEZ", role: "admin", password: "VizaHome2026!Kz8m" },
-    { email: "viza.cobranza@viza.com.py", name: "GABRIEL HENRIQUE MICELUTTI DA SILVA", role: "supremo_admin", password: "VizaSupremo2026!Cob" },
+    { email: "viza@viza.com.py", name: "VILMAR CESAR ZAGO PEREIRA", role: "admin", password: adminPassword },
+    { email: "baltazar@viza.com.py", name: "BALTAZAR ALFREDO PALUDO GONCALVES", role: "admin", password: adminPassword },
+    { email: "viza.compras@viza.com.py", name: "ADRIANO RUIZ GOMEZ", role: "admin", password: adminPassword },
+    { email: "viza.cobranza@viza.com.py", name: "GABRIEL HENRIQUE MICELUTTI DA SILVA", role: "supremo_admin", password: supremoPassword },
   ];
 
-  for (const u of adminUsers) {
+  const adminsConPassword = adminUsers.filter((u) => u.password);
+
+  if (adminsConPassword.length === 0) {
+    console.log(
+      "  (Sin BOOTSTRAP_ADMIN_PASSWORD / BOOTSTRAP_SUPREMO_PASSWORD: no se crean usuarios)"
+    );
+  }
+
+  for (const u of adminsConPassword) {
+    if (!u.password) continue;
+
     const existing = await pgClient.user.findUnique({ where: { email: u.email } });
     if (existing) {
       console.log(`  [skip] ${u.email} ya existe`);
       continue;
     }
-    const hashed = await bcrypt.hash(u.password, 10);
-    const created = await pgClient.user.create({
+    const hashed = await bcrypt.hash(u.password, 12);
+    await pgClient.user.create({
       data: {
         email: u.email,
         name: u.name,
         password: hashed,
         role: u.role,
         active: true,
-      },
-    });
-    // Registrar en PasswordLog
-    await pgClient.passwordLog.create({
-      data: {
-        userId: created.id,
-        email: u.email,
-        contrasenaTextoPlano: u.password,
-        cambiadoPor: "SISTEMA",
       },
     });
     console.log(`  [OK] ${u.email} (${u.role})`);
@@ -106,6 +112,8 @@ async function main() {
   console.log("\n--- Migrando productos ---");
   let sqliteDb: any = null;
   try {
+    // better-sqlite3 es opcional: solo se usa al migrar desde SQLite local.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Database = require("better-sqlite3");
     const dbPath = path.join(process.cwd(), "db", "custom.db");
     if (!fs.existsSync(dbPath)) {

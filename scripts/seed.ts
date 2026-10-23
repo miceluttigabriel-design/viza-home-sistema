@@ -62,11 +62,21 @@ async function main() {
     await db.product.create({ data: p });
   }
 
-  // Crear usuarios administradores reales
+  // Crear usuarios administradores iniciales.
+  // IMPORTANTE: las contraseñas NO se hardcodean en el repo (la repo es pública).
+  // Se leen de variables de entorno; si no existen, se genera una aleatoria y se
+  // muestra una sola vez en la terminal.
   console.log("Creando usuarios...");
-  const vilmarPass = await bcrypt.hash("vilmarrepresentante1*", 10);
-  const gabrielPass = await bcrypt.hash("gabrielcobranza1*", 10);
-  const vendedorPass = await bcrypt.hash("vendedor1*", 10);
+  const { randomBytes } = await import("crypto");
+  const genPass = () => `Viza${randomBytes(6).toString("base64url")}!9`;
+
+  const adminPass = process.env.SEED_ADMIN_PASSWORD || genPass();
+  const supremoPass = process.env.SEED_SUPREMO_PASSWORD || genPass();
+  const vendedorPass = process.env.SEED_VENDEDOR_PASSWORD || genPass();
+
+  const vilmarPass = await bcrypt.hash(adminPass, 10);
+  const gabrielPass = await bcrypt.hash(supremoPass, 10);
+  const vendedorHash = await bcrypt.hash(vendedorPass, 10);
 
   // Administradores
   await db.user.create({
@@ -92,7 +102,7 @@ async function main() {
     data: {
       email: "vendedor@viza.com.py",
       name: "COMERCIAL VIZA HOME E.A.S",
-      password: vendedorPass,
+      password: vendedorHash,
       role: "representante",
     },
   });
@@ -102,11 +112,10 @@ async function main() {
   console.log(`   - Muebles: ${products.filter(p => p.category === "Muebles").length}`);
   console.log(`   - Electrodomesticos: ${products.filter(p => p.category === "Electrodomesticos").length}`);
   console.log(`   - Motos: ${products.filter(p => p.category === "Motos").length}`);
-  console.log("   - Usuarios ADMINISTRADORES:");
-  console.log("     * viza@viza.com.py / vilmarrepresentante1* (Vilmar)");
-  console.log("     * viza.cobranza@viza.com.py / gabrielcobranza1* (Gabriel)");
-  console.log("   - Usuario VENDEDOR (lista de precios):");
-  console.log("     * vendedor@viza.com.py / vendedor1* (COMERCIAL VIZA HOME E.A.S)");
+  console.log("   - Usuarios creados (guardá estas contraseñas, no se vuelven a mostrar):");
+  console.log(`     * viza@viza.com.py / ${adminPass} (Vilmar)`);
+  console.log(`     * viza.cobranza@viza.com.py / ${supremoPass} (Gabriel)`);
+  console.log(`     * vendedor@viza.com.py / ${vendedorPass} (COMERCIAL VIZA HOME E.A.S)`);
 }
 
 main()

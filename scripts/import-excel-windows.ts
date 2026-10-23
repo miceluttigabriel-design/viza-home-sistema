@@ -78,7 +78,7 @@ function recalculate(p: any): any {
 async function main() {
   console.log("Abriendo Excel...");
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(excelPath, { password: PASS });
+  await wb.xlsx.readFile(excelPath);
 
   const ws = wb.getWorksheet("base");
   if (!ws) {
@@ -90,7 +90,7 @@ async function main() {
 
   console.log(`Hoja 'base': ${ws.rowCount} filas, ${ws.columnCount} columnas`);
 
-  const products = [];
+  const products: any[] = [];
   const seenSkus = new Set<string>();
 
   for (let r = 3; r <= ws.rowCount; r++) {
