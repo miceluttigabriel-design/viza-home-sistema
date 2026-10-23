@@ -925,21 +925,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         </div>
       </main>
 
-      <footer className="mt-auto py-6" style={{ backgroundColor: "#155789" }}>
-        <div className="h-1 w-full mb-4" style={{ background: "linear-gradient(90deg, #b89853 0%, #D9B86B 50%, #b89853 100%)" }} />
-        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white">
-          <div className="flex items-baseline gap-1">
-            <span className="text-base font-black text-white">VIZA</span>
-            <span className="text-sm font-bold" style={{ color: "#D9B86B" }}>home</span>
-            <span className="text-[10px] italic ml-2" style={{ color: "#e5cb8a" }}>Todo para tu hogar, en un solo lugar.</span>
-          </div>
-          <div className="flex items-center gap-3 text-[10px]">
-            <span>Tel: (0987) 700 707</span>
-            <span>Email: ventas.online@viza.com.py</span>
-            <span>Web: www.viza.com.py</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
