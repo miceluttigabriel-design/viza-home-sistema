@@ -14,6 +14,21 @@ function toString(val: any): string {
 }
 
 /**
+ * Normaliza un header del Excel para comparación robusta:
+ * - Quita acentos/diacríticos (Descripción → Descripcion)
+ * - Pasa a mayúsculas (Descripcion → DESCRIPCION)
+ * - Recorta espacios
+ * Esto hace que "Descripción" → "DESCRIPCION" matchee con nuestro lookup.
+ * Acepta any porque ExcelJS devuelve CellValue (string | number | Date | object | null).
+ */
+function normalizeHeader(s: any): string {
+  return toString(s)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // quita diacríticos
+    .toUpperCase();
+}
+
+/**
  * Limpia un Codigo del Excel que puede venir con coma como separador de miles.
  * Ej: "1,747" → "1747", "12,240" → "12240", "301" → "301".
  */
@@ -99,10 +114,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Mapear headers (fila 1) → número de columna
+    // Usamos normalizeHeader para que "Descripción" (con acento) → "DESCRIPCION"
+    // y el lookup en getCell tambien normalice → siempre matchea.
     const headerRow = ws.getRow(1);
     const headerMap: Record<string, number> = {};
     for (let c = 1; c <= ws.columnCount; c++) {
-      const header = toString(headerRow.getCell(c).value).toUpperCase();
+      const header = normalizeHeader(headerRow.getCell(c).value);
       if (header) headerMap[header] = c;
     }
 
@@ -124,9 +141,9 @@ export async function POST(req: NextRequest) {
     const colSubgrupo = headerMap["SUBGRUPO"];
     const colDescripcion = headerMap["DESCRIPCION"];
 
-    // Helper para obtener valor de celda por nombre de header
+    // Helper para obtener valor de celda por nombre de header (normaliza para match)
     const getCell = (row: ExcelJS.Row, headerName: string): any => {
-      const col = headerMap[headerName.toUpperCase()];
+      const col = headerMap[normalizeHeader(headerName)];
       if (!col) return null;
       const cell = row.getCell(col).value;
       // Si es celda con fórmula, tomar el resultado
@@ -137,14 +154,16 @@ export async function POST(req: NextRequest) {
     };
 
     // 5. Recorrer filas, agrupar por Codigo y acumular Saldo
-    // Estructura: { [codigoLimpio]: { stockSumado, unaFilaRepresentativa, countFilas } }
+    // Estructura: { [codigoLimpio]: { stockSumado, costProd, referencia, subGrupo, name, filas } }
+    // IMPORTANTE: el "Codigo Fabrica" del Excel se guarda como `referencia`
+    // (columna REFERENCIA del grupo DATOS en la tabla), NO como `codViza` (DATOS VIZA).
     const grouped: Record<
       string,
       {
         codigo: string;
         stockSumado: number;
         costProd: number | null;
-        codViza: string | null;
+        referencia: string | null;  // ← antes era codViza, ahora es referencia
         subGrupo: string | null;
         name: string | null;
         filas: number;
@@ -173,7 +192,9 @@ export async function POST(req: NextRequest) {
 
       const saldo = parseSaldo(getCell(row, "SALDO"));
       const costProd = parseCostoUnitario(getCell(row, "COSTO UNIT. ULTIMA COMPRA"));
-      const codViza = toString(getCell(row, "CODIGO FABRICA")) || null;
+      // El Codigo Fabrica del Excel va al campo `referencia` de la base
+      // (columna REFERENCIA del grupo DATOS), NO a `codViza` (DATOS VIZA).
+      const referencia = toString(getCell(row, "CODIGO FABRICA")) || null;
       const subGrupo = toString(getCell(row, "SUBGRUPO")) || null;
       const name = toString(getCell(row, "DESCRIPCION")) || null;
 
@@ -186,7 +207,7 @@ export async function POST(req: NextRequest) {
           codigo,
           stockSumado: saldo,
           costProd,
-          codViza,
+          referencia,
           subGrupo,
           name,
           filas: 1,
@@ -206,7 +227,7 @@ export async function POST(req: NextRequest) {
     const nuevos: Array<{
       sku: string;
       name: string | null;
-      codViza: string | null;
+      referencia: string | null;  // ← antes era codViza, ahora es referencia
       subGrupo: string | null;
       stock: number;
       costProd: number | null;
@@ -235,7 +256,7 @@ export async function POST(req: NextRequest) {
         nuevos.push({
           sku: codigo,
           name: data.name,
-          codViza: data.codViza,
+          referencia: data.referencia,  // ← antes era codViza
           subGrupo: data.subGrupo,
           stock: data.stockSumado,
           costProd: data.costProd,

@@ -272,7 +272,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     codigosUnicos: number;
     nuevosCount: number;
     actualizadosCount: number;
-    nuevos: Array<{ sku: string; name: string | null; codViza: string | null; subGrupo: string | null; stock: number; costProd: number | null }>;
+    nuevos: Array<{ sku: string; name: string | null; referencia: string | null; subGrupo: string | null; stock: number; costProd: number | null }>;
     actualizados: Array<{ sku: string; nameActual: string | null; stockActual: number; stockNuevo: number }>;
     errores: string[];
   } | null>(null);
@@ -1117,7 +1117,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                             <tr>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">SKU</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
-                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Cod Viza</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Referencia</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo Prod.</th>
                             </tr>
@@ -1127,7 +1127,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               <tr key={i} className="border-t border-stone-100">
                                 <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{p.sku}</td>
                                 <td className="px-2 py-1.5 text-stone-700">{p.name || "—"}</td>
-                                <td className="px-2 py-1.5 text-stone-600">{p.codViza || "—"}</td>
+                                <td className="px-2 py-1.5 text-stone-600">{p.referencia || "—"}</td>
                                 <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700 font-semibold">{p.stock}</td>
                                 <td className="px-2 py-1.5 text-right tabular-nums text-stone-700">
                                   {p.costProd != null ? p.costProd.toLocaleString("es-PY") : "—"}
