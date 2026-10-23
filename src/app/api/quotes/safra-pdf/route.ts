@@ -448,82 +448,17 @@ export async function POST(req: NextRequest) {
       y += obsLines.length * 12;
     }
 
-    // ===== FOOTER =====
-    const footerH = 70;
-    const footerY = pageH - footerH;
-
-    doc.setFillColor(...BLUE);
-    doc.rect(0, footerY, pageW, footerH, "F");
-
-    doc.setFillColor(...GOLD);
-    doc.rect(0, footerY, pageW, 3, "F");
-
-    // Mini logo: grilla dorada + texto "VIZA home"
-    const fGridX = margin;
-    const fGridY = footerY + 12;
-    const fSqSize = 6;
-    const fSqGap = 1.5;
-    doc.setFillColor(...GOLD);
-    doc.rect(fGridX, fGridY, fSqSize, fSqSize, "F");
-    doc.rect(fGridX + fSqSize + fSqGap, fGridY, fSqSize, fSqSize, "F");
-    doc.rect(fGridX, fGridY + fSqSize + fSqGap, fSqSize, fSqSize, "F");
-    doc.rect(fGridX + fSqSize + fSqGap, fGridY + fSqSize + fSqGap, fSqSize, fSqSize, "F");
-
-    let fTxtX = fGridX + fSqSize * 2 + fSqGap + 6;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(255, 255, 255);
-    const fViza = "VIZA";
-    doc.text(fViza, fTxtX, footerY + 22);
-    const fVizaW = doc.getTextWidth(fViza);
-    doc.setTextColor(...GOLD);
-    doc.text(" home", fTxtX + fVizaW, footerY + 22);
-
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(7);
-    doc.setTextColor(...GOLD);
-    doc.text("Todo para tu hogar, en un solo lugar.", fTxtX, footerY + 32);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(255, 255, 255);
-    doc.text("Tel: (0987) 700 707", fTxtX, footerY + 44);
-    doc.text("Email: ventas.online@viza.com.py", fTxtX, footerY + 54);
-    doc.text("Web: www.viza.com.py   ·   Redes: @vizahome", fTxtX, footerY + 64);
-
-    // Texto legal a la derecha
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(200, 200, 200);
-    doc.text(
-      "VIZA HOME E.A.S · Plan Safra de pagos escalonados",
-      pageW - margin,
-      footerY + 12,
-      { align: "right" }
-    );
-    doc.text(
-      "Presupuesto válido por 7 días desde la fecha de emisión.",
-      pageW - margin,
-      footerY + 22,
-      { align: "right" }
-    );
-    doc.text(
-      "¡Gracias por elegirnos!",
-      pageW - margin,
-      footerY + 32,
-      { align: "right" }
-    );
-
+    // ===== FOOTER (nuevo diseño unificado) =====
+    drawFooter(doc, pageW, pageH, margin, contentW, "Plan Safra");
     // Número de página si tiene múltiples páginas
     const totalPages = doc.getNumberOfPages();
     if (totalPages > 1) {
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(...GOLD);
-        doc.text(`Página ${i} de ${totalPages}`, pageW - margin, footerY + 64, {
-          align: "right",
-        });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(...GREY);
+        doc.text(`Página ${i} de ${totalPages}`, pageW - margin, pageH - 54, { align: "right" });
       }
     }
 

@@ -291,7 +291,7 @@ function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: number, co
   doc.setFontSize(6.8);
   doc.setTextColor(...GREY);
   doc.text(
-    `VIZA HOME E.A.S · Muebles, Electrodomésticos y Motos · Presupuesto válido por ${VALIDEZ_DIAS} días desde la fecha de emisión.`,
+    `VIZA HOME E.A.S · Plan de Cuotas · Presupuesto válido por ${VALIDEZ_DIAS} días desde la fecha de emisión.`,
     pageW / 2,
     pageH - 20,
     { align: "center" }
