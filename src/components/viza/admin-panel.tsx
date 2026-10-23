@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Plus,
   Download,
+  Upload,
   FileSpreadsheet,
   Tag,
   Pencil,
@@ -261,6 +262,23 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const [openFilterColumn, setOpenFilterColumn] = useState<string | null>(null);
   // Filtro activo de etiqueta de color: "verde" | "azul" | "dorado" | "rojo" | null
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
+
+  // ─── IMPORTAR EXCEL (planilla de inventario) ───
+  // Estados del modal de importación de stock desde planilla de inventario
+  const [importOpen, setImportOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importPreview, setImportPreview] = useState<{
+    totalFilas: number;
+    codigosUnicos: number;
+    nuevosCount: number;
+    actualizadosCount: number;
+    nuevos: Array<{ sku: string; name: string | null; codViza: string | null; subGrupo: string | null; stock: number; costProd: number | null }>;
+    actualizados: Array<{ sku: string; nameActual: string | null; stockActual: number; stockNuevo: number }>;
+    errores: string[];
+  } | null>(null);
+  const [importApplying, setImportApplying] = useState(false);
+  const [importResult, setImportResult] = useState<{ creados: number; actualizados: number; errores: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchProducts = useCallback(async () => {
     setLoadingProducts(true);
@@ -553,6 +571,64 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   <Download className="h-3.5 w-3.5" />
                   EXPORTAR EXCEL
                 </button>
+
+                {/* Boton IMPORTAR EXCEL (planilla de inventario) — solo supremo_admin */}
+                {isSupremo && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setImportOpen(true);
+                        setImportLoading(true);
+                        setImportPreview(null);
+                        setImportResult(null);
+                        try {
+                          const formData = new FormData();
+                          formData.append("file", file);
+                          const res = await fetch("/api/products/import-stock/preview", {
+                            method: "POST",
+                            body: formData,
+                          });
+                          const data = await res.json();
+                          if (!res.ok || data.error) {
+                            throw new Error(data.error || `Error HTTP ${res.status}`);
+                          }
+                          setImportPreview(data);
+                        } catch (error) {
+                          console.error("Error import preview:", error);
+                          toast.error(`Error: ${(error as Error).message}`);
+                          setImportOpen(false);
+                        } finally {
+                          setImportLoading(false);
+                          // Reset del input para permitir elegir el mismo archivo otra vez
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }
+                      }}
+                    />
+                    <button
+                      id="btn-import-excel"
+                      onClick={() => {
+                        setImportOpen(true);
+                        setImportPreview(null);
+                        setImportResult(null);
+                        setImportLoading(false);
+                        setImportApplying(false);
+                        fileInputRef.current?.click();
+                      }}
+                      className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                      style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                      title="Importar planilla de inventario (stock + nuevos productos)"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      IMPORTAR EXCEL
+                    </button>
+                  </>
+                )}
               </div>
               <div className="text-xs text-stone-500 flex items-center gap-2 flex-wrap">
                 <span className="inline-flex items-center gap-1">
@@ -920,6 +996,298 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           )}
         </div>
       </main>
+
+      {/* ════════════════════════════════════════════════════════════════
+          MODAL: IMPORTAR EXCEL (planilla de inventario)
+          - Solo visible para supremo_admin (botón está condicionado)
+          - Muestra preview con cantidad de productos nuevos + actualizados
+          - Botón CONFIRMAR aplica los cambios
+          ════════════════════════════════════════════════════════════════ */}
+      {importOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => {
+            if (!importLoading && !importApplying) setImportOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del modal */}
+            <div
+              className="px-6 py-4 flex items-center justify-between border-b"
+              style={{ borderColor: "#e7e5e4", background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+            >
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Importar planilla de inventario
+              </h3>
+              <button
+                onClick={() => {
+                  if (!importLoading && !importApplying) setImportOpen(false);
+                }}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                disabled={importLoading || importApplying}
+                title="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body del modal */}
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              {importLoading && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="h-10 w-10 rounded-full border-4 border-stone-200 border-t-[#155789] animate-spin"></div>
+                  <p className="text-sm text-stone-600 font-medium">Procesando Excel…</p>
+                </div>
+              )}
+
+              {!importLoading && importResult && (
+                <div className="space-y-4">
+                  <div
+                    className="rounded-xl p-4 border"
+                    style={{ background: "#f0fdf4", borderColor: "#86efac" }}
+                  >
+                    <p className="text-base font-bold text-emerald-800 mb-2">
+                      ✓ Importación completada
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="bg-white rounded-lg p-3 border border-emerald-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Productos nuevos creados</p>
+                        <p className="text-2xl font-black text-emerald-700">{importResult.creados}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-emerald-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Stocks actualizados</p>
+                        <p className="text-2xl font-black text-blue-700">{importResult.actualizados}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {importResult.errores.length > 0 && (
+                    <div className="rounded-xl p-4 border border-amber-200 bg-amber-50">
+                      <p className="text-sm font-bold text-amber-800 mb-2">
+                        ⚠ Errores ({importResult.errores.length})
+                      </p>
+                      <ul className="text-xs text-amber-700 space-y-1 max-h-40 overflow-auto">
+                        {importResult.errores.slice(0, 50).map((e, i) => (
+                          <li key={i}>• {e}</li>
+                        ))}
+                        {importResult.errores.length > 50 && (
+                          <li className="italic">…y {importResult.errores.length - 50} más</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="text-xs text-stone-500 italic">
+                    La tabla de productos se va a recargar automáticamente para mostrar los cambios.
+                  </div>
+                </div>
+              )}
+
+              {!importLoading && !importResult && importPreview && (
+                <div className="space-y-4">
+                  {/* Resumen */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Productos nuevos</p>
+                      <p className="text-3xl font-black text-emerald-700">{importPreview.nuevosCount}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Se van a CREAR con SKU, descripción, codViza, subGrupo, stock y costo</p>
+                    </div>
+                    <div className="rounded-lg p-3 border border-blue-200 bg-blue-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Stocks actualizados</p>
+                      <p className="text-3xl font-black text-blue-700">{importPreview.actualizadosCount}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Solo se REEMPLAZA el campo stock (resto intocado)</p>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-stone-600 bg-stone-50 rounded-lg p-3 border border-stone-200">
+                    <strong>Resumen del Excel:</strong> {importPreview.totalFilas} filas procesadas → {importPreview.codigosUnicos} códigos únicos (las filas duplicadas con el mismo código se sumaron en stock).
+                  </div>
+
+                  {/* Lista de productos nuevos (muestra hasta 8) */}
+                  {importPreview.nuevos.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-stone-800 mb-2">
+                        Productos nuevos a crear ({importPreview.nuevos.length})
+                      </p>
+                      <div className="border border-stone-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead style={{ background: "#f5f5f4" }}>
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">SKU</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Cod Viza</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo Prod.</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importPreview.nuevos.slice(0, 8).map((p, i) => (
+                              <tr key={i} className="border-t border-stone-100">
+                                <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{p.sku}</td>
+                                <td className="px-2 py-1.5 text-stone-700">{p.name || "—"}</td>
+                                <td className="px-2 py-1.5 text-stone-600">{p.codViza || "—"}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700 font-semibold">{p.stock}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-700">
+                                  {p.costProd != null ? p.costProd.toLocaleString("es-PY") : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {importPreview.nuevos.length > 8 && (
+                        <p className="text-[10px] text-stone-500 italic mt-1">
+                          …y {importPreview.nuevos.length - 8} productos más (no se muestran para no recargar la vista)
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Lista de productos actualizados (muestra hasta 8) */}
+                  {importPreview.actualizados.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-stone-800 mb-2">
+                        Stocks a actualizar ({importPreview.actualizados.length})
+                      </p>
+                      <div className="border border-stone-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead style={{ background: "#f5f5f4" }}>
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">SKU</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción actual</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock actual</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock nuevo</th>
+                              <th className="text-center px-2 py-1.5 font-semibold text-stone-600">Cambio</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importPreview.actualizados.slice(0, 8).map((p, i) => {
+                              const diff = p.stockNuevo - p.stockActual;
+                              return (
+                                <tr key={i} className="border-t border-stone-100">
+                                  <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{p.sku}</td>
+                                  <td className="px-2 py-1.5 text-stone-700">{p.nameActual || "—"}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">{p.stockActual}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums text-stone-800 font-semibold">{p.stockNuevo}</td>
+                                  <td className="px-2 py-1.5 text-center tabular-nums font-bold">
+                                    <span className={diff > 0 ? "text-emerald-600" : diff < 0 ? "text-rose-600" : "text-stone-500"}>
+                                      {diff > 0 ? "+" : ""}{diff}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {importPreview.actualizados.length > 8 && (
+                        <p className="text-[10px] text-stone-500 italic mt-1">
+                          …y {importPreview.actualizados.length - 8} productos más
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Errores del preview */}
+                  {importPreview.errores.length > 0 && (
+                    <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
+                      <p className="text-xs font-bold text-amber-800 mb-1">⚠ Advertencias</p>
+                      <ul className="text-[10px] text-amber-700 space-y-0.5">
+                        {importPreview.errores.slice(0, 10).map((e, i) => (
+                          <li key={i}>• {e}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!importLoading && !importResult && !importPreview && (
+                <div className="text-center py-12 text-stone-500 text-sm">
+                  No se pudo procesar el archivo. Cerrá y probá de nuevo.
+                </div>
+              )}
+            </div>
+
+            {/* Footer del modal con botones */}
+            <div className="px-6 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: "#e7e5e4" }}>
+              {!importResult && (
+                <>
+                  <button
+                    onClick={() => setImportOpen(false)}
+                    className="h-9 px-4 rounded-lg border border-stone-300 bg-white text-stone-700 text-sm font-medium hover:bg-stone-50 transition-colors"
+                    disabled={importLoading || importApplying}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!importPreview) return;
+                      setImportApplying(true);
+                      try {
+                        const res = await fetch("/api/products/import-stock/apply", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            nuevos: importPreview.nuevos,
+                            actualizados: importPreview.actualizados,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok || data.error) {
+                          throw new Error(data.error || `Error HTTP ${res.status}`);
+                        }
+                        setImportResult(data);
+                        toast.success(
+                          `Importación completa: ${data.creados} nuevos, ${data.actualizados} actualizados`
+                        );
+                        // Recargar la tabla para mostrar los cambios
+                        fetchProducts();
+                      } catch (error) {
+                        console.error("Error apply:", error);
+                        toast.error(`Error: ${(error as Error).message}`);
+                      } finally {
+                        setImportApplying(false);
+                      }
+                    }}
+                    className="h-9 px-4 rounded-lg text-white text-sm font-bold flex items-center gap-1.5 hover:brightness-110 transition-colors disabled:opacity-50"
+                    style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                    disabled={
+                      importLoading ||
+                      importApplying ||
+                      !importPreview ||
+                      (importPreview?.nuevosCount === 0 && importPreview?.actualizadosCount === 0)
+                    }
+                  >
+                    {importApplying ? (
+                      <>
+                        <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                        Aplicando…
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4" />
+                        CONFIRMAR IMPORTACIÓN
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+              {importResult && (
+                <button
+                  onClick={() => setImportOpen(false)}
+                  className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
+                  style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                >
+                  Cerrar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
