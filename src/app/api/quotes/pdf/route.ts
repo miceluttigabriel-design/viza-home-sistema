@@ -148,17 +148,41 @@ function fillPath(doc: jsPDF, start: [number, number], segs: Seg[], color: RGB) 
   doc.lines(rel, start[0], start[1], [1, 1], "F", true);
 }
 
+// Ola superior (estilo de marca): coordenadas diseñadas sobre un lienzo de 1223 x 202
+// y escaladas al ancho de la página, así siempre queda pegada al borde superior/derecho.
+const WAVE_LIGHT_GOLD: RGB = [224, 192, 128];
 function drawWave(doc: jsPDF, pageW: number) {
-  fillPath(doc, [pageW, 0], [
-    ["L", 250, 0],
-    ["C", 330, 6, 400, 26, 470, 34],
-    ["C", 530, 40, 575, 52, pageW, 84],
-  ], BLUE);
-  fillPath(doc, [pageW, 84], [
-    ["C", 575, 52, 530, 40, 470, 34],
-    ["C", 430, 30, 380, 46, 340, 56],
-    ["C", 430, 70, 520, 92, pageW, 100],
+  const k = pageW / 1223;
+  const P = (x: number, y: number): [number, number] => [x * k, y * k];
+  const C = (a: number, b: number, c: number, d: number, e: number, f: number): Seg => [
+    "C", a * k, b * k, c * k, d * k, e * k, f * k,
+  ];
+  const L = (x: number, y: number): Seg => ["L", x * k, y * k];
+
+  // 1) Dorado (banda diagonal que asoma debajo del azul)
+  fillPath(doc, P(557, 0), [
+    L(557, 40),
+    C(740, 95, 930, 150, 1060, 172),
+    C(1120, 182, 1180, 192, 1223, 202),
+    L(1223, 0),
   ], GOLD);
+
+  // 1b) Dorado claro en la esquina inferior derecha (queda debajo del azul, sin costuras)
+  fillPath(doc, P(1100, 100), [
+    L(1223, 100),
+    L(1223, 202),
+    C(1180, 192, 1130, 183, 1100, 177),
+  ], WAVE_LIGHT_GOLD);
+
+  // 2) Azul (forma principal, borde inferior ondulado y esquina inferior derecha redondeada)
+  fillPath(doc, P(180, 0), [
+    C(300, 15, 400, 42, 490, 42),
+    C(570, 42, 630, 25, 700, 25),
+    C(800, 25, 930, 65, 1010, 110),
+    C(1060, 150, 1100, 176, 1140, 168),
+    C(1190, 160, 1215, 125, 1223, 98),
+    L(1223, 0),
+  ], BLUE);
 }
 
 function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: number, quoteNumber: string, emision: Date, fmtDT: (d: Date) => string, fmtD: (d: Date) => string) {
