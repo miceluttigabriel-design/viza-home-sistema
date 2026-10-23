@@ -191,10 +191,10 @@ const COLUMNS: ColDef[] = [
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   { key: "codViza", label: "DATOS VIZA", type: "text", group: "DATOS" },
   { key: "codShow", label: "COD SHOW", type: "text", group: "DATOS" },
+  // STOCK movida ENTRE COD SHOW y Costo R$ (atras de Costo R$ = antes, en frente de COD SHOW = despues)
+  { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   // Costos
   { key: "costBR", label: "Costo R$", type: "num", group: "COSTOS" },
-  // STOCK movida atras de Costo R$ (orden solicitado por el usuario)
-  { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   { key: "rsToGs", label: "R$ A GS", type: "calc", group: "COSTOS" },
   { key: "costUS", label: "Costo US$", type: "num", group: "COSTOS" },
   { key: "usToGs", label: "US$ A GS", type: "calc", group: "COSTOS" },
