@@ -9,6 +9,8 @@ import { authOptions } from "@/lib/auth";
 // Aplica:
 //   - Para cada item en `nuevos`: CREATE nuevo Product con sku/name/codViza/subGrupo/stock/costProd
 //   - Para cada item en `actualizados`: UPDATE solo el campo stock (reemplazar)
+// Procesamiento en LOTES PARALELOS (batches de BATCH_SIZE) para no agotar
+// el timeout de Vercel (10s en Hobby) cuando hay miles de productos.
 // Devuelve: { ok, creados, actualizados, errores }
 // ─────────────────────────────────────────────────────────────
 
@@ -32,6 +34,12 @@ interface ApplyBody {
   nuevos: NuevoItem[];
   actualizados: ActualizadoItem[];
 }
+
+// Tamaño de lote para Promise.allSettled: 50 operaciones paralelas por lote.
+// Con 50 ops × ~30ms = 1.5s por lote, 2000 ops en ~40 lotes × 1.5s = 60s
+// (más que el timeout de Hobby, pero se va a procesar en chunks más chicos
+// para no bloquear el event loop).
+const BATCH_SIZE = 50;
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,100 +68,112 @@ export async function POST(req: NextRequest) {
     let creados = 0;
     let actualizadosCount = 0;
 
-    // 3. Crear productos nuevos
-    for (const item of body.nuevos) {
-      try {
-        if (!item.sku) {
-          errores.push(`Item sin SKU, saltado`);
-          continue;
-        }
-        // Verificar de nuevo si ya existe (por si cambió entre preview y apply)
-        const yaExiste = await db.product.findUnique({
-          where: { sku: item.sku },
-          select: { sku: true },
-        });
-        if (yaExiste) {
-          // Si existe ahora, actualizar stock en lugar de crear
-          await db.product.update({
+    // ─────────────────────────────────────────────────────
+    // 3. Crear productos nuevos — en lotes paralelos
+    // ─────────────────────────────────────────────────────
+    for (let i = 0; i < body.nuevos.length; i += BATCH_SIZE) {
+      const batch = body.nuevos.slice(i, i + BATCH_SIZE);
+      // Promise.allSettled: si un item falla, los demás se procesan igual
+      const results = await Promise.allSettled(
+        batch.map(async (item) => {
+          if (!item.sku) {
+            throw new Error("SKU vacío, saltado");
+          }
+          // Verificar de nuevo si ya existe (por si cambió entre preview y apply)
+          const yaExiste = await db.product.findUnique({
             where: { sku: item.sku },
-            data: { stock: item.stock },
+            select: { sku: true },
           });
-          actualizadosCount++;
-          continue;
-        }
-
-        // Crear producto nuevo con campos mínimos:
-        // - sku (obligatorio)
-        // - name (obligatorio en schema, si viene null usamos "PRODUCTO sin nombre")
-        // - codViza (del Excel: Codigo Fabrica)
-        // - subGrupo (del Excel: Subgrupo)
-        // - stock (Saldo sumado del Excel)
-        // - costProd (Costo Unit. Ultima Compra — solo para productos nuevos)
-        // Los demás campos quedan null y se cargan manualmente después.
-        await db.product.create({
-          data: {
-            sku: item.sku,
-            name: item.name || `PRODUCTO ${item.sku}`,
-            codViza: item.codViza,
-            subGrupo: item.subGrupo,
-            stock: item.stock,
-            costProd: item.costProd,
-            // showInCatalog por defecto es true (según schema), pero para
-            // productos recién importados desde planilla de inventario,
-            // conviene que no aparezcan automáticamente en el catálogo de
-            // vendedores hasta que el admin los configure. Lo dejamos en false.
-            showInCatalog: false,
-            // Campos legados de compatibilidad catálogo
-            brand: null,
-            category: item.subGrupo,
-            subcategory: item.subGrupo,
-            description: item.name,
-          },
-        });
-        creados++;
-      } catch (err: any) {
-        const msg = err?.message || String(err);
-        if (msg.includes("Unique constraint")) {
-          errores.push(`SKU ${item.sku}: ya existe (constraint) — saltado`);
+          if (yaExiste) {
+            // Si existe ahora, actualizar stock en lugar de crear
+            await db.product.update({
+              where: { sku: item.sku },
+              data: { stock: item.stock },
+            });
+            return { tipo: "actualizado", sku: item.sku };
+          }
+          // Crear producto nuevo con campos mínimos
+          await db.product.create({
+            data: {
+              sku: item.sku,
+              name: item.name || `PRODUCTO ${item.sku}`,
+              codViza: item.codViza,
+              subGrupo: item.subGrupo,
+              stock: item.stock,
+              costProd: item.costProd,
+              showInCatalog: false,
+              brand: null,
+              category: item.subGrupo,
+              subcategory: item.subGrupo,
+              description: item.name,
+            },
+          });
+          return { tipo: "nuevo", sku: item.sku };
+        })
+      );
+      // Procesar resultados del lote
+      results.forEach((r, idx) => {
+        if (r.status === "fulfilled") {
+          if (r.value.tipo === "nuevo") creados++;
+          else actualizadosCount++;
         } else {
-          errores.push(`SKU ${item.sku}: ${msg}`);
+          const sku = batch[idx]?.sku || "(sin sku)";
+          const reason = r.reason;
+          const msg = reason?.message || String(reason);
+          if (msg.includes("Unique constraint")) {
+            errores.push(`SKU ${sku}: ya existe (constraint) — saltado`);
+          } else {
+            errores.push(`SKU ${sku}: ${msg}`);
+          }
         }
-      }
+      });
     }
 
-    // 4. Actualizar stock de productos existentes (solo campo stock, nada más)
-    for (const item of body.actualizados) {
-      try {
-        if (!item.sku) {
-          errores.push(`Item actualizado sin SKU, saltado`);
-          continue;
-        }
-        await db.product.update({
-          where: { sku: item.sku },
-          data: { stock: item.stockNuevo },
-        });
-        actualizadosCount++;
-      } catch (err: any) {
-        const msg = err?.message || String(err);
-        if (msg.includes("Record to update not found")) {
-          // Si no existe al momento de apply, crearlo ahora
-          try {
-            await db.product.create({
-              data: {
-                sku: item.sku,
-                name: item.nameActual || `PRODUCTO ${item.sku}`,
-                stock: item.stockNuevo,
-                showInCatalog: false,
-              },
-            });
-            creados++;
-          } catch (e2: any) {
-            errores.push(`SKU ${item.sku}: ${e2?.message || String(e2)}`);
+    // ─────────────────────────────────────────────────────
+    // 4. Actualizar stock de existentes — en lotes paralelos
+    // ─────────────────────────────────────────────────────
+    for (let i = 0; i < body.actualizados.length; i += BATCH_SIZE) {
+      const batch = body.actualizados.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (item) => {
+          if (!item.sku) {
+            throw new Error("SKU vacío, saltado");
           }
+          try {
+            await db.product.update({
+              where: { sku: item.sku },
+              data: { stock: item.stockNuevo },
+            });
+            return { tipo: "actualizado", sku: item.sku };
+          } catch (err: any) {
+            const m = err?.message || String(err);
+            if (m.includes("Record to update not found")) {
+              // Si no existe al momento de apply, crearlo ahora con stock nuevo
+              await db.product.create({
+                data: {
+                  sku: item.sku,
+                  name: item.nameActual || `PRODUCTO ${item.sku}`,
+                  stock: item.stockNuevo,
+                  showInCatalog: false,
+                },
+              });
+              return { tipo: "nuevo", sku: item.sku };
+            }
+            throw err;
+          }
+        })
+      );
+      results.forEach((r, idx) => {
+        if (r.status === "fulfilled") {
+          if (r.value.tipo === "nuevo") creados++;
+          else actualizadosCount++;
         } else {
-          errores.push(`SKU ${item.sku}: ${msg}`);
+          const sku = batch[idx]?.sku || "(sin sku)";
+          const reason = r.reason;
+          const msg = reason?.message || String(reason);
+          errores.push(`SKU ${sku}: ${msg}`);
         }
-      }
+      });
     }
 
     return NextResponse.json({
@@ -164,8 +184,16 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error en import-stock/apply:", error);
+    // Detectar body too large de Next.js
+    const msg = (error as any)?.message || String(error);
+    if (msg.toLowerCase().includes("body") && msg.toLowerCase().includes("limit")) {
+      return NextResponse.json(
+        { error: "El cuerpo de la solicitud es demasiado grande. Intentá importar una planilla más chica." },
+        { status: 413 }
+      );
+    }
     return NextResponse.json(
-      { error: "Error al aplicar la importación" },
+      { error: "Error al aplicar la importación: " + msg },
       { status: 500 }
     );
   }

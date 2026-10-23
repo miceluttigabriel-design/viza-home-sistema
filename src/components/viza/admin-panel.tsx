@@ -1235,9 +1235,27 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                             actualizados: importPreview.actualizados,
                           }),
                         });
-                        const data = await res.json();
-                        if (!res.ok || data.error) {
-                          throw new Error(data.error || `Error HTTP ${res.status}`);
+                        // Leer SIEMPRE como texto primero, y después intentar
+                        // parsear como JSON. Si el servidor respondió con HTML
+                        // (timeout 504 de Vercel, error 500, etc.) vamos a
+                        // detectarlo y mostrar un mensaje claro en vez de
+                        // "JSON.parse: Unexpected character at line 1 column 1".
+                        const text = await res.text();
+                        let data: any;
+                        try {
+                          data = text ? JSON.parse(text) : null;
+                        } catch (jsonErr) {
+                          // El cuerpo no es JSON — probablemente página HTML de error/timeout
+                          const preview = text.slice(0, 120).replace(/\s+/g, " ").trim();
+                          throw new Error(
+                            `El servidor respondió con estado ${res.status} pero no devolvió JSON. ` +
+                            `Probablemente timeout (muchos productos). ` +
+                            `Primeros caracteres: "${preview || "(respuesta vacía)"}". ` +
+                            `Si la planilla es muy grande, intentá partirla en archivos más chicos.`
+                          );
+                        }
+                        if (!res.ok || data?.error) {
+                          throw new Error(data?.error || `Error HTTP ${res.status}`);
                         }
                         setImportResult(data);
                         toast.success(
@@ -1247,7 +1265,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         fetchProducts();
                       } catch (error) {
                         console.error("Error apply:", error);
-                        toast.error(`Error: ${(error as Error).message}`);
+                        toast.error(`Error: ${(error as Error).message}`, { duration: 8000 });
                       } finally {
                         setImportApplying(false);
                       }
