@@ -187,7 +187,6 @@ const COLUMNS: ColDef[] = [
   { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
   { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
   { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
-  { key: "costSistema", label: "COSTO SISTEMA", type: "num", group: "DATOS FINALES" },
   { key: "productName", label: "PRODUCTO", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
@@ -237,6 +236,8 @@ const COLUMNS: ColDef[] = [
   { key: "margenTecnico", label: "MARGEN TECNICO", type: "num", group: "DATOS FINALES" },
   { key: "coluna1", label: "COLUNA1", type: "text", group: "DATOS FINALES" },
   { key: "coluna2", label: "COLUNA2", type: "text", group: "DATOS FINALES" },
+  // COSTO SISTEMA movida al final absoluto (ultima columna a la derecha)
+  { key: "costSistema", label: "COSTO SISTEMA", type: "num", group: "DATOS FINALES" },
 ];
 
 export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPanelProps) {
