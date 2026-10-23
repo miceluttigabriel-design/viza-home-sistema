@@ -6,7 +6,6 @@ import {
   Search,
   ShoppingCart,
   LogOut,
-  LayoutDashboard,
   X,
   Check,
   Trash2,
@@ -395,37 +394,45 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   return (
     <div className="min-h-screen flex flex-col bg-stone-100">
       <header className="sticky top-0 z-30 border-b bg-white" style={{ borderColor: "#e7e5e4" }}>
-        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-end gap-4">
-          <div className="flex items-center gap-2 sm:gap-3">
+        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-start justify-start">
+          {/* Columna vertical de funciones en la parte superior izquierda */}
+          <div className="flex flex-col gap-2 items-center">
+            {/* 1. Bolinha de usuario (avatar) */}
+            <div
+              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title={`${user.name || user.email} · ${isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}`}
+            >
+              {(user.name || user.email).charAt(0).toUpperCase()}
+            </div>
+
+            {/* 2. Carrito de ventas (solo icono) */}
             <button
               onClick={onGoSales}
-              className="h-10 w-10 rounded-xl bg-stone-900 text-white flex items-center justify-center transition-colors shadow-sm hover:bg-stone-800"
+              className="h-9 w-9 rounded-xl bg-stone-900 text-white flex items-center justify-center transition-colors shadow-sm hover:bg-stone-800"
               title="Ir a Ventas"
               aria-label="Ir a Ventas"
             >
               <ShoppingCart className="h-4 w-4" />
             </button>
 
-            <div className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-              title={`${user.name || user.email} · ${isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}`}
-            >
-              {(user.name || user.email).charAt(0).toUpperCase()}
-            </div>
-
+            {/* 3. GDA (solo texto, sin emoji) */}
             {isSupremo && onGoGestion && (
               <button
                 onClick={onGoGestion}
-                className="h-10 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm hover:brightness-110"
+                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
                 style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
                 title="Gestión de Accesos y Contraseñas"
+                aria-label="Gestión de Accesos y Contraseñas"
               >
-                <LayoutDashboard className="h-4 w-4" />
-                <span>GDA</span>
+                GDA
               </button>
             )}
+
+            {/* 4. Clave de cambiar contraseña */}
             <button
               onClick={onOpenCambiarContrasena}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors hover:bg-[#efe6cf]"
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors hover:bg-[#efe6cf]"
               style={{ backgroundColor: "#f5efdf", color: "#8a6d2f" }}
               title="Cambiar mi contraseña"
               aria-label="Cambiar mi contraseña"
@@ -433,9 +440,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               <KeyRound className="h-4 w-4" />
             </button>
 
+            {/* 5. Cerrar sesión */}
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors bg-stone-100 hover:bg-red-50 text-stone-500 hover:text-red-600"
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors bg-stone-100 hover:bg-red-50 text-stone-500 hover:text-red-600"
               title="Cerrar sesión"
               aria-label="Cerrar sesión"
             >
