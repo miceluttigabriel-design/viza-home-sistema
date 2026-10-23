@@ -8,7 +8,7 @@ import { Prisma } from "@prisma/client";
 // POST /api/products/import-stock/apply
 // Recibe: JSON { nuevos: [...], actualizados: [...] }
 // Aplica:
-//   - Para cada item en `nuevos`: CREATE nuevo Product (sku/name/codViza/subGrupo/stock/costProd)
+//   - Para cada item en `nuevos`: CREATE nuevo Product (sku/name/referencia/subGrupo/stock/costProd)
 //   - Para cada item en `actualizados`: UPDATE solo el campo stock (reemplazar)
 //
 // ─── OPTIMIZACIÓN CRÍTICA (anti-timeout de Vercel Hobby 10s) ───
@@ -25,7 +25,7 @@ import { Prisma } from "@prisma/client";
 interface NuevoItem {
   sku: string;
   name: string | null;
-  referencia: string | null;  // ← antes era codViza, ahora es referencia (Codigo Fabrica)
+  referencia: string | null;  // ← Codigo Fabrica del Excel
   subGrupo: string | null;
   stock: number;
   costProd: number | null;
@@ -44,15 +44,11 @@ interface ApplyBody {
 }
 
 // Tamaño de lote para SQL bulk UPDATE con CASE WHEN.
-// Postgres soporta hasta 65535 parámetros por query.
-// Cada item usa 2 parámetros (sku, stock), así que 200 items = 400 params — seguro.
 const UPDATE_BATCH_SIZE = 200;
 
 // ─────────────────────────────────────────────────────────────
 // recalculateFromCostProd: dispara el cálculo automático de márgenes
 // y precios usando el costProd importado del Excel como base.
-// Esto replica la lógica de recalcLive del admin-panel pero solo
-// desde costProd (sin input costs como costBR/costUS).
 // Los márgenes (marginContado, pct1A6, pct7A13, pct14A30) se
 // asumen en 0 si no están seteados — el admin puede editarlos
 // después y se recalculan los precios en vivo.
@@ -132,17 +128,13 @@ export async function POST(req: NextRequest) {
     // ─────────────────────────────────────────────────────
     // 4. Determinar qué crear y qué actualizar
     // ─────────────────────────────────────────────────────
-    // Items "nuevos" cuyo SKU no existe → CREATE
-    // Items "nuevos" cuyo SKU sí existe → UPDATE stock
-    // Items "actualizados" cuyo SKU existe → UPDATE stock
-    // Items "actualizados" cuyo SKU no existe → CREATE
     const trulyNewFromNuevos = body.nuevos.filter(n => !existingSet.has(n.sku));
     const trulyNewFromActualizados = body.actualizados
       .filter(a => !existingSet.has(a.sku))
       .map(a => ({
         sku: a.sku,
         name: a.nameActual,
-        referencia: null,   // ← antes era codViza, ahora es referencia
+        referencia: null,
         subGrupo: null,
         stock: a.stockNuevo,
         costProd: null,
@@ -159,7 +151,6 @@ export async function POST(req: NextRequest) {
 
     // ─────────────────────────────────────────────────────
     // 5. BULK CREATE: una sola operación para todos los nuevos
-    // (createMany con skipDuplicates para safety)
     // ─────────────────────────────────────────────────────
     let creados = 0;
     if (trulyNew.length > 0) {
@@ -173,7 +164,7 @@ export async function POST(req: NextRequest) {
         const p: any = {
           sku: n.sku,
           name: n.name || `PRODUCTO ${n.sku}`,
-          referencia: n.referencia,   // ← antes era codViza
+          referencia: n.referencia,
           subGrupo: n.subGrupo,
           stock: n.stock,
           costProd: n.costProd,
@@ -201,8 +192,7 @@ export async function POST(req: NextRequest) {
         });
         creados = result.count;
       } catch (err: any) {
-        // Si createMany falla (por ej. constraint en algún campo),
-        // intentar crear uno por uno como fallback
+        // Si createMany falla, intentar crear uno por uno como fallback
         const msg = err?.message || String(err);
         errores.push(`createMany falló: ${msg}. Intentando individual…`);
         for (const n of trulyNew) {
@@ -230,7 +220,6 @@ export async function POST(req: NextRequest) {
           } catch (e2: any) {
             const m2 = e2?.message || String(e2);
             if (m2.includes("Unique constraint")) {
-              // Ya existe (alguien lo creó entre el findMany y el create) → updatear stock
               try {
                 await db.product.update({
                   where: { sku: n.sku },

@@ -135,12 +135,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const colSaldo = headerMap["SALDO"];
-    const colCostoUnit = headerMap["COSTO UNIT. ULTIMA COMPRA"];
-    const colCodigoFabrica = headerMap["CODIGO FABRICA"];
-    const colSubgrupo = headerMap["SUBGRUPO"];
-    const colDescripcion = headerMap["DESCRIPCION"];
-
     // Helper para obtener valor de celda por nombre de header (normaliza para match)
     const getCell = (row: ExcelJS.Row, headerName: string): any => {
       const col = headerMap[normalizeHeader(headerName)];
@@ -154,7 +148,6 @@ export async function POST(req: NextRequest) {
     };
 
     // 5. Recorrer filas, agrupar por Codigo y acumular Saldo
-    // Estructura: { [codigoLimpio]: { stockSumado, costProd, referencia, subGrupo, name, filas } }
     // IMPORTANTE: el "Codigo Fabrica" del Excel se guarda como `referencia`
     // (columna REFERENCIA del grupo DATOS en la tabla), NO como `codViza` (DATOS VIZA).
     const grouped: Record<
@@ -163,7 +156,7 @@ export async function POST(req: NextRequest) {
         codigo: string;
         stockSumado: number;
         costProd: number | null;
-        referencia: string | null;  // ← antes era codViza, ahora es referencia
+        referencia: string | null;
         subGrupo: string | null;
         name: string | null;
         filas: number;
@@ -172,10 +165,8 @@ export async function POST(req: NextRequest) {
 
     const errores: string[] = [];
     let totalFilas = 0;
-    let filaActual = 1; // header es fila 1, datos empiezan en 2
 
     for (let r = 2; r <= ws.rowCount; r++) {
-      filaActual = r;
       const row = ws.getRow(r);
       const codigoRaw = getCell(row, "CODIGO");
       const codigo = cleanCodigo(codigoRaw);
@@ -227,7 +218,7 @@ export async function POST(req: NextRequest) {
     const nuevos: Array<{
       sku: string;
       name: string | null;
-      referencia: string | null;  // ← antes era codViza, ahora es referencia
+      referencia: string | null;
       subGrupo: string | null;
       stock: number;
       costProd: number | null;
@@ -256,7 +247,7 @@ export async function POST(req: NextRequest) {
         nuevos.push({
           sku: codigo,
           name: data.name,
-          referencia: data.referencia,  // ← antes era codViza
+          referencia: data.referencia,
           subGrupo: data.subGrupo,
           stock: data.stockSumado,
           costProd: data.costProd,

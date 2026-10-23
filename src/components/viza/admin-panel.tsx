@@ -6,6 +6,7 @@ import {
   Search,
   ShoppingCart,
   LogOut,
+  LayoutDashboard,
   X,
   Check,
   Trash2,
@@ -17,6 +18,7 @@ import {
   Plus,
   Download,
   Upload,
+  AlertTriangle,
   FileSpreadsheet,
   Tag,
   Pencil,
@@ -98,7 +100,7 @@ interface AdminPanelProps {
   isSupremo?: boolean;
 }
 
-const PAGE_SIZE = 50; // Más productos por página (filas compactas permiten ver más)
+const PAGE_SIZE = 15; // Filas más grandes, menos por página
 
 // Recalcular en vivo (espejo del cálculo del servidor)
 function recalcLive(form: any): any {
@@ -179,21 +181,9 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   // Datos principales (pegados al SKU)
   { key: "referencia", label: "REFERENCIA", type: "text", group: "DATOS" },
-  // DATOS FINALES movidos antes de DESCRIPCION (orden solicitado por el usuario)
-  { key: "fabricante", label: "FABRICANTE", type: "text", group: "DATOS FINALES" },
-  { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
-  { key: "categoria", label: "CATEGORIA", type: "text", group: "DATOS FINALES" },
-  { key: "division", label: "DIVISION", type: "text", group: "DATOS FINALES" },
-  { key: "tipo", label: "TIPO", type: "text", group: "DATOS FINALES" },
-  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
-  { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
-  { key: "productName", label: "PRODUCTO", type: "text", group: "DATOS FINALES" },
-  // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   { key: "codViza", label: "DATOS VIZA", type: "text", group: "DATOS" },
   { key: "codShow", label: "COD SHOW", type: "text", group: "DATOS" },
-  // STOCK movida ENTRE COD SHOW y Costo R$ (atras de Costo R$ = antes, en frente de COD SHOW = despues)
-  { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   // Costos
   { key: "costBR", label: "Costo R$", type: "num", group: "COSTOS" },
   { key: "rsToGs", label: "R$ A GS", type: "calc", group: "COSTOS" },
@@ -217,7 +207,7 @@ const COLUMNS: ColDef[] = [
   { key: "pct1A6", label: "1 A 6", type: "pct", group: "BASES" },
   { key: "pct7A13", label: "7 A 13", type: "pct", group: "BASES" },
   { key: "pct14A30", label: "14 A 30", type: "pct", group: "BASES" },
-  // Margenes y precios
+  // Márgenes y precios
   { key: "marginContado", label: "% CONTADO", type: "pct", group: "MARGENES" },
   { key: "safra", label: "SAFRA", type: "num", group: "DATOS FINALES" },
   { key: "priceContado", label: "CONTADO", type: "calc", group: "PRECIOS" },
@@ -233,12 +223,20 @@ const COLUMNS: ColDef[] = [
     type: "calc" as const,
     group: "PRECIOS",
   })),
-  // VALOR TECNICO, MARGEN TECNICO, COLUNA1, COLUNA2 movidas al final
+  // Datos finales
+  { key: "productName", label: "PRODUCTO", type: "text", group: "DATOS FINALES" },
+  { key: "fabricante", label: "FABRICANTE", type: "text", group: "DATOS FINALES" },
+  { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
+  { key: "categoria", label: "CATEGORIA", type: "text", group: "DATOS FINALES" },
+  { key: "division", label: "DIVISION", type: "text", group: "DATOS FINALES" },
+  { key: "tipo", label: "TIPO", type: "text", group: "DATOS FINALES" },
+  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
+  { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
   { key: "valorTecnico", label: "VALOR TECNICO", type: "num", group: "DATOS FINALES" },
   { key: "margenTecnico", label: "MARGEN TECNICO", type: "num", group: "DATOS FINALES" },
   { key: "coluna1", label: "COLUNA1", type: "text", group: "DATOS FINALES" },
   { key: "coluna2", label: "COLUNA2", type: "text", group: "DATOS FINALES" },
-  // COSTO SISTEMA movida al final absoluto (ultima columna a la derecha)
+  { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   { key: "costSistema", label: "COSTO SISTEMA", type: "num", group: "DATOS FINALES" },
 ];
 
@@ -279,6 +277,19 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const [importApplying, setImportApplying] = useState(false);
   const [importResult, setImportResult] = useState<{ creados: number; actualizados: number; errores: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ─── DELETE ALL (borrar TODOS los productos) ───
+  // Botón rojo solo para supremo_admin. Borra toda la tabla de productos.
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
+  const [deleteAllPreview, setDeleteAllPreview] = useState<{
+    total: number;
+    sample: Array<{ sku: string; name: string; stock: number }>;
+  } | null>(null);
+  const [deleteAllApplying, setDeleteAllApplying] = useState(false);
+  const [deleteAllResult, setDeleteAllResult] = useState<{ borrados: number } | null>(null);
+  // Checkbox de doble confirmación (debe tildar "SI, BORRAR TODO" para habilitar)
+  const [deleteAllConfirmCheck, setDeleteAllConfirmCheck] = useState(false);
 
   const fetchProducts = useCallback(async () => {
     setLoadingProducts(true);
@@ -413,90 +424,74 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
   return (
     <div className="min-h-screen flex flex-col bg-stone-100">
-      <header className="sticky top-0 z-30 border-b bg-white" style={{ borderColor: "#e7e5e4" }}>
-        <div className="flex items-center gap-3 py-3 pr-4 sm:pr-6 lg:pr-8">
-          {/* Cajita HORIZONTAL de botones, pegada al borde izquierdo, al lado del buscador */}
-          <div
-            className="flex flex-row gap-2 items-center p-2 ml-3 rounded-2xl shrink-0"
-            style={{
-              background: "linear-gradient(180deg, #faf6e9 0%, #ffffff 100%)",
-              boxShadow: "0 2px 6px rgba(217,184,107,0.3), 0 0 0 1px #e7d9a8",
-            }}
-          >
-            {/* 1. Bolinha de usuario (avatar) */}
-            <div
-              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
-              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-              title={`${user.name || user.email} · ${isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}`}
+      <header className="sticky top-0 z-30 border-b" style={{ backgroundColor: "#155789", borderColor: "#0d3d5e" }}>
+        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg, #b89853 0%, #D9B86B 50%, #b89853 100%)" }} />
+        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-black text-white tracking-tight" style={{ fontFamily: "system-ui, sans-serif" }}>VIZA</span>
+              <span className="text-base font-bold" style={{ color: "#D9B86B", fontFamily: "system-ui, sans-serif" }}>home</span>
+            </div>
+            <div className="hidden md:block border-l pl-3 ml-1" style={{ borderColor: "#D9B86B" }}>
+              <p className="text-[11px] font-medium text-white/80">ADMIN · Gestión de Productos</p>
+              <p className="text-[10px] italic" style={{ color: "#D9B86B" }}>Todo para tu hogar, en un solo lugar.</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={onGoSales}
+              className="h-10 px-3 sm:px-4 rounded-xl text-white font-medium text-xs sm:text-sm flex items-center gap-2 transition-colors shadow-sm hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
             >
+              <ShoppingCart className="h-4 w-4" />
+              <span className="hidden sm:inline">IR A VENTAS</span>
+            </button>
+
+            <div className="hidden sm:flex flex-col items-end text-right">
+              <span className="text-xs font-semibold text-white leading-none">
+                {user.name || user.email}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide font-bold" style={{ color: "#D9B86B" }}>
+                {isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}
+              </span>
+            </div>
+
+            <div className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}>
               {(user.name || user.email).charAt(0).toUpperCase()}
             </div>
 
-            {/* 2. Carrito de ventas (solo icono) */}
-            <button
-              onClick={onGoSales}
-              className="h-9 w-9 rounded-xl bg-stone-900 text-white flex items-center justify-center transition-colors shadow-sm hover:bg-stone-800"
-              title="Ir a Ventas"
-              aria-label="Ir a Ventas"
-            >
-              <ShoppingCart className="h-4 w-4" />
-            </button>
-
-            {/* 3. GDA (solo texto, sin emoji) */}
             {isSupremo && onGoGestion && (
               <button
                 onClick={onGoGestion}
-                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
+                className="h-10 px-3 sm:px-4 rounded-xl text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors shadow-sm hover:brightness-110"
                 style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
                 title="Gestión de Accesos y Contraseñas"
-                aria-label="Gestión de Accesos y Contraseñas"
               >
-                GDA
+                <LayoutDashboard className="h-4 w-4" />
+                <span className="hidden sm:inline">GESTIÓN DE ACCESOS</span>
+                <span className="sm:hidden">ACCESOS</span>
               </button>
             )}
-
-            {/* 4. Clave de cambiar contraseña */}
             <button
               onClick={onOpenCambiarContrasena}
-              className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors hover:bg-[#efe6cf]"
-              style={{ backgroundColor: "#f5efdf", color: "#8a6d2f" }}
+              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors"
+              style={{ backgroundColor: "rgba(217, 184, 107, 0.18)", color: "#D9B86B" }}
               title="Cambiar mi contraseña"
               aria-label="Cambiar mi contraseña"
             >
               <KeyRound className="h-4 w-4" />
             </button>
 
-            {/* 5. Cerrar sesión */}
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
-              className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors bg-stone-100 hover:bg-red-50 text-stone-500 hover:text-red-600"
+              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors"
+              style={{ backgroundColor: "rgba(255,255,255,0.1)", color: "white" }}
               title="Cerrar sesión"
               aria-label="Cerrar sesión"
             >
               <LogOut className="h-4 w-4" />
             </button>
-          </div>
-
-          {/* Buscador pegado arriba, al lado de la cajita de botones */}
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="BUSCAR PRODUCTO POR SKU, NOMBRE, MARCA, MODELO O FABRICANTE..."
-              className="w-full h-14 pl-12 pr-12 rounded-xl border-2 border-[#D9B86B] text-base font-medium focus:border-rose-500 focus:ring-4 focus:ring-rose-100 outline-none bg-white shadow-sm"
-              autoFocus
-            />
-            {search.trim() && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 flex items-center justify-center transition-colors"
-                title="Limpiar búsqueda"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            )}
           </div>
         </div>
       </header>
@@ -508,10 +503,31 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         onClose={() => setCambiarContrasenaOpen(false)}
       />
 
-      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-4">
-          {/* (Buscador movido al header) */}
+          {/* Buscador */}
           <div className="flex flex-col gap-3">
+            <div className="relative w-full">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="BUSCAR PRODUCTO POR SKU, NOMBRE, MARCA, MODELO O FABRICANTE..."
+                className="w-full h-14 pl-12 pr-12 rounded-xl border-2 border-stone-200 text-base font-medium focus:border-rose-500 focus:ring-4 focus:ring-rose-100 outline-none bg-white shadow-sm"
+                autoFocus
+              />
+              {search.trim() && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 flex items-center justify-center transition-colors"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <h2 className="text-lg font-bold text-stone-900">Gestión de productos</h2>
@@ -594,18 +610,27 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                             method: "POST",
                             body: formData,
                           });
-                          const data = await res.json();
-                          if (!res.ok || data.error) {
-                            throw new Error(data.error || `Error HTTP ${res.status}`);
+                          const text = await res.text();
+                          let data: any;
+                          try {
+                            data = text ? JSON.parse(text) : null;
+                          } catch {
+                            const preview = text.slice(0, 120).replace(/\s+/g, " ").trim();
+                            throw new Error(
+                              `El servidor respondió estado ${res.status} pero no devolvió JSON. ` +
+                              `Probablemente timeout. Primeros caracteres: "${preview || "(vacío)"}".`
+                            );
+                          }
+                          if (!res.ok || data?.error) {
+                            throw new Error(data?.error || `Error HTTP ${res.status}`);
                           }
                           setImportPreview(data);
                         } catch (error) {
                           console.error("Error import preview:", error);
-                          toast.error(`Error: ${(error as Error).message}`);
+                          toast.error(`Error: ${(error as Error).message}`, { duration: 8000 });
                           setImportOpen(false);
                         } finally {
                           setImportLoading(false);
-                          // Reset del input para permitir elegir el mismo archivo otra vez
                           if (fileInputRef.current) fileInputRef.current.value = "";
                         }
                       }}
@@ -628,6 +653,48 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       IMPORTAR EXCEL
                     </button>
                   </>
+                )}
+
+                {/* Boton DELETE ALL (borrar TODOS los productos) — rojo, solo supremo_admin */}
+                {isSupremo && (
+                  <button
+                    id="btn-delete-all"
+                    onClick={async () => {
+                      setDeleteAllOpen(true);
+                      setDeleteAllPreview(null);
+                      setDeleteAllResult(null);
+                      setDeleteAllConfirmCheck(false);
+                      setDeleteAllLoading(true);
+                      try {
+                        const res = await fetch("/api/products/cleanup-all/preview", {
+                          method: "POST",
+                        });
+                        const text = await res.text();
+                        let data: any;
+                        try {
+                          data = text ? JSON.parse(text) : null;
+                        } catch {
+                          throw new Error(`Respuesta inválida del servidor (estado ${res.status})`);
+                        }
+                        if (!res.ok || data?.error) {
+                          throw new Error(data?.error || `Error HTTP ${res.status}`);
+                        }
+                        setDeleteAllPreview(data);
+                      } catch (error) {
+                        console.error("Error delete-all preview:", error);
+                        toast.error(`Error: ${(error as Error).message}`);
+                        setDeleteAllOpen(false);
+                      } finally {
+                        setDeleteAllLoading(false);
+                      }
+                    }}
+                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    style={{ background: "linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)" }}
+                    title="BORRAR TODOS los productos de la base (irreversible, solo supremo)"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    DELETE ALL
+                  </button>
                 )}
               </div>
               <div className="text-xs text-stone-500 flex items-center gap-2 flex-wrap">
@@ -804,17 +871,17 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           </div>
 
           {/* Tabla estilo Excel - edición directa */}
-          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 130px)" }}>
-            <div className="overflow-auto">
-              <table className="admin-table border-collapse text-xs">
-                <thead className="border-b border-stone-200 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="border-collapse text-xs">
+                <thead className="bg-stone-100 border-b-2 border-stone-300">
                   <tr>
                     {/* Columna acciones */}
-                    <th className="sticky left-0 z-20 px-2 py-0.5 text-center font-bold border-r border-stone-200 min-w-[120px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                    <th className="sticky left-0 z-20 bg-stone-100 px-2 py-2 text-center font-bold text-stone-700 border-r border-stone-300 min-w-[80px]">
                       ACCIONES
                     </th>
                     {/* SKU */}
-                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                    <th className="sticky left-[80px] z-20 bg-stone-100 px-2 py-2 text-left font-bold text-stone-700 border-r border-stone-300 min-w-[80px]">
                       SKU
                     </th>
                     {COLUMNS.map((col) => {
@@ -824,14 +891,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       return (
                         <th
                           key={col.key}
-                          className={`relative px-2 py-0.5 text-center font-bold border-r border-stone-100 whitespace-nowrap ${
-                            col.type === "calc" ? "text-[#0d3d5e]" : "text-[#155789]"
+                          className={`relative px-2 py-2 text-center font-bold border-r border-stone-200 whitespace-nowrap ${
+                            col.type === "calc" ? "bg-emerald-50 text-emerald-800" : "text-stone-700"
                           }`}
-                          style={{ backgroundColor: "#D9B86B" }}
                         >
                           <div className="flex flex-col items-center">
                             {col.group && (
-                              <span className="text-[9px] font-normal mb-0.5" style={{ color: "#0d3d5e", opacity: 0.7 }}>
+                              <span className="text-[9px] text-stone-400 font-normal mb-0.5">
                                 {col.group}
                               </span>
                             )}
@@ -997,11 +1063,26 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         </div>
       </main>
 
+      <footer className="mt-auto py-6" style={{ backgroundColor: "#155789" }}>
+        <div className="h-1 w-full mb-4" style={{ background: "linear-gradient(90deg, #b89853 0%, #D9B86B 50%, #b89853 100%)" }} />
+        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white">
+          <div className="flex items-baseline gap-1">
+            <span className="text-base font-black text-white">VIZA</span>
+            <span className="text-sm font-bold" style={{ color: "#D9B86B" }}>home</span>
+            <span className="text-[10px] italic ml-2" style={{ color: "#e5cb8a" }}>Todo para tu hogar, en un solo lugar.</span>
+          </div>
+          <div className="flex items-center gap-3 text-[10px]">
+            <span>Tel: (0987) 700 707</span>
+            <span>Email: ventas.online@viza.com.py</span>
+            <span>Web: www.viza.com.py</span>
+          </div>
+        </div>
+      </footer>
+
       {/* ════════════════════════════════════════════════════════════════
           MODAL: IMPORTAR EXCEL (planilla de inventario)
-          - Solo visible para supremo_admin (botón está condicionado)
-          - Muestra preview con cantidad de productos nuevos + actualizados
-          - Botón CONFIRMAR aplica los cambios
+          - Solo visible para supremo_admin
+          - Muestra preview (nuevos + actualizados) + botón CONFIRMAR
           ════════════════════════════════════════════════════════════════ */}
       {importOpen && (
         <div
@@ -1014,7 +1095,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
             className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header del modal */}
+            {/* Header */}
             <div
               className="px-6 py-4 flex items-center justify-between border-b"
               style={{ borderColor: "#e7e5e4", background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
@@ -1035,7 +1116,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               </button>
             </div>
 
-            {/* Body del modal */}
+            {/* Body */}
             <div className="flex-1 overflow-auto p-6 space-y-4">
               {importLoading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -1080,7 +1161,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </div>
                   )}
                   <div className="text-xs text-stone-500 italic">
-                    La tabla de productos se va a recargar automáticamente para mostrar los cambios.
+                    La tabla se va a recargar automáticamente para mostrar los cambios.
                   </div>
                 </div>
               )}
@@ -1092,7 +1173,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Productos nuevos</p>
                       <p className="text-3xl font-black text-emerald-700">{importPreview.nuevosCount}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Se van a CREAR con SKU, descripción, codViza, subGrupo, stock y costo</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Se van a CREAR con SKU, descripción, referencia, stock y costo</p>
                     </div>
                     <div className="rounded-lg p-3 border border-blue-200 bg-blue-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Stocks actualizados</p>
@@ -1102,10 +1183,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   </div>
 
                   <div className="text-xs text-stone-600 bg-stone-50 rounded-lg p-3 border border-stone-200">
-                    <strong>Resumen del Excel:</strong> {importPreview.totalFilas} filas procesadas → {importPreview.codigosUnicos} códigos únicos (las filas duplicadas con el mismo código se sumaron en stock).
+                    <strong>Resumen del Excel:</strong> {importPreview.totalFilas} filas procesadas → {importPreview.codigosUnicos} códigos únicos (filas duplicadas con el mismo código se sumaron en stock).
                   </div>
 
-                  {/* Lista de productos nuevos (muestra hasta 8) */}
+                  {/* Productos nuevos (hasta 8) */}
                   {importPreview.nuevos.length > 0 && (
                     <div>
                       <p className="text-sm font-bold text-stone-800 mb-2">
@@ -1145,7 +1226,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </div>
                   )}
 
-                  {/* Lista de productos actualizados (muestra hasta 8) */}
+                  {/* Stocks a actualizar (hasta 8) */}
                   {importPreview.actualizados.length > 0 && (
                     <div>
                       <p className="text-sm font-bold text-stone-800 mb-2">
@@ -1190,7 +1271,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </div>
                   )}
 
-                  {/* Errores del preview */}
                   {importPreview.errores.length > 0 && (
                     <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
                       <p className="text-xs font-bold text-amber-800 mb-1">⚠ Advertencias</p>
@@ -1211,7 +1291,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               )}
             </div>
 
-            {/* Footer del modal con botones */}
+            {/* Footer */}
             <div className="px-6 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: "#e7e5e4" }}>
               {!importResult && (
                 <>
@@ -1235,17 +1315,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                             actualizados: importPreview.actualizados,
                           }),
                         });
-                        // Leer SIEMPRE como texto primero, y después intentar
-                        // parsear como JSON. Si el servidor respondió con HTML
-                        // (timeout 504 de Vercel, error 500, etc.) vamos a
-                        // detectarlo y mostrar un mensaje claro en vez de
-                        // "JSON.parse: Unexpected character at line 1 column 1".
                         const text = await res.text();
                         let data: any;
                         try {
                           data = text ? JSON.parse(text) : null;
-                        } catch (jsonErr) {
-                          // El cuerpo no es JSON — probablemente página HTML de error/timeout
+                        } catch {
                           const preview = text.slice(0, 120).replace(/\s+/g, " ").trim();
                           throw new Error(
                             `El servidor respondió con estado ${res.status} pero no devolvió JSON. ` +
@@ -1261,7 +1335,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         toast.success(
                           `Importación completa: ${data.creados} nuevos, ${data.actualizados} actualizados`
                         );
-                        // Recargar la tabla para mostrar los cambios
                         fetchProducts();
                       } catch (error) {
                         console.error("Error apply:", error);
@@ -1296,6 +1369,211 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               {importResult && (
                 <button
                   onClick={() => setImportOpen(false)}
+                  className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
+                  style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                >
+                  Cerrar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          MODAL: DELETE ALL (borrar TODOS los productos)
+          - Botón rojo, solo supremo_admin
+          - Pide doble confirmación (checkbox + botón)
+          - Operación IRREVERSIBLE
+          ════════════════════════════════════════════════════════════════ */}
+      {deleteAllOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => {
+            if (!deleteAllLoading && !deleteAllApplying) setDeleteAllOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header rojo */}
+            <div
+              className="px-6 py-4 flex items-center justify-between border-b"
+              style={{ borderColor: "#fecaca", background: "linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)" }}
+            >
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                BORRAR TODOS los productos
+              </h3>
+              <button
+                onClick={() => {
+                  if (!deleteAllLoading && !deleteAllApplying) setDeleteAllOpen(false);
+                }}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                disabled={deleteAllLoading || deleteAllApplying}
+                title="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              {deleteAllLoading && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="h-10 w-10 rounded-full border-4 border-stone-200 border-t-red-600 animate-spin"></div>
+                  <p className="text-sm text-stone-600 font-medium">Contando productos…</p>
+                </div>
+              )}
+
+              {!deleteAllLoading && deleteAllResult && (
+                <div className="space-y-4">
+                  <div
+                    className="rounded-xl p-4 border"
+                    style={{ background: "#fef2f2", borderColor: "#fca5a5" }}
+                  >
+                    <p className="text-base font-bold text-red-800 mb-2">
+                      ✓ Borrado completado
+                    </p>
+                    <p className="text-sm text-red-700">
+                      Se borraron <strong>{deleteAllResult.borrados}</strong> productos de la base.
+                    </p>
+                    <p className="text-xs text-stone-500 italic mt-2">
+                      La tabla está vacía ahora. Podés re-importar usando IMPORTAR EXCEL.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!deleteAllLoading && !deleteAllResult && deleteAllPreview && (
+                <div className="space-y-4">
+                  {/* Aviso grande */}
+                  <div className="rounded-xl p-4 border-2 border-red-300 bg-red-50">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-base font-bold text-red-800 mb-1">¡OPERACIÓN IRREVERSIBLE!</p>
+                        <p className="text-sm text-red-700">
+                          Vas a borrar <strong>{deleteAllPreview.total}</strong> productos de la base.
+                          Una vez borrados, no se pueden recuperar (a menos que tengas un backup Excel).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sample */}
+                  {deleteAllPreview.sample.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-stone-800 mb-2">Primeros 5 productos que se van a borrar:</p>
+                      <div className="border border-stone-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead style={{ background: "#f5f5f4" }}>
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">SKU</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {deleteAllPreview.sample.map((p, i) => (
+                              <tr key={i} className="border-t border-stone-100">
+                                <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{p.sku}</td>
+                                <td className="px-2 py-1.5 text-stone-700">{p.name}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">{p.stock}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Checkbox doble confirmación */}
+                  <label className="flex items-start gap-3 p-4 rounded-lg border-2 border-stone-300 hover:border-red-400 transition-colors cursor-pointer bg-white">
+                    <input
+                      type="checkbox"
+                      checked={deleteAllConfirmCheck}
+                      onChange={(e) => setDeleteAllConfirmCheck(e.target.checked)}
+                      disabled={deleteAllApplying}
+                      className="h-5 w-5 mt-0.5 text-red-600 rounded border-stone-400"
+                    />
+                    <span className="text-sm text-stone-800 font-semibold">
+                      Sí, entiendo que es IRREVERSIBLE. Quiero borrar TODOS los {deleteAllPreview.total} productos de la base.
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: "#e7e5e4" }}>
+              {!deleteAllResult && (
+                <>
+                  <button
+                    onClick={() => setDeleteAllOpen(false)}
+                    className="h-9 px-4 rounded-lg border border-stone-300 bg-white text-stone-700 text-sm font-medium hover:bg-stone-50 transition-colors"
+                    disabled={deleteAllLoading || deleteAllApplying}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!deleteAllPreview) return;
+                      if (!deleteAllConfirmCheck) return;
+                      setDeleteAllApplying(true);
+                      try {
+                        const res = await fetch("/api/products/cleanup-all/apply", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ confirm: true }),
+                        });
+                        const text = await res.text();
+                        let data: any;
+                        try {
+                          data = text ? JSON.parse(text) : null;
+                        } catch {
+                          throw new Error(`Respuesta inválida del servidor (estado ${res.status})`);
+                        }
+                        if (!res.ok || data?.error) {
+                          throw new Error(data?.error || `Error HTTP ${res.status}`);
+                        }
+                        setDeleteAllResult(data);
+                        toast.success(`Borrado completo: ${data.borrados} productos eliminados`);
+                        fetchProducts();
+                      } catch (error) {
+                        console.error("Error delete-all apply:", error);
+                        toast.error(`Error: ${(error as Error).message}`);
+                      } finally {
+                        setDeleteAllApplying(false);
+                      }
+                    }}
+                    className="h-9 px-4 rounded-lg text-white text-sm font-bold flex items-center gap-1.5 hover:brightness-110 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ background: "linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)" }}
+                    disabled={
+                      deleteAllLoading ||
+                      deleteAllApplying ||
+                      !deleteAllPreview ||
+                      !deleteAllConfirmCheck
+                    }
+                  >
+                    {deleteAllApplying ? (
+                      <>
+                        <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                        Borrando…
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4" />
+                        SÍ, BORRAR TODO ({deleteAllPreview?.total || 0})
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+              {deleteAllResult && (
+                <button
+                  onClick={() => setDeleteAllOpen(false)}
                   className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
                   style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
                 >
@@ -1352,16 +1630,15 @@ const ExcelRow = memo(function ExcelRow({
     <>
     <tr
       className={`border-b border-stone-100 ${currentStyle ? currentStyle.cellClass : ""}`}
-      style={{ borderBottom: "1px solid #f1f5f9" }}
     >
       {/* Acciones - sticky */}
-      <td className="sticky left-0 z-10 px-2 py-0.5 text-center border-r border-stone-100 bg-white">
-        <div className="flex flex-row items-center justify-center gap-0.5 relative">
+      <td className="sticky left-0 z-10 px-2 py-1 text-center border-r border-stone-200 bg-white">
+        <div className="flex flex-col items-center justify-start gap-1 relative">
           <button
             id={`save-btn-${product.id}`}
             onClick={onSave}
             disabled={!isDirty}
-            className={`h-7 w-7 rounded-lg flex items-center justify-center transition-colors ${
+            className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
               isDirty
                 ? "bg-emerald-500 hover:bg-emerald-600 text-white"
                 : "bg-stone-100 text-stone-400 cursor-not-allowed"
@@ -1374,7 +1651,7 @@ const ExcelRow = memo(function ExcelRow({
           <button
             id={`label-btn-${product.id}`}
             onClick={onToggleLabelMenu}
-            className="h-7 w-7 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors"
+            className="h-8 w-8 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors"
             style={label ? { backgroundColor: labelStyles[label].border, color: "white" } : undefined}
             title="Etiquetar producto"
           >
@@ -1382,7 +1659,7 @@ const ExcelRow = memo(function ExcelRow({
           </button>
           <button
             onClick={onDelete}
-            className="h-7 w-7 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 flex items-center justify-center transition-colors"
+            className="h-8 w-8 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 flex items-center justify-center transition-colors"
             title="Eliminar producto"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -1390,7 +1667,7 @@ const ExcelRow = memo(function ExcelRow({
         </div>
       </td>
       {/* SKU - sticky - con badge de última edición encima */}
-      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-stone-700 font-semibold border-r border-stone-100 bg-white align-top">
+      <td className="sticky left-[80px] z-10 px-2 py-1 font-mono text-stone-700 font-semibold border-r border-stone-200 bg-white align-top">
         {/* Badge de última edición manual del admin */}
         {product.ultimaEdicionAt && (() => {
           const d = new Date(product.ultimaEdicionAt);
@@ -1547,7 +1824,7 @@ const Cell = memo(function Cell({
           : formatPYG(Number(value))
         : "—";
     return (
-      <td className="px-2 py-0.5 text-right tabular-nums bg-emerald-50/50 border-r border-stone-50 whitespace-nowrap text-stone-700">
+      <td className="px-2 py-1 text-right tabular-nums bg-emerald-50/50 border-r border-stone-100 whitespace-nowrap text-stone-700">
         {displayValue}
       </td>
     );
@@ -1564,7 +1841,7 @@ const Cell = memo(function Cell({
       : value ?? "";
 
   return (
-    <td className="px-1 py-0 border-r border-stone-50 bg-white">
+    <td className="px-1 py-0.5 border-r border-stone-100 bg-white">
       <input
         type={isNum || isPct ? "number" : "text"}
         step={isPct ? "0.01" : isNum ? "1" : undefined}
@@ -1577,7 +1854,7 @@ const Cell = memo(function Cell({
             onChange(e.target.value);
           }
         }}
-        className={`w-full min-w-[80px] h-6 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
+        className={`w-full min-w-[80px] h-7 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
           isText ? "text-left" : "text-right"
         }`}
         placeholder="—"
