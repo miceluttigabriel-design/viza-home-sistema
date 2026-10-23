@@ -731,14 +731,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 200px)" }}>
             <div className="overflow-auto">
               <table className="admin-table border-collapse text-xs">
-                <thead className="border-b-2 border-stone-300 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                <thead className="border-b border-stone-200 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                   <tr>
                     {/* Columna acciones */}
-                    <th className="sticky left-0 z-20 px-2 py-0.5 text-center font-bold border-r border-stone-300 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                    <th className="sticky left-0 z-20 px-2 py-0.5 text-center font-bold border-r border-stone-200 min-w-[120px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                       ACCIONES
                     </th>
                     {/* SKU */}
-                    <th className="sticky left-[80px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-300 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
                       SKU
                     </th>
                     {COLUMNS.map((col) => {
@@ -748,7 +748,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       return (
                         <th
                           key={col.key}
-                          className={`relative px-2 py-0.5 text-center font-bold border-r border-stone-200 whitespace-nowrap ${
+                          className={`relative px-2 py-0.5 text-center font-bold border-r border-stone-100 whitespace-nowrap ${
                             col.type === "calc" ? "text-[#0d3d5e]" : "text-[#155789]"
                           }`}
                           style={{ backgroundColor: "#D9B86B" }}
@@ -966,15 +966,16 @@ const ExcelRow = memo(function ExcelRow({
     <>
     <tr
       className={`border-b border-stone-100 ${currentStyle ? currentStyle.cellClass : ""}`}
+      style={{ borderBottom: "1px solid #f1f5f9" }}
     >
       {/* Acciones - sticky */}
-      <td className="sticky left-0 z-10 px-2 py-0.5 text-center border-r border-stone-200 bg-white">
-        <div className="flex flex-col items-center justify-start gap-1 relative">
+      <td className="sticky left-0 z-10 px-2 py-0.5 text-center border-r border-stone-100 bg-white">
+        <div className="flex flex-row items-center justify-center gap-0.5 relative">
           <button
             id={`save-btn-${product.id}`}
             onClick={onSave}
             disabled={!isDirty}
-            className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
+            className={`h-7 w-7 rounded-lg flex items-center justify-center transition-colors ${
               isDirty
                 ? "bg-emerald-500 hover:bg-emerald-600 text-white"
                 : "bg-stone-100 text-stone-400 cursor-not-allowed"
@@ -987,7 +988,7 @@ const ExcelRow = memo(function ExcelRow({
           <button
             id={`label-btn-${product.id}`}
             onClick={onToggleLabelMenu}
-            className="h-8 w-8 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors"
+            className="h-7 w-7 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors"
             style={label ? { backgroundColor: labelStyles[label].border, color: "white" } : undefined}
             title="Etiquetar producto"
           >
@@ -995,7 +996,7 @@ const ExcelRow = memo(function ExcelRow({
           </button>
           <button
             onClick={onDelete}
-            className="h-8 w-8 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 flex items-center justify-center transition-colors"
+            className="h-7 w-7 rounded-lg bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 flex items-center justify-center transition-colors"
             title="Eliminar producto"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -1003,7 +1004,7 @@ const ExcelRow = memo(function ExcelRow({
         </div>
       </td>
       {/* SKU - sticky - con badge de última edición encima */}
-      <td className="sticky left-[80px] z-10 px-2 py-0.5 font-mono text-stone-700 font-semibold border-r border-stone-200 bg-white align-top">
+      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-stone-700 font-semibold border-r border-stone-100 bg-white align-top">
         {/* Badge de última edición manual del admin */}
         {product.ultimaEdicionAt && (() => {
           const d = new Date(product.ultimaEdicionAt);
@@ -1160,7 +1161,7 @@ const Cell = memo(function Cell({
           : formatPYG(Number(value))
         : "—";
     return (
-      <td className="px-2 py-0.5 text-right tabular-nums bg-emerald-50/50 border-r border-stone-100 whitespace-nowrap text-stone-700">
+      <td className="px-2 py-0.5 text-right tabular-nums bg-emerald-50/50 border-r border-stone-50 whitespace-nowrap text-stone-700">
         {displayValue}
       </td>
     );
@@ -1177,7 +1178,7 @@ const Cell = memo(function Cell({
       : value ?? "";
 
   return (
-    <td className="px-1 py-0 border-r border-stone-100 bg-white">
+    <td className="px-1 py-0 border-r border-stone-50 bg-white">
       <input
         type={isNum || isPct ? "number" : "text"}
         step={isPct ? "0.01" : isNum ? "1" : undefined}
@@ -1190,7 +1191,7 @@ const Cell = memo(function Cell({
             onChange(e.target.value);
           }
         }}
-        className={`w-full min-w-[80px] h-7 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
+        className={`w-full min-w-[80px] h-6 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
           isText ? "text-left" : "text-right"
         }`}
         placeholder="—"
