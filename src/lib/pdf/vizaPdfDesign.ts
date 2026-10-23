@@ -102,7 +102,7 @@ export function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: num
   doc.text("@vizahome", x + split + 18, y + 47);
   doc.text("www.viza.com.py", x + split + 135, y + 34);
   doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); doc.setTextColor(...GREY);
-  doc.text(`VIZA HOME E.A.S · ${planType} · Presupuesto válido por ${VALIDEZ_DIAS} días desde la fecha de emisión.`, pageW / 2, pageH - 20, { align: "center" });
+  doc.text(`Viza E.A.S (Viza Home) Presupuesto válido por ${VALIDEZ_DIAS} días desde la fecha de emisión.`, pageW / 2, pageH - 20, { align: "center" });
 }
 
 export function formatPYG(amount: number): string {
