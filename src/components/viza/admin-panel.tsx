@@ -186,11 +186,12 @@ const COLUMNS: ColDef[] = [
   { key: "tipo", label: "TIPO", type: "text", group: "DATOS FINALES" },
   { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
   { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
-  { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   { key: "productName", label: "PRODUCTO", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   { key: "codViza", label: "DATOS VIZA", type: "text", group: "DATOS" },
+  // STOCK movida atras de DATOS VIZA (orden solicitado por el usuario)
+  { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   { key: "codShow", label: "COD SHOW", type: "text", group: "DATOS" },
   // Costos
   { key: "costBR", label: "Costo R$", type: "num", group: "COSTOS" },
