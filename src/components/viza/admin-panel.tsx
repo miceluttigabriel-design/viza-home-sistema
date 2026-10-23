@@ -97,7 +97,7 @@ interface AdminPanelProps {
   isSupremo?: boolean;
 }
 
-const PAGE_SIZE = 15; // Filas más grandes, menos por página
+const PAGE_SIZE = 50; // Más productos por página (filas compactas permiten ver más)
 
 // Recalcular en vivo (espejo del cálculo del servidor)
 function recalcLive(form: any): any {
@@ -728,7 +728,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           </div>
 
           {/* Tabla estilo Excel - edición directa */}
-          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 200px)" }}>
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 130px)" }}>
             <div className="overflow-auto">
               <table className="admin-table border-collapse text-xs">
                 <thead className="border-b border-stone-200 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
