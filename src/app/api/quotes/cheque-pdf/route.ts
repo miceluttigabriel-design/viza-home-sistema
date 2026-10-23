@@ -203,39 +203,7 @@ export async function POST(req: NextRequest) {
     // Línea separadora (NO se muestra "Subtotal productos" - es regla de negocio)
     y += 4;
 
-    // ===== DESCUENTO POR CASCO (si aplica) =====
-    // NOTA: El bloque de casco SÍ se muestra porque es un descuento visible
-    // para el cliente (no es un precio de producto, es un beneficio).
-    const totalBruto = body.totalContadoBruto || 0;
-    const descCasco = body.cascoAplicado && body.cascoValor ? body.cascoValor : 0;
-
-    if (descCasco > 0) {
-      // Verificar salto de página
-      if (y > pageH - FOOTER_RESERVE) {
-        doc.addPage();
-        y = margin + 10;
-      }
-
-      const cascoBoxH = 56;
-      doc.setFillColor(...GREEN);
-      doc.roundedRect(margin, y, contentW, cascoBoxH, 4, 4, "F");
-      doc.setFillColor(212, 237, 218);
-      doc.roundedRect(margin + 3, y + 3, contentW - 6, cascoBoxH - 6, 3, 3, "F");
-
-      doc.setTextColor(20, 100, 40);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.text("DESCUENTO POR CASCO", margin + 14, y + 18);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text(`Producto: ${body.cascoDescripcion || "Casco"}`, margin + 14, y + 34);
-      doc.setTextColor(...RED);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("-" + formatPYG(descCasco), pageW - margin - 14, y + 36, { align: "right" });
-
-      y += cascoBoxH + 18;
-    }
+    // ===== DESCUENTO POR CASCO - OCULTO en el PDF CON CHEQUE (no se muestra al cliente) =====
 
     // ===== PLAN CON CHEQUE - TABLA DE CHEQUES =====
     const chequesTableH = 30 + cheques.length * 22 + 30;
