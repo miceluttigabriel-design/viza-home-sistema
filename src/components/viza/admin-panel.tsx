@@ -393,72 +393,72 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
   return (
     <div className="min-h-screen flex flex-col bg-stone-100">
-      {/* Columna vertical de botones FIJA, pegada al borde izquierdo absoluto de la página */}
-      <div
-        className="fixed top-3 left-3 z-50 flex flex-col gap-2 items-center p-2 rounded-2xl"
-        style={{
-          background: "linear-gradient(180deg, #faf6e9 0%, #ffffff 100%)",
-          boxShadow: "0 2px 6px rgba(217,184,107,0.3), 0 0 0 1px #e7d9a8",
-        }}
-      >
-        {/* 1. Bolinha de usuario (avatar) */}
-        <div
-          className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
-          style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-          title={`${user.name || user.email} · ${isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}`}
-        >
-          {(user.name || user.email).charAt(0).toUpperCase()}
-        </div>
-
-        {/* 2. Carrito de ventas (solo icono) */}
-        <button
-          onClick={onGoSales}
-          className="h-9 w-9 rounded-xl bg-stone-900 text-white flex items-center justify-center transition-colors shadow-sm hover:bg-stone-800"
-          title="Ir a Ventas"
-          aria-label="Ir a Ventas"
-        >
-          <ShoppingCart className="h-4 w-4" />
-        </button>
-
-        {/* 3. GDA (solo texto, sin emoji) */}
-        {isSupremo && onGoGestion && (
-          <button
-            onClick={onGoGestion}
-            className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
-            style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-            title="Gestión de Accesos y Contraseñas"
-            aria-label="Gestión de Accesos y Contraseñas"
-          >
-            GDA
-          </button>
-        )}
-
-        {/* 4. Clave de cambiar contraseña */}
-        <button
-          onClick={onOpenCambiarContrasena}
-          className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors hover:bg-[#efe6cf]"
-          style={{ backgroundColor: "#f5efdf", color: "#8a6d2f" }}
-          title="Cambiar mi contraseña"
-          aria-label="Cambiar mi contraseña"
-        >
-          <KeyRound className="h-4 w-4" />
-        </button>
-
-        {/* 5. Cerrar sesión */}
-        <button
-          onClick={() => signOut({ callbackUrl: "/" })}
-          className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors bg-stone-100 hover:bg-red-50 text-stone-500 hover:text-red-600"
-          title="Cerrar sesión"
-          aria-label="Cerrar sesión"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
-      </div>
-
       <header className="sticky top-0 z-30 border-b bg-white" style={{ borderColor: "#e7e5e4" }}>
-        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-3 pl-[88px]">
-          {/* Buscador pegado arriba, desplazado a la derecha para no pisar la columna de botones */}
-          <div className="relative w-full">
+        <div className="flex items-center gap-3 py-3 pr-4 sm:pr-6 lg:pr-8">
+          {/* Cajita HORIZONTAL de botones, pegada al borde izquierdo, al lado del buscador */}
+          <div
+            className="flex flex-row gap-2 items-center p-2 ml-3 rounded-2xl shrink-0"
+            style={{
+              background: "linear-gradient(180deg, #faf6e9 0%, #ffffff 100%)",
+              boxShadow: "0 2px 6px rgba(217,184,107,0.3), 0 0 0 1px #e7d9a8",
+            }}
+          >
+            {/* 1. Bolinha de usuario (avatar) */}
+            <div
+              className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title={`${user.name || user.email} · ${isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}`}
+            >
+              {(user.name || user.email).charAt(0).toUpperCase()}
+            </div>
+
+            {/* 2. Carrito de ventas (solo icono) */}
+            <button
+              onClick={onGoSales}
+              className="h-9 w-9 rounded-xl bg-stone-900 text-white flex items-center justify-center transition-colors shadow-sm hover:bg-stone-800"
+              title="Ir a Ventas"
+              aria-label="Ir a Ventas"
+            >
+              <ShoppingCart className="h-4 w-4" />
+            </button>
+
+            {/* 3. GDA (solo texto, sin emoji) */}
+            {isSupremo && onGoGestion && (
+              <button
+                onClick={onGoGestion}
+                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
+                style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+                title="Gestión de Accesos y Contraseñas"
+                aria-label="Gestión de Accesos y Contraseñas"
+              >
+                GDA
+              </button>
+            )}
+
+            {/* 4. Clave de cambiar contraseña */}
+            <button
+              onClick={onOpenCambiarContrasena}
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors hover:bg-[#efe6cf]"
+              style={{ backgroundColor: "#f5efdf", color: "#8a6d2f" }}
+              title="Cambiar mi contraseña"
+              aria-label="Cambiar mi contraseña"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
+
+            {/* 5. Cerrar sesión */}
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors bg-stone-100 hover:bg-red-50 text-stone-500 hover:text-red-600"
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Buscador pegado arriba, al lado de la cajita de botones */}
+          <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400" />
             <input
               type="text"
@@ -488,7 +488,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         onClose={() => setCambiarContrasenaOpen(false)}
       />
 
-      <main className="flex-1 max-w-[1800px] w-full mx-auto px-4 sm:px-6 lg:px-8 pl-[88px] py-6">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-4">
           {/* (Buscador movido al header) */}
           <div className="flex flex-col gap-3">
