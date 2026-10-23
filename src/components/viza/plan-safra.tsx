@@ -454,12 +454,6 @@ export function PlanSafra() {
                         >
                           {p.priceContado ? formatPYG(p.priceContado) : "—"}
                         </span>
-                        <div
-                          className="h-7 w-7 rounded-lg text-white flex items-center justify-center"
-                          style={{ backgroundColor: DORADO_OSCURO }}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </div>
                       </div>
                     </button>
                   ))}
