@@ -399,35 +399,28 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={onGoSales}
-              className="h-10 px-3 sm:px-4 rounded-xl bg-stone-900 text-white font-medium text-xs sm:text-sm flex items-center gap-2 transition-colors shadow-sm hover:bg-stone-800"
+              className="h-10 w-10 rounded-xl bg-stone-900 text-white flex items-center justify-center transition-colors shadow-sm hover:bg-stone-800"
+              title="Ir a Ventas"
+              aria-label="Ir a Ventas"
             >
               <ShoppingCart className="h-4 w-4" />
-              <span className="hidden sm:inline">IR A VENTAS</span>
             </button>
 
-            <div className="hidden sm:flex flex-col items-end text-right">
-              <span className="text-xs font-semibold text-stone-800 leading-none">
-                {user.name || user.email}
-              </span>
-              <span className="text-[10px] uppercase tracking-wide font-bold" style={{ color: "#8a6d2f" }}>
-                {isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}
-              </span>
-            </div>
-
-            <div className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}>
+            <div className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title={`${user.name || user.email} · ${isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}`}
+            >
               {(user.name || user.email).charAt(0).toUpperCase()}
             </div>
 
             {isSupremo && onGoGestion && (
               <button
                 onClick={onGoGestion}
-                className="h-10 px-3 sm:px-4 rounded-xl text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors shadow-sm hover:brightness-110"
+                className="h-10 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm hover:brightness-110"
                 style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
                 title="Gestión de Accesos y Contraseñas"
               >
                 <LayoutDashboard className="h-4 w-4" />
-                <span className="hidden sm:inline">GESTIÓN DE ACCESOS</span>
-                <span className="sm:hidden">ACCESOS</span>
+                <span>GDA</span>
               </button>
             )}
             <button
