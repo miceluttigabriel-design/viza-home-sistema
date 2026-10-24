@@ -47,35 +47,55 @@ interface ApplyBody {
 const UPDATE_BATCH_SIZE = 200;
 
 // ─────────────────────────────────────────────────────────────
-// recalculateFromCostProd: dispara el cálculo automático de márgenes
-// y precios usando el costProd importado del Excel como base.
-// Los márgenes (marginContado, pct1A6, pct7A13, pct14A30) se
-// asumen en 0 si no están seteados — el admin puede editarlos
-// después y se recalculan los precios en vivo.
+// recalculateFull: cadena de cálculo COMPLETA, idéntica a la de la edición
+// manual (PUT /api/products/[id]) y a la del alta de producto.
+//
+// El "COSTO UNIT. ULTIMA COMPRA" del Excel viene en Guaraníes, por eso se
+// guarda como costGs (campo de ENTRADA). A partir de ahí se calculan TODAS
+// las columnas automáticas: sub-costo, descuentos, adicionales, costProd,
+// márgenes 1..30 y precios.
+//
+// Antes se guardaba directo en costProd (campo calculado) y las demás
+// columnas quedaban vacías; además, al editar un margen el sistema
+// recalculaba desde costGs (vacío) y ponía el costo y los precios en 0.
 // ─────────────────────────────────────────────────────────────
-function recalculateFromCostProd(p: any): void {
-  const t = p.costProd ?? 0;
-  const mContado = Number(p.marginContado) || 0;
+function recalculateFull(p: any): void {
+  const cambioRS = 1100;
+  const cambioUS = 6000;
+
+  // Entrada: costo importado (Gs)
+  p.costGs = p.costProd ?? null;
+
+  const d = p.costBR && p.costBR > 0 ? p.costBR * cambioRS : null;
+  const f = p.costUS && p.costUS > 0 ? p.costUS * cambioUS : null;
+  p.rsNoUS = d && d > 0 ? d : f;
+  const calcCost = p.rsNoUS && p.rsNoUS > 0 ? p.rsNoUS : (p.costGs ?? 0);
+  p.usNoGs = calcCost;
+  p.subCost = calcCost;
+  p.rsToGs = d;
+  p.usToGs = f;
+
+  p.minusDisc = calcCost - calcCost * (p.discountPct || 0);
+  p.plusAdd = p.minusDisc + p.minusDisc * (p.addPct || 0);
+  p.plusAdd2 = p.plusAdd + p.plusAdd * (p.admPct || 0);
+  p.minusDescV = p.plusAdd2 - (p.valorDesc || 0);
+  const baseCosto = p.minusDescV + (p.valorAdd || 0);
+  p.costProd = Math.round(baseCosto / 1000) * 1000;
+
   const y = Number(p.pct1A6) || 0;
   const z = Number(p.pct7A13) || 0;
   const aa = Number(p.pct14A30) || 0;
+  const mContado = Number(p.marginContado) || 0;
 
-  // Márgenes acumulados (igual que recalcLive)
+  const t = p.costProd ?? 0;
+  p.priceContado = Math.round((t + t * mContado) / 1000) * 1000;
+
   let last = mContado;
   for (let i = 1; i <= 30; i++) {
-    let base: number;
-    if (i <= 6) base = y;
-    else if (i <= 13) base = z;
-    else base = aa;
+    const base = i <= 6 ? y : i <= 13 ? z : aa;
     last = last + base;
     p[`marginC${i}`] = last;
-  }
-
-  // Precios calculados en base a costProd y márgenes
-  p.priceContado = Math.round((t + t * mContado) / 1000) * 1000;
-  for (let i = 1; i <= 30; i++) {
-    const margin = p[`marginC${i}`];
-    p[`price${i}`] = Math.round((t + t * margin) / 1000 / i) * 1000;
+    p[`price${i}`] = Math.round((t + t * last) / 1000 / i) * 1000;
   }
 
   // Campos legados de compatibilidad catálogo
@@ -179,8 +199,8 @@ export async function POST(req: NextRequest) {
           pct7A13: 0,
           pct14A30: 0,
         };
-        // Disparar cálculo de margins y prices en base a costProd
-        recalculateFromCostProd(p);
+        // Disparar la cadena de cálculo completa (costGs → costProd → márgenes → precios)
+        recalculateFull(p);
         return p;
       });
       try {
@@ -214,7 +234,7 @@ export async function POST(req: NextRequest) {
               pct7A13: 0,
               pct14A30: 0,
             };
-            recalculateFromCostProd(p);
+            recalculateFull(p);
             await db.product.create({ data: p });
             creados++;
           } catch (e2: any) {

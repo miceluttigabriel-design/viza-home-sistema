@@ -142,6 +142,16 @@ export async function PUT(
         return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
       }
       const merged = { ...current, ...data } as any;
+      // Productos importados antes solo con Costo Prod. (sin costBR/costUS/costGs):
+      // usar ese costo como base, para que editar un margen NO ponga costo y
+      // precios en 0. Solo si el admin no está tocando los costos de entrada.
+      const sinCostoEntrada =
+        !(merged.costBR > 0) && !(merged.costUS > 0) && !(merged.costGs > 0);
+      const tocaCosto = ["costBR", "costUS", "costGs"].some((k) => body[k] !== undefined);
+      if (sinCostoEntrada && !tocaCosto && (current.costProd ?? 0) > 0) {
+        merged.costGs = current.costProd;
+        data.costGs = current.costProd;
+      }
       recalculate(merged);
       // Sobrescribir data con valores recalculados
       [

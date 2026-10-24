@@ -185,8 +185,6 @@ const COLUMNS: ColDef[] = [
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
-  { key: "codViza", label: "DATOS VIZA", type: "text", group: "DATOS" },
-  { key: "codShow", label: "COD SHOW", type: "text", group: "DATOS" },
   // STOCK movida ENTRE COD SHOW y Costo R$ (atras de Costo R$ = antes, en frente de COD SHOW = despues)
   { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   // Costos
@@ -411,6 +409,16 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           fullForm[k] = (product as any)[k] ?? "";
         }
       });
+      // Productos viejos importados solo con Costo Prod. (sin costBR/costUS/costGs):
+      // usar ese costo como base para que NO se pongan en 0 al editar un margen.
+      const sinCostoEntrada =
+        !(Number(fullForm.costBR) > 0) &&
+        !(Number(fullForm.costUS) > 0) &&
+        !(Number(fullForm.costGs) > 0);
+      const tocoCosto = ["costBR", "costUS", "costGs"].some((k) => changes[k] !== undefined);
+      if (sinCostoEntrada && !tocoCosto && Number((product as any).costProd) > 0) {
+        fullForm.costGs = (product as any).costProd;
+      }
       const recalculated = recalcLive(fullForm);
       // Sobrescribir los campos calculados en form
       Object.assign(form, recalculated);
@@ -867,7 +875,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </th>
                     {/* SKU */}
                     <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
-                      SKU
+                      COD
                     </th>
                     {COLUMNS.map((col) => {
                       const hasFilter =
