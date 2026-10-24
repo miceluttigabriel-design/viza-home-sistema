@@ -91,10 +91,16 @@ export async function GET(req: NextRequest) {
     const total = await db.product.count({ where });
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     // Ordenamiento:
+    // - Si llega sort=stock (dir=asc|desc), ordenar por stock (flechita de la columna STOCK
+    //   en el Panel ADM) con category+name como desempate. Solo se permite "stock".
     // - Si el filtro "editados" está activo, ordenar por ultimaEdicionAt DESC
     //   (más reciente arriba) - IGNORAR el ordenamiento alfabético normal
     // - En caso contrario, orden alfabético estándar (categoría + nombre)
-    const orderBy = etiquetaColor === "editados"
+    const sortField = searchParams.get("sort");
+    const sortDir: "asc" | "desc" = searchParams.get("dir") === "desc" ? "desc" : "asc";
+    const orderBy = sortField === "stock"
+      ? [{ stock: sortDir }, { category: "asc" as const }, { name: "asc" as const }]
+      : etiquetaColor === "editados"
       ? [{ ultimaEdicionAt: "desc" as const }]
       : [{ category: "asc" as const }, { name: "asc" as const }];
     const products = await db.product.findMany({

@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback, useRef, memo } from "react";
 import { createPortal } from "react-dom";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Search,
   ShoppingCart,
   LogOut,
@@ -252,6 +255,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
   // Columna cuyo dropdown está abierto (null = ninguno)
   const [openFilterColumn, setOpenFilterColumn] = useState<string | null>(null);
+  // Ordenamiento de la columna STOCK: null (sin orden) | "desc" (mayor a menor) | "asc" (menor a mayor)
+  const [stockSort, setStockSort] = useState<"asc" | "desc" | null>(null);
   // Filtro activo de etiqueta de color: "verde" | "azul" | "dorado" | "rojo" | null
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
 
@@ -358,6 +363,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       if (Object.keys(activeFilters).length > 0) {
         params.set("filters", JSON.stringify(activeFilters));
       }
+      // Ordenamiento por stock (flechita de la columna STOCK)
+      if (stockSort) {
+        params.set("sort", "stock");
+        params.set("dir", stockSort);
+      }
       const res = await fetch(`/api/products?${params.toString()}`);
       const data = await res.json();
       setProducts(data.products || []);
@@ -376,7 +386,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     } finally {
       setLoadingProducts(false);
     }
-  }, [search, page, columnFilters, labelFilter]);
+  }, [search, page, columnFilters, labelFilter, stockSort]);
 
   useEffect(() => {
     fetchProducts();
@@ -1103,16 +1113,29 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                             )}
                             <div className="flex items-center gap-1">
                               <span>{col.label}</span>
-                              <FilterButton
-                                hasFilter={hasFilter}
-                                isOpen={isOpen}
-                                onClick={() =>
-                                  setOpenFilterColumn(isOpen ? null : col.key)
-                                }
-                              />
+                              {col.key === "stock" ? (
+                                // STOCK: sin filtro por valor, solo flechita de ordenamiento
+                                <StockSortButton
+                                  dir={stockSort}
+                                  onClick={() => {
+                                    setStockSort((prev) =>
+                                      prev === null ? "desc" : prev === "desc" ? "asc" : null
+                                    );
+                                    setPage(1);
+                                  }}
+                                />
+                              ) : (
+                                <FilterButton
+                                  hasFilter={hasFilter}
+                                  isOpen={isOpen}
+                                  onClick={() =>
+                                    setOpenFilterColumn(isOpen ? null : col.key)
+                                  }
+                                />
+                              )}
                             </div>
                           </div>
-                          {isOpen && (
+                          {isOpen && col.key !== "stock" && (
                             <FilterDropdown
                               colKey={col.key}
                               selected={columnFilters[col.key] || []}
@@ -2446,6 +2469,48 @@ const FilterButton = memo(function FilterButton({
       }`}
     >
       <Filter className="h-3 w-3" />
+    </button>
+  );
+});
+
+// Botón de ordenamiento para la columna STOCK (flechita)
+// Estados: null (sin orden, flecha neutral) → "desc" (mayor a menor, ↓) → "asc" (menor a mayor, ↑) → null
+const StockSortButton = memo(function StockSortButton({
+  dir,
+  onClick,
+}: {
+  dir: "asc" | "desc" | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onClick();
+      }}
+      title={
+        dir === "desc"
+          ? "Stock: mayor a menor (click para menor a mayor)"
+          : dir === "asc"
+          ? "Stock: menor a mayor (click para volver al orden normal)"
+          : "Ordenar por stock: mayor a menor / menor a mayor"
+      }
+      className={`inline-flex items-center justify-center h-5 w-5 rounded transition-colors ${
+        dir
+          ? "bg-stone-800 text-white"
+          : "text-stone-700 hover:bg-black/10 hover:text-black"
+      }`}
+    >
+      {dir === "desc" ? (
+        <ArrowDown className="h-3 w-3" />
+      ) : dir === "asc" ? (
+        <ArrowUp className="h-3 w-3" />
+      ) : (
+        <ArrowUpDown className="h-3 w-3" />
+      )}
     </button>
   );
 });
