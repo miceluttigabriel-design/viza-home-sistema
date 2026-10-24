@@ -711,7 +711,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         onClose={() => setCambiarContrasenaOpen(false)}
       />
 
-      <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
+      <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 pt-6 pb-3 flex flex-col">
         <div className="space-y-4 flex-1 min-h-0 flex flex-col">
           {/* (Buscador movido al header) */}
           <div className="flex flex-col gap-3 shrink-0">
@@ -1242,7 +1242,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
           {/* Paginación */}
           {totalPages > 1 && !loadingProducts && (
-            <div className="mt-6 shrink-0 flex items-center justify-center gap-2 flex-wrap">
+            <div className="shrink-0 flex items-center justify-center gap-2 flex-wrap">
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
