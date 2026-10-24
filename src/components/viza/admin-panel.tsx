@@ -180,15 +180,9 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   // Datos principales (pegados al SKU)
   { key: "referencia", label: "REFERENCIA", type: "text", group: "DATOS" },
-  // DATOS FINALES movidos antes de DESCRIPCION (orden solicitado por el usuario)
-  { key: "fabricante", label: "FABRICANTE", type: "text", group: "DATOS FINALES" },
+  // Columnas FABRICANTE, CATEGORIA, DIVISION, TIPO, MARCA, MODELO y PRODUCTO
+  // ocultas de esta tabla a pedido del usuario (los datos siguen en la base).
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
-  { key: "categoria", label: "CATEGORIA", type: "text", group: "DATOS FINALES" },
-  { key: "division", label: "DIVISION", type: "text", group: "DATOS FINALES" },
-  { key: "tipo", label: "TIPO", type: "text", group: "DATOS FINALES" },
-  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
-  { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
-  { key: "productName", label: "PRODUCTO", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   { key: "codViza", label: "DATOS VIZA", type: "text", group: "DATOS" },
@@ -290,7 +284,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     sample: Array<{ sku: string; name: string; stock: number }>;
   } | null>(null);
   const [deleteAllApplying, setDeleteAllApplying] = useState(false);
-  const [deleteAllResult, setDeleteAllResult] = useState<{ borrados: number } | null>(null);
+  const [deleteAllResult, setDeleteAllResult] = useState<{ borrados: number; conservados?: number } | null>(null);
   // Checkbox de doble confirmación (debe tildar "SI, BORRAR TODO" para habilitar)
   const [deleteAllConfirmCheck, setDeleteAllConfirmCheck] = useState(false);
 
@@ -1365,6 +1359,223 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         </div>
       )}
 
+
+      {/* ════════════════════════════════════════════════════════════════
+          MODAL: DELETE ALL (borrar TODOS los productos)
+          - Botón rojo, solo supremo_admin
+          - Pide doble confirmación (checkbox + botón)
+          - Operación IRREVERSIBLE
+          ════════════════════════════════════════════════════════════════ */}
+      {deleteAllOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => {
+            if (!deleteAllLoading && !deleteAllApplying) setDeleteAllOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header rojo */}
+            <div
+              className="px-6 py-4 flex items-center justify-between border-b"
+              style={{ borderColor: "#fecaca", background: "linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)" }}
+            >
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                BORRAR TODOS los productos
+              </h3>
+              <button
+                onClick={() => {
+                  if (!deleteAllLoading && !deleteAllApplying) setDeleteAllOpen(false);
+                }}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                disabled={deleteAllLoading || deleteAllApplying}
+                title="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              {deleteAllLoading && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="h-10 w-10 rounded-full border-4 border-stone-200 border-t-red-600 animate-spin"></div>
+                  <p className="text-sm text-stone-600 font-medium">Contando productos…</p>
+                </div>
+              )}
+
+              {!deleteAllLoading && deleteAllResult && (
+                <div className="space-y-4">
+                  <div
+                    className="rounded-xl p-4 border"
+                    style={{ background: "#fef2f2", borderColor: "#fca5a5" }}
+                  >
+                    <p className="text-base font-bold text-red-800 mb-2">
+                      ✓ Borrado completado
+                    </p>
+                    <p className="text-sm text-red-700">
+                      Se borraron <strong>{deleteAllResult.borrados}</strong> productos de la base.
+                    </p>
+                    {(deleteAllResult.conservados ?? 0) > 0 && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                        ⚠ Se conservaron <strong>{deleteAllResult.conservados}</strong> productos porque
+                        están dentro de presupuestos guardados (para no perder ese historial).
+                      </p>
+                    )}
+                    <p className="text-xs text-stone-500 italic mt-2">
+                      {(deleteAllResult.conservados ?? 0) > 0
+                        ? "Podés re-importar usando IMPORTAR EXCEL."
+                        : "La tabla está vacía ahora. Podés re-importar usando IMPORTAR EXCEL."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!deleteAllLoading && !deleteAllResult && deleteAllPreview && (
+                <div className="space-y-4">
+                  {/* Aviso grande */}
+                  <div className="rounded-xl p-4 border-2 border-red-300 bg-red-50">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-base font-bold text-red-800 mb-1">¡OPERACIÓN IRREVERSIBLE!</p>
+                        <p className="text-sm text-red-700">
+                          Vas a borrar <strong>{deleteAllPreview.total}</strong> productos de la base.
+                          Una vez borrados, no se pueden recuperar (a menos que tengas un backup Excel).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sample */}
+                  {deleteAllPreview.sample.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-stone-800 mb-2">Primeros 5 productos que se van a borrar:</p>
+                      <div className="border border-stone-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead style={{ background: "#f5f5f4" }}>
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">SKU</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {deleteAllPreview.sample.map((p, i) => (
+                              <tr key={i} className="border-t border-stone-100">
+                                <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{p.sku}</td>
+                                <td className="px-2 py-1.5 text-stone-700">{p.name}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">{p.stock}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Checkbox doble confirmación */}
+                  <label className="flex items-start gap-3 p-4 rounded-lg border-2 border-stone-300 hover:border-red-400 transition-colors cursor-pointer bg-white">
+                    <input
+                      type="checkbox"
+                      checked={deleteAllConfirmCheck}
+                      onChange={(e) => setDeleteAllConfirmCheck(e.target.checked)}
+                      disabled={deleteAllApplying}
+                      className="h-5 w-5 mt-0.5 text-red-600 rounded border-stone-400"
+                    />
+                    <span className="text-sm text-stone-800 font-semibold">
+                      Sí, entiendo que es IRREVERSIBLE. Quiero borrar TODOS los {deleteAllPreview.total} productos de la base.
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: "#e7e5e4" }}>
+              {!deleteAllResult && (
+                <>
+                  <button
+                    onClick={() => setDeleteAllOpen(false)}
+                    className="h-9 px-4 rounded-lg border border-stone-300 bg-white text-stone-700 text-sm font-medium hover:bg-stone-50 transition-colors"
+                    disabled={deleteAllLoading || deleteAllApplying}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!deleteAllPreview) return;
+                      if (!deleteAllConfirmCheck) return;
+                      setDeleteAllApplying(true);
+                      try {
+                        const res = await fetch("/api/products/cleanup-all/apply", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ confirm: true }),
+                        });
+                        const text = await res.text();
+                        let data: any;
+                        try {
+                          data = text ? JSON.parse(text) : null;
+                        } catch {
+                          throw new Error(`Respuesta inválida del servidor (estado ${res.status})`);
+                        }
+                        if (!res.ok || data?.error) {
+                          throw new Error(data?.error || `Error HTTP ${res.status}`);
+                        }
+                        setDeleteAllResult(data);
+                        if (data.conservados > 0) {
+                          toast.warning(`Se borraron ${data.borrados} productos. ${data.conservados} se conservaron porque están en presupuestos guardados.`, { duration: 9000 });
+                        } else {
+                          toast.success(`Borrado completo: ${data.borrados} productos eliminados`);
+                        }
+                        fetchProducts();
+                      } catch (error) {
+                        console.error("Error delete-all apply:", error);
+                        toast.error(`Error: ${(error as Error).message}`);
+                      } finally {
+                        setDeleteAllApplying(false);
+                      }
+                    }}
+                    className="h-9 px-4 rounded-lg text-white text-sm font-bold flex items-center gap-1.5 hover:brightness-110 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ background: "linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)" }}
+                    disabled={
+                      deleteAllLoading ||
+                      deleteAllApplying ||
+                      !deleteAllPreview ||
+                      !deleteAllConfirmCheck
+                    }
+                  >
+                    {deleteAllApplying ? (
+                      <>
+                        <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                        Borrando…
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4" />
+                        SÍ, BORRAR TODO ({deleteAllPreview?.total || 0})
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+              {deleteAllResult && (
+                <button
+                  onClick={() => setDeleteAllOpen(false)}
+                  className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
+                  style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                >
+                  Cerrar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

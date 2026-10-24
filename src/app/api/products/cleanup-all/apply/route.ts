@@ -39,12 +39,28 @@ export async function POST(req: NextRequest) {
     // Contar antes de borrar
     const totalAntes = await db.product.count();
 
-    // BORRAR TODO con deleteMany (where vacío = borra todo)
-    const result = await db.product.deleteMany({});
+    // BORRAR TODO con deleteMany (where vacío = borra todo).
+    // Si algún presupuesto guardado (QuoteItem) usa productos, la base rechaza
+    // el borrado total por la clave foránea. En ese caso borramos todos los que
+    // NO están en presupuestos y conservamos el resto (sin perder el historial).
+    let borrados = 0;
+    let conservados = 0;
+    try {
+      const result = await db.product.deleteMany({});
+      borrados = result.count;
+    } catch (err) {
+      console.warn("cleanup-all: borrado total rechazado, se borran solo los no usados en presupuestos:", err);
+      const result = await db.product.deleteMany({
+        where: { quoteItems: { none: {} } },
+      });
+      borrados = result.count;
+      conservados = await db.product.count();
+    }
 
     return NextResponse.json({
       ok: true,
-      borrados: result.count,
+      borrados,
+      conservados,
       totalAntes,
     });
   } catch (error) {
