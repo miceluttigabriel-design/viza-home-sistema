@@ -31,7 +31,7 @@ export function PlanCheque() {
 
   const {
     productos, addProducto, removeProducto, setProductoQuantity,
-    clienteNombre, clienteTelefono, clienteObservaciones, fechaEmision, setClienteField,
+    clienteNombre, clienteTelefono, clienteDocumento, clienteObservaciones, fechaEmision, setClienteField,
     cantidadCheques, setCantidadCheques, fechasCheques, setFechaCheque, generarCampos,
     resultados, totalPagar, totalContadoBruto, descuentoCasco, baseCalculo,
     calcular, clear,
@@ -94,7 +94,7 @@ export function PlanCheque() {
     setGeneratingPdf(true);
     try {
       const payload = {
-        cliente: { nombre: clienteNombre, telefono: clienteTelefono, observaciones: clienteObservaciones, fecha: fechaEmision },
+        cliente: { nombre: clienteNombre, telefono: clienteTelefono, documento: clienteDocumento, observaciones: clienteObservaciones, fecha: fechaEmision },
         productos: productos.map(p => ({ sku: p.sku, name: p.name, quantity: p.quantity, priceContado: p.priceContado, subtotalContado: p.priceContado * p.quantity, safraPct: p.safraPct })),
         cascoAplicado: !!cascoEnCarrito, cascoValor: cascoValorExacto, cascoDescripcion: cascoEnCarrito?.name || "",
         totalContadoBruto,
@@ -139,17 +139,12 @@ export function PlanCheque() {
             onChange={(v) => setClienteField("Telefono", v)}
             placeholder="+598 99 123 456"
           />
-          <div>
-            <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
-              Fecha de emisión
-            </label>
-            <input
-              type="text"
-              value={fechaEmision}
-              readOnly
-              className="w-full h-10 px-3 rounded-lg border border-stone-200 bg-stone-50 text-sm"
-            />
-          </div>
+          <Field
+            label="RUC / CI Documento (opcional)"
+            value={clienteDocumento}
+            onChange={(v) => setClienteField("Documento", v)}
+            placeholder="Ej: 1234567-8"
+          />
         </div>
         <div className="mt-3">
           <Field

@@ -23,6 +23,7 @@ interface SafraPdfPayload {
   cliente: {
     nombre: string;
     telefono: string;
+    documento?: string; // RUC o CI (opcional)
     observaciones: string;
     fecha: string; // ISO fecha de emisión
   };
@@ -159,6 +160,10 @@ export async function POST(req: NextRequest) {
 
       if (body.cliente.telefono) {
         doc.text(`Teléfono/WhatsApp: ${body.cliente.telefono}`, margin, y);
+        y += 12;
+      }
+      if (body.cliente.documento) {
+        doc.text(`RUC/CI: ${body.cliente.documento}`, margin, y);
         y += 12;
       }
     }

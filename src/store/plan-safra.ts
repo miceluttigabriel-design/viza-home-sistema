@@ -74,6 +74,7 @@ export interface PlanSafraState {
   // === Cliente ===
   clienteNombre: string;
   clienteTelefono: string;
+  clienteDocumento: string;
   clienteObservaciones: string;
   fechaEmision: string;
   setClienteField: (field: string, value: string) => void;
@@ -390,6 +391,7 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
 const initialCliente = {
   clienteNombre: "",
   clienteTelefono: "",
+  clienteDocumento: "",
   clienteObservaciones: "",
   fechaEmision: new Date().toISOString().slice(0, 10),
 };
@@ -400,6 +402,7 @@ type PlanSafraPersistedState = Pick<
   | "productos"
   | "clienteNombre"
   | "clienteTelefono"
+  | "clienteDocumento"
   | "clienteObservaciones"
   | "fechaEmision"
   | "entradaValor"
@@ -563,6 +566,7 @@ export const usePlanSafraStore = create<PlanSafraState>()(
         productos: state.productos,
         clienteNombre: state.clienteNombre,
         clienteTelefono: state.clienteTelefono,
+        clienteDocumento: state.clienteDocumento,
         clienteObservaciones: state.clienteObservaciones,
         fechaEmision: state.fechaEmision,
         entradaValor: state.entradaValor,

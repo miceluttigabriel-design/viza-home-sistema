@@ -26,6 +26,7 @@ interface ChequePdfPayload {
   cliente: {
     nombre: string;
     telefono: string;
+    documento?: string; // RUC o CI (opcional)
     observaciones: string;
     fecha: string; // ISO fecha de emisión
   };
@@ -141,6 +142,9 @@ export async function POST(req: NextRequest) {
     }
     if (body.cliente && body.cliente.telefono) {
       doc.text(`Teléfono/WhatsApp: ${body.cliente.telefono}`, margin + 14, y + 52);
+    }
+    if (body.cliente && body.cliente.documento) {
+      doc.text(`RUC/CI: ${body.cliente.documento}`, margin + 14, y + 68);
     }
 
     y += 90;

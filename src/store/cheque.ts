@@ -51,6 +51,7 @@ export interface ChequeState {
 
   clienteNombre: string;
   clienteTelefono: string;
+  clienteDocumento: string;
   clienteObservaciones: string;
   fechaEmision: string;
   setClienteField: (field: string, value: string) => void;
@@ -127,7 +128,7 @@ function calcularHelper(state: ChequeState): Partial<ChequeState> {
 }
 
 const initialCliente = {
-  clienteNombre: "", clienteTelefono: "", clienteObservaciones: "",
+  clienteNombre: "", clienteTelefono: "", clienteDocumento: "", clienteObservaciones: "",
   fechaEmision: new Date().toISOString().slice(0, 10),
 };
 
@@ -137,6 +138,7 @@ type ChequePersistedState = Pick<
   | "productos"
   | "clienteNombre"
   | "clienteTelefono"
+  | "clienteDocumento"
   | "clienteObservaciones"
   | "fechaEmision"
   | "cantidadCheques"
@@ -189,7 +191,7 @@ export const useChequeStore = create<ChequeState>()(
       storage: createUserScopedStorage<ChequePersistedState>(),
       partialize: (s) => ({
         productos: s.productos, clienteNombre: s.clienteNombre, clienteTelefono: s.clienteTelefono,
-        clienteObservaciones: s.clienteObservaciones, fechaEmision: s.fechaEmision,
+        clienteDocumento: s.clienteDocumento, clienteObservaciones: s.clienteObservaciones, fechaEmision: s.fechaEmision,
         cantidadCheques: s.cantidadCheques, fechasCheques: s.fechasCheques,
       }),
     }

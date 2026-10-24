@@ -55,6 +55,7 @@ export function PlanSafra() {
     setProductoQuantity,
     clienteNombre,
     clienteTelefono,
+    clienteDocumento,
     clienteObservaciones,
     fechaEmision,
     setClienteField,
@@ -254,6 +255,7 @@ export function PlanSafra() {
         cliente: {
           nombre: clienteNombre,
           telefono: clienteTelefono,
+          documento: clienteDocumento,
           observaciones: clienteObservaciones,
           fecha: fechaEmision,
         },
@@ -347,17 +349,12 @@ export function PlanSafra() {
             onChange={(v) => setClienteField("Telefono", v)}
             placeholder="+598 99 123 456"
           />
-          <div>
-            <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
-              Fecha de emisión
-            </label>
-            <input
-              type="text"
-              value={fechaEmision}
-              readOnly
-              className="w-full h-10 px-3 rounded-lg border border-stone-200 bg-stone-50 text-sm"
-            />
-          </div>
+          <Field
+            label="RUC / CI Documento (opcional)"
+            value={clienteDocumento}
+            onChange={(v) => setClienteField("Documento", v)}
+            placeholder="Ej: 1234567-8"
+          />
         </div>
         <div className="mt-3">
           <Field
