@@ -690,10 +690,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     }}
                     className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
                     style={{ background: "linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)" }}
-                    title="BORRAR TODOS los productos de la base (irreversible, solo supremo)"
+                    title="ELIMINAR TODOS los productos de la base (irreversible, solo supremo)"
                   >
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    DELETE ALL
+                    ELIMINAR TODO
                   </button>
                 )}
               </div>
