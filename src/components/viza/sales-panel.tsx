@@ -19,7 +19,6 @@ import {
   Gift,
   AlertTriangle,
   KeyRound,
-  LayoutDashboard,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -710,7 +709,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2 flex-wrap lg:flex-nowrap">
-          {/* LADO IZQUIERDO: Reloj (PRIMERO, EXTREMO IZQUIERDO) + GESTIÓN ACCESOS + PANEL ADMIN + Tabs */}
+          {/* LADO IZQUIERDO: Reloj (PRIMERO, EXTREMO IZQUIERDO) + GDA + BASE + Tabs */}
           <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap">
             {/* Reloj en tiempo real - PRIMERO EN EL HEADER, EXTREMO IZQUIERDO - FONDO BLANCO TEXTO NEGRO */}
             <div
@@ -743,13 +742,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             {isSupremoRole && onGoGestion && (
               <button
                 onClick={onGoGestion}
-                className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border shadow-sm hover:brightness-110 shrink-0"
-                style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO, borderColor: DORADO_OSCURO }}
+                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110 shrink-0"
+                style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO }}
                 title="Gestión de Accesos y Contraseñas"
+                aria-label="Gestión de Accesos y Contraseñas"
               >
-                <LayoutDashboard className="h-4 w-4" />
-                <span className="hidden sm:inline">GESTIÓN DE ACCESOS</span>
-                <span className="sm:hidden">ACCESOS</span>
+                GDA
               </button>
             )}
             {isAdmin && onGoAdmin && (
@@ -759,11 +757,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
                 title="Volver al Panel Admin"
               >
-                <span className="hidden sm:inline">PANEL ADMIN</span>
-                <span className="sm:hidden">ADMIN</span>
+                <span>BASE</span>
               </button>
             )}
-            {/* === TOGGLE MODO COTIZADOR / PLAN SAFRA / CON CHEQUE (al lado de PANEL ADMIN) === */}
+            {/* === TOGGLE MODO COTIZADOR / PLAN SAFRA / CON CHEQUE (al lado de BASE) === */}
             <button
               onClick={() => setViewMode("cotizador")}
               className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
