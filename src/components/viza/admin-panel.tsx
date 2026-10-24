@@ -1076,14 +1076,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 130px)" }}>
             <div className="overflow-auto">
               <table className="admin-table border-collapse text-xs">
-                <thead className="border-b border-stone-200 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                <thead className="border-b border-stone-200 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
                   <tr>
                     {/* Columna acciones */}
-                    <th className="sticky left-0 z-20 px-2 py-0.5 text-center font-bold border-r border-stone-200 min-w-[120px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                    <th className="sticky left-0 z-20 px-2 py-0.5 text-center font-bold border-r border-stone-200 min-w-[120px]" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
                       ACCIONES
                     </th>
                     {/* SKU */}
-                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#155789" }}>
+                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#7a5800" }}>
                       COD
                     </th>
                     {COLUMNS.map((col) => {
@@ -1093,14 +1093,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       return (
                         <th
                           key={col.key}
-                          className={`relative px-2 py-0.5 text-center font-bold border-r border-stone-100 whitespace-nowrap ${
-                            col.type === "calc" ? "text-[#0d3d5e]" : "text-[#155789]"
-                          }`}
+                          className="relative px-2 py-0.5 text-center font-bold border-r border-stone-100 whitespace-nowrap"
                           style={{ backgroundColor: "#D9B86B" }}
                         >
                           <div className="flex flex-col items-center">
                             {col.group && (
-                              <span className="text-[9px] font-normal mb-0.5" style={{ color: "#0d3d5e", opacity: 0.7 }}>
+                              <span className="text-[9px] font-normal mb-0.5" style={{ color: "#1c1917" }}>
                                 {col.group}
                               </span>
                             )}
@@ -2224,7 +2222,7 @@ const ExcelRow = memo(function ExcelRow({
         </div>
       </td>
       {/* SKU - sticky - con badge de última edición encima */}
-      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-stone-700 font-semibold border-r border-stone-100 bg-white align-top">
+      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-[#b8860b] font-semibold border-r border-stone-100 bg-white align-top">
         {/* Badge de última edición manual del admin */}
         {product.ultimaEdicionAt && (() => {
           const d = new Date(product.ultimaEdicionAt);
