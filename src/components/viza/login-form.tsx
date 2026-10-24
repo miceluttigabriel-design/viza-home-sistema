@@ -208,13 +208,7 @@ export function LoginForm() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="mt-6 text-center text-xs space-y-1" style={{ color: "#D9B86B" }}>
-          <p>TEL: (0987) 700 707 | EMAIL: VENTAS.ONLINE@VIZA.COM.PY</p>
-          <p>WEB: WWW.VIZA.COM.PY | @VIZAHOME</p>
-        </div>
-
-        <p className="text-center text-stone-300/80 text-[11px] mt-3">
+        <p className="text-center text-stone-300/80 text-[11px] mt-6">
           VIZA HOME E.A.S © {new Date().getFullYear()} · ACCESO SOLO PARA PERSONAL AUTORIZADO
         </p>
       </div>
