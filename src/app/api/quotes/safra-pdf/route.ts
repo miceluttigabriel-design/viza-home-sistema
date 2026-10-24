@@ -344,38 +344,37 @@ export async function POST(req: NextRequest) {
       rowIdx += 1;
     };
 
-    // Entrada inicial (destacada)
-    // v3.9+: el plan-safra ahora envía "entradaValor" en vez de "fechaEntrega/valorEntrega"
-    // v4.0: si fechaEntrega viene vacío, usar la fecha de emisión del cliente
-    const entradaValor: number = (body as any).entradaValor || body.valorEntrega || 0;
-    drawCronoRow(
-      "ENTRADA INICIAL",
-      body.cliente?.fecha || body.fechaEntrega || "",
-      entradaValor,
-      true
-    );
+    // === FILAS DEL CRONOGRAMA: se usan los datos REALES del plan (body.cronograma) ===
+    // El panel SAFRA calcula el cronograma mes a mes (interés sobre saldo restante) y
+    // lo envía con {fecha, concepto, pago}. Ahí están las FECHAS de cada refuerzo, los
+    // VALORES auto-calculados y el ÚLTIMO pago ya etiquetado como "PAGO FINAL".
+    // (Antes el PDF reconstruía las filas desde body.refuerzos, que llegan SIN fecha y
+    //  con valor 0 porque el cálculo real queda solo dentro del cronograma.)
+    // Se muestran solo los pagos reales (pago > 0), igual que en el panel.
+    const filasPago = (body.cronograma || []).filter((c) => c.pago > 0);
 
-    // Refuerzos (v3.9: ahora se envían con {fecha, valor} calculados automáticamente)
-    const refuerzos = body.refuerzos || [];
-    const n = refuerzos.length;
-    for (let i = 0; i < n; i++) {
-      const r = refuerzos[i] || { fecha: "", valor: 0 };
+    filasPago.forEach((c) => {
+      const esEntrada = c.mes === 0;
+      const esPagoFinal = (c.concepto || "").toUpperCase() === "PAGO FINAL";
       drawCronoRow(
-        `REFUERZO ${i + 1}`,
-        r.fecha || "",
-        r.valor || 0,
-        false
+        esEntrada ? "ENTRADA INICIAL" : (c.concepto || "REFUERZO").toUpperCase(),
+        c.fecha || "",
+        c.pago,
+        esEntrada || esPagoFinal
       );
-    }
+    });
 
-    // Pago final (si existe) - v3.9+: ya no se usa, pero mantenemos compat
-    if (body.fechaFinal && body.valorFinal && body.valorFinal > 0) {
-      drawCronoRow(
-        "PAGO FINAL",
-        body.fechaFinal,
-        body.valorFinal,
-        true
-      );
+    // Fallback de compatibilidad: si no viene cronograma pero sí entrada, mostrar la entrada
+    if (filasPago.length === 0) {
+      const entradaValor: number = (body as any).entradaValor || body.valorEntrega || 0;
+      if (entradaValor > 0) {
+        drawCronoRow(
+          "ENTRADA INICIAL",
+          body.cliente?.fecha || body.fechaEntrega || "",
+          entradaValor,
+          true
+        );
+      }
     }
 
     // ===== RESUMEN TOTAL =====
@@ -383,10 +382,11 @@ export async function POST(req: NextRequest) {
     y += 12;
 
     const sumBoxW = 320;
+    const sumBoxH = 56; // mismo tamaño que el cuadro de MAYORISTA
     const sumBoxX = pageW - margin - sumBoxW;
 
     doc.setFillColor(...BLUE);
-    doc.roundedRect(sumBoxX, y, sumBoxW, 80, 6, 6, "F");
+    doc.roundedRect(sumBoxX, y, sumBoxW, sumBoxH, 6, 6, "F");
 
     // Banda dorada superior
     doc.setFillColor(...GOLD);
@@ -395,45 +395,20 @@ export async function POST(req: NextRequest) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(217, 184, 107);
-    doc.text("TOTAL DEL PLAN SAFRA:", sumBoxX + 14, y + 22);
+    doc.text("TOTAL DEL PLAN SAFRA:", sumBoxX + 14, y + 25);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
     doc.setTextColor(255, 255, 255);
-    doc.text(formatPYG(body.totalPlan), sumBoxX + sumBoxW - 14, y + 22, {
+    doc.text(formatPYG(body.totalPlan), sumBoxX + sumBoxW - 14, y + 25, {
       align: "right",
     });
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(220, 220, 220);
-    doc.text("Total distribuido:", sumBoxX + 14, y + 42);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(255, 255, 255);
-    doc.text(
-      formatPYG(body.totalDistribuido),
-      sumBoxX + sumBoxW - 14,
-      y + 42,
-      { align: "right" }
-    );
+    // (Eliminadas las líneas "Total distribuido" y "Diferencia": el campo
+    //  totalDistribuido nunca se enviaba desde el panel y mostraba "Gs NaN".
+    //  El total del plan ya incluye intereses y cuadra por diseño del cronograma.)
 
-    // Indicador cuadre
-    const cuadra = body.totalDistribuido === body.totalPlan;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    if (cuadra) {
-      doc.setTextColor(180, 252, 200);
-      doc.text("CUADRA", sumBoxX + 14, y + 62);
-    } else {
-      doc.setTextColor(254, 202, 202);
-      doc.text(
-        `Diferencia: ${formatPYG(body.totalPlan - body.totalDistribuido)}`,
-        sumBoxX + 14,
-        y + 62
-      );
-    }
-
-    y += 100;
+    y += sumBoxH + 16;
 
     // ===== OBSERVACIONES =====
     if (
