@@ -22,6 +22,7 @@ import {
   Tag,
   Pencil,
   KeyRound,
+  Percent,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -273,6 +274,41 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const [importResult, setImportResult] = useState<{ creados: number; actualizados: number; errores: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // ─── IMPORTAR MÁRGENES (planilla LISTA VIZA HOME, hoja "base") ───
+  // El Excel se procesa EN EL NAVEGADOR (SheetJS) y solo se envía un JSON
+  // compacto con códigos + márgenes. Así se evita el límite de 4.5MB de
+  // subida de Vercel (el .xlsm pesa ~6MB).
+  const [marginsImportOpen, setMarginsImportOpen] = useState(false);
+  const [marginsImportLoading, setMarginsImportLoading] = useState(false);
+  const [marginsImportPreview, setMarginsImportPreview] = useState<{
+    totalCodigos: number;
+    coinciden: number;
+    noEncontrados: number;
+    noEncontradosMuestra: string[];
+    sinMargen: number;
+    sinCosto: number;
+    cambios: Array<{
+      sku: string;
+      name: string;
+      marginActual: number | null;
+      marginNuevo: number;
+      pct1A6: number;
+      pct7A13: number;
+      pct14A30: number;
+      precioContadoNuevo: number | null;
+    }>;
+  } | null>(null);
+  const [marginsImportApplying, setMarginsImportApplying] = useState(false);
+  const [marginsImportResult, setMarginsImportResult] = useState<{
+    actualizados: number;
+    noEncontrados: number;
+    fallidos: number;
+    errores: string[];
+  } | null>(null);
+  const marginsFileInputRef = useRef<HTMLInputElement | null>(null);
+  // Guarda las filas parseadas del Excel entre la vista previa y el apply
+  const marginsRowsRef = useRef<Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null }> | null>(null);
+
   // ─── DELETE ALL (borrar TODOS los productos) ───
   // Botón rojo solo para supremo_admin. Borra toda la tabla de productos.
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
@@ -379,6 +415,112 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       fetchProducts();
     } catch {
       toast.error("No se pudo eliminar");
+    }
+  };
+
+  // ─── IMPORTAR MÁRGENES: procesar el Excel EN EL NAVEGADOR ───
+  // Lee la hoja "base" de la planilla LISTA VIZA HOME (headers en fila 2),
+  // extrae COD VIZA + Contado + bases 1A6/7A13/14A30 y envía un JSON
+  // compacto a /api/products/import-margins/preview.
+  const handleMarginsFile = async (file: File) => {
+    setMarginsImportOpen(true);
+    setMarginsImportLoading(true);
+    setMarginsImportPreview(null);
+    setMarginsImportResult(null);
+    try {
+      // Import dinámico: solo carga la librería cuando se usa (~peso del bundle)
+      const XLSX = await import("xlsx");
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array", cellDates: false });
+      const sheetName =
+        wb.SheetNames.find((n) => n.trim().toLowerCase() === "base") || wb.SheetNames[0];
+      if (!sheetName) throw new Error("El Excel no tiene hojas");
+      const ws = wb.Sheets[sheetName];
+      const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+
+      const norm = (s: any) => String(s ?? "").trim().toUpperCase().replace(/\s+/g, " ");
+      // Buscar la fila de headers que contiene "COD VIZA"
+      let headerIdx = -1;
+      let colMap: Record<string, number> = {};
+      for (let r = 0; r < Math.min(aoa.length, 10); r++) {
+        const row = aoa[r] || [];
+        const mapped: Record<string, number> = {};
+        row.forEach((cell, c) => {
+          const h = norm(cell);
+          if (h && mapped[h] === undefined) mapped[h] = c;
+        });
+        if (mapped["COD VIZA"] !== undefined) {
+          headerIdx = r;
+          colMap = mapped;
+          break;
+        }
+      }
+      if (headerIdx < 0 || colMap["CONTADO"] === undefined) {
+        throw new Error("No se encontró la hoja 'base' con columnas COD VIZA y Contado");
+      }
+
+      const num = (v: any): number | null => {
+        if (v === null || v === undefined || v === "") return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      const rows: Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null }> = [];
+      for (let r = headerIdx + 1; r < aoa.length; r++) {
+        const row = aoa[r] || [];
+        const codRaw = row[colMap["COD VIZA"]];
+        if (codRaw === null || codRaw === undefined || String(codRaw).trim() === "") continue;
+        rows.push({
+          cod: String(codRaw).trim().replace(/\.0$/, ""),
+          m: num(row[colMap["CONTADO"]]),
+          y: num(row[colMap["1 A 6"]]),
+          z: num(row[colMap["7 A 13"]]),
+          aa: num(row[colMap["14 A 30"]]),
+        });
+      }
+      if (rows.length === 0) throw new Error("El Excel no contiene filas con COD VIZA");
+      marginsRowsRef.current = rows;
+
+      const res = await fetch("/api/products/import-margins/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `Error HTTP ${res.status}`);
+      setMarginsImportPreview(data);
+    } catch (error) {
+      console.error("Error import margins:", error);
+      toast.error(`Error: ${(error as Error).message}`);
+      setMarginsImportOpen(false);
+    } finally {
+      setMarginsImportLoading(false);
+      if (marginsFileInputRef.current) marginsFileInputRef.current.value = "";
+    }
+  };
+
+  const handleMarginsApply = async () => {
+    const rows = marginsRowsRef.current;
+    if (!rows || rows.length === 0) {
+      toast.error("No hay datos para aplicar");
+      return;
+    }
+    setMarginsImportApplying(true);
+    try {
+      const res = await fetch("/api/products/import-margins/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `Error HTTP ${res.status}`);
+      setMarginsImportResult(data);
+      fetchProducts(); // Recargar la tabla con las márgenes nuevas
+    } catch (error) {
+      console.error("Error apply margins:", error);
+      toast.error(`Error: ${(error as Error).message}`);
+    } finally {
+      setMarginsImportApplying(false);
     }
   };
 
@@ -644,6 +786,39 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     >
                       <Upload className="h-3.5 w-3.5" />
                       IMPORTAR EXCEL
+                    </button>
+                  </>
+                )}
+
+                {/* Boton IMPORTAR MÁRGENES (planilla LISTA VIZA HOME) — solo supremo_admin */}
+                {isSupremo && (
+                  <>
+                    <input
+                      ref={marginsFileInputRef}
+                      type="file"
+                      accept=".xlsm,.xlsx,.xls"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleMarginsFile(file);
+                      }}
+                    />
+                    <button
+                      id="btn-import-margins"
+                      onClick={() => {
+                        setMarginsImportOpen(true);
+                        setMarginsImportPreview(null);
+                        setMarginsImportResult(null);
+                        setMarginsImportLoading(false);
+                        setMarginsImportApplying(false);
+                        marginsFileInputRef.current?.click();
+                      }}
+                      className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                      style={{ background: "linear-gradient(135deg, #0d3d5e 0%, #155789 100%)" }}
+                      title="Importar márgenes desde la planilla LISTA VIZA HOME (hoja base)"
+                    >
+                      <Percent className="h-3.5 w-3.5" />
+                      IMPORTAR MÁRGENES
                     </button>
                   </>
                 )}
@@ -1358,6 +1533,230 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   onClick={() => setImportOpen(false)}
                   className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
                   style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                >
+                  Cerrar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          MODAL: IMPORTAR MÁRGENES (planilla LISTA VIZA HOME, hoja "base")
+          - Excel procesado en el navegador, envía solo JSON compacto
+          - Preview con muestra antes de aplicar
+          - Solo toca márgenes + precios; costos NUNCA se modifican
+          ════════════════════════════════════════════════════════════════ */}
+      {marginsImportOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => {
+            if (!marginsImportLoading && !marginsImportApplying) setMarginsImportOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del modal */}
+            <div
+              className="px-6 py-4 flex items-center justify-between border-b"
+              style={{ borderColor: "#e7e5e4", background: "linear-gradient(135deg, #0d3d5e 0%, #155789 100%)" }}
+            >
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Percent className="h-5 w-5" />
+                Importar márgenes (planilla VIZA HOME)
+              </h3>
+              <button
+                onClick={() => {
+                  if (!marginsImportLoading && !marginsImportApplying) setMarginsImportOpen(false);
+                }}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                disabled={marginsImportLoading || marginsImportApplying}
+                title="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body del modal */}
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              {marginsImportLoading && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="h-10 w-10 rounded-full border-4 border-stone-200 border-t-[#155789] animate-spin"></div>
+                  <p className="text-sm text-stone-600 font-medium">Procesando planilla…</p>
+                </div>
+              )}
+
+              {!marginsImportLoading && marginsImportResult && (
+                <div className="space-y-4">
+                  <div
+                    className="rounded-xl p-4 border"
+                    style={{ background: "#f0fdf4", borderColor: "#86efac" }}
+                  >
+                    <p className="text-base font-bold text-emerald-800 mb-2">
+                      ✓ Márgenes aplicadas
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="bg-white rounded-lg p-3 border border-emerald-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Productos actualizados</p>
+                        <p className="text-2xl font-black text-emerald-700">{marginsImportResult.actualizados}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-blue-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Códigos sin producto</p>
+                        <p className="text-2xl font-black text-blue-700">{marginsImportResult.noEncontrados}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {marginsImportResult.errores.length > 0 && (
+                    <div className="rounded-xl p-4 border border-amber-200 bg-amber-50">
+                      <p className="text-sm font-bold text-amber-800 mb-2">
+                        ⚠ Errores ({marginsImportResult.fallidos})
+                      </p>
+                      <ul className="text-xs text-amber-700 space-y-1 max-h-40 overflow-auto">
+                        {marginsImportResult.errores.slice(0, 50).map((e, i) => (
+                          <li key={i}>• {e}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="text-xs text-stone-500 italic">
+                    La tabla se recargó con las márgenes y precios nuevos. Los costos no fueron modificados.
+                  </div>
+                </div>
+              )}
+
+              {!marginsImportLoading && !marginsImportResult && marginsImportPreview && (
+                <div className="space-y-4">
+                  {/* Resumen */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
+                      <p className="text-3xl font-black text-emerald-700">{marginsImportPreview.coinciden}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos que coinciden por COD</p>
+                    </div>
+                    <div className="rounded-lg p-3 border border-stone-200 bg-stone-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin producto</p>
+                      <p className="text-3xl font-black text-stone-600">{marginsImportPreview.noEncontrados}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Códigos del Excel que no existen en el sistema</p>
+                    </div>
+                    <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Filas ignoradas</p>
+                      <p className="text-3xl font-black text-amber-600">{marginsImportPreview.sinMargen}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Sin margen Contado válida en el Excel</p>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-stone-600 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                    <strong>{marginsImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base".
+                    Se actualizan <strong>solo márgenes (% CONTADO + bases + % C1..C30)</strong> y se recalculan
+                    los <strong>precios (contado + 30 cuotas)</strong> con el costo actual de cada producto.
+                    <strong> Los costos no se modifican.</strong>
+                    {marginsImportPreview.sinCosto > 0 && (
+                      <span className="block mt-1 text-amber-700">
+                        ⚠ {marginsImportPreview.sinCosto} productos sin costo guardado: se actualizarán solo sus márgenes (precios intocados).
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Muestra de cambios */}
+                  {marginsImportPreview.cambios.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-stone-800 mb-2">
+                        Vista previa de cambios (primeros {marginsImportPreview.cambios.length})
+                      </p>
+                      <div className="border border-stone-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead style={{ background: "#f5f5f4" }}>
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">COD</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">% CONTADO actual</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">% CONTADO nuevo</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Base 1A6</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Base 7A13</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Base 14A30</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Precio CONTADO nuevo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {marginsImportPreview.cambios.map((c, i) => (
+                              <tr key={i} className="border-t border-stone-100">
+                                <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{c.sku}</td>
+                                <td className="px-2 py-1.5 text-stone-700 max-w-[220px] truncate" title={c.name}>{c.name || "—"}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-500">
+                                  {c.marginActual != null ? `${(c.marginActual * 100).toFixed(2)}%` : "—"}
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums font-bold text-emerald-700">
+                                  {(c.marginNuevo * 100).toFixed(2)}%
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">{(c.pct1A6 * 100).toFixed(2)}%</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">{(c.pct7A13 * 100).toFixed(2)}%</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">{(c.pct14A30 * 100).toFixed(2)}%</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-800">
+                                  {c.precioContadoNuevo != null ? formatPYG(c.precioContadoNuevo) : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Códigos sin producto (muestra) */}
+                  {marginsImportPreview.noEncontradosMuestra.length > 0 && (
+                    <div className="text-xs text-stone-500">
+                      <span className="font-semibold text-stone-600">Sin producto en el sistema (muestra): </span>
+                      {marginsImportPreview.noEncontradosMuestra.slice(0, 20).join(", ")}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer del modal */}
+            <div className="px-6 py-4 border-t border-stone-200 flex items-center justify-end gap-3 bg-stone-50">
+              {!marginsImportResult && (
+                <>
+                  <button
+                    onClick={() => setMarginsImportOpen(false)}
+                    className="h-9 px-4 rounded-lg text-stone-600 text-sm font-bold hover:bg-stone-200 transition-colors disabled:opacity-50"
+                    disabled={marginsImportLoading || marginsImportApplying}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleMarginsApply}
+                    className="h-9 px-4 rounded-lg text-white text-sm font-bold flex items-center gap-1.5 hover:brightness-110 transition-colors disabled:opacity-50"
+                    style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 100%)" }}
+                    disabled={
+                      marginsImportLoading ||
+                      marginsImportApplying ||
+                      !marginsImportPreview ||
+                      marginsImportPreview.coinciden === 0
+                    }
+                  >
+                    {marginsImportApplying ? (
+                      <>
+                        <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                        Aplicando márgenes…
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4" />
+                        APLICAR MÁRGENES
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+              {marginsImportResult && (
+                <button
+                  onClick={() => setMarginsImportOpen(false)}
+                  className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
+                  style={{ background: "linear-gradient(135deg, #0d3d5e 0%, #155789 100%)" }}
                 >
                   Cerrar
                 </button>
