@@ -5,6 +5,8 @@
 //   - Los precios (contado + 30 cuotas) se recalculan con el costProd YA EXISTENTE
 //   - Los costos NUNCA se modifican
 //   - Productos sin costo: solo márgenes (precios intocados)
+//   - valorTecnico/margenTecnico SOLO para los productos que traen Valor Para
+//     Técnico en el Excel (col CV > 0); los demás quedan intocados.
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { parseBody, requireAdmin, fetchMatchedProducts, buildMarginUpdate } from "../shared";
@@ -51,6 +53,7 @@ export async function POST(req: NextRequest) {
 
     // Ejecutar updates en lotes paralelos (rápido incluso con ~3.500 productos)
     let actualizados = 0;
+    let conTecnico = 0;
     const errores: string[] = [];
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
       const batch = updates.slice(i, i + BATCH_SIZE);
@@ -60,6 +63,7 @@ export async function POST(req: NextRequest) {
       results.forEach((r, idx) => {
         if (r.status === "fulfilled") {
           actualizados++;
+          if (typeof batch[idx].data.valorTecnico === "number") conTecnico++;
         } else {
           const sku = batch[idx].sku;
           errores.push(`SKU ${sku}: ${String((r as PromiseRejectedResult).reason?.message || "error")}`);
@@ -71,6 +75,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       totalCodigos: rows.length,
       actualizados,
+      conTecnico,
       noEncontrados: noEncontrados.length,
       fallidos: errores.length,
       errores: errores.slice(0, 50),

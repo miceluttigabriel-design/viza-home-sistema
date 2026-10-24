@@ -287,6 +287,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     noEncontradosMuestra: string[];
     sinMargen: number;
     sinCosto: number;
+    conTecnico: number;
     cambios: Array<{
       sku: string;
       name: string;
@@ -297,17 +298,26 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       pct14A30: number;
       precioContadoNuevo: number | null;
     }>;
+    cambiosTecnico: Array<{
+      sku: string;
+      name: string;
+      valorTecnicoActual: number | null;
+      valorTecnicoNuevo: number;
+      margenTecnicoNuevo: number | null;
+    }>;
   } | null>(null);
   const [marginsImportApplying, setMarginsImportApplying] = useState(false);
   const [marginsImportResult, setMarginsImportResult] = useState<{
     actualizados: number;
+    conTecnico: number;
     noEncontrados: number;
     fallidos: number;
     errores: string[];
   } | null>(null);
   const marginsFileInputRef = useRef<HTMLInputElement | null>(null);
   // Guarda las filas parseadas del Excel entre la vista previa y el apply
-  const marginsRowsRef = useRef<Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null }> | null>(null);
+  // vt/mt = Valor Para Técnico + Margen P/Técnico (solo algunos productos los traen)
+  const marginsRowsRef = useRef<Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null; vt: number | null; mt: number | null }> | null>(null);
 
   // ─── DELETE ALL (borrar TODOS los productos) ───
   // Botón rojo solo para supremo_admin. Borra toda la tabla de productos.
@@ -420,8 +430,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
   // ─── IMPORTAR MÁRGENES: procesar el Excel EN EL NAVEGADOR ───
   // Lee la hoja "base" de la planilla LISTA VIZA HOME (headers en fila 2),
-  // extrae COD VIZA + Contado + bases 1A6/7A13/14A30 y envía un JSON
-  // compacto a /api/products/import-margins/preview.
+  // extrae COD VIZA + Contado + bases 1A6/7A13/14A30 + Valor Para Técnico (CV)
+  // + Margen P/Técnico (CW) y envía un JSON compacto a
+  // /api/products/import-margins/preview.
   const handleMarginsFile = async (file: File) => {
     setMarginsImportOpen(true);
     setMarginsImportLoading(true);
@@ -458,6 +469,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       if (headerIdx < 0 || colMap["CONTADO"] === undefined) {
         throw new Error("No se encontró la hoja 'base' con columnas COD VIZA y Contado");
       }
+      // Columnas técnicas (opcionales): 'Valor Para Tecnico' (CV) y 'Margen P/Tecnico' (CW).
+      // Solo algunos productos las tienen; si no existen en la planilla se ignoran.
+      const colVT =
+        colMap["VALOR PARA TECNICO"] ?? colMap["VALOR TECNICO"] ?? -1;
+      const colMT =
+        colMap["MARGEN P/TECNICO"] ?? colMap["MARGEN P/ TECNICO"] ?? colMap["MARGEN TECNICO"] ?? -1;
 
       const num = (v: any): number | null => {
         if (v === null || v === undefined || v === "") return null;
@@ -465,17 +482,23 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         return Number.isFinite(n) ? n : null;
       };
 
-      const rows: Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null }> = [];
+      const rows: Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null; vt: number | null; mt: number | null }> = [];
       for (let r = headerIdx + 1; r < aoa.length; r++) {
         const row = aoa[r] || [];
         const codRaw = row[colMap["COD VIZA"]];
         if (codRaw === null || codRaw === undefined || String(codRaw).trim() === "") continue;
+        // Valor Para Tecnico: en la planilla, 0 o vacío = sin precio técnico
+        const vtRaw = colVT >= 0 ? num(row[colVT]) : null;
+        const mtRaw = colMT >= 0 ? num(row[colMT]) : null;
+        const hasTec = vtRaw !== null && vtRaw > 0;
         rows.push({
           cod: String(codRaw).trim().replace(/\.0$/, ""),
           m: num(row[colMap["CONTADO"]]),
           y: num(row[colMap["1 A 6"]]),
           z: num(row[colMap["7 A 13"]]),
           aa: num(row[colMap["14 A 30"]]),
+          vt: hasTec ? vtRaw : null,
+          mt: hasTec ? mtRaw : null,
         });
       }
       if (rows.length === 0) throw new Error("El Excel no contiene filas con COD VIZA");
@@ -815,7 +838,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       }}
                       className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
                       style={{ background: "linear-gradient(135deg, #0d3d5e 0%, #155789 100%)" }}
-                      title="Importar márgenes desde la planilla LISTA VIZA HOME (hoja base)"
+                      title="Importar márgenes + valores técnicos desde la planilla LISTA VIZA HOME (hoja base)"
                     >
                       <Percent className="h-3.5 w-3.5" />
                       IMPORTAR MÁRGENES
@@ -1547,6 +1570,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           - Excel procesado en el navegador, envía solo JSON compacto
           - Preview con muestra antes de aplicar
           - Solo toca márgenes + precios; costos NUNCA se modifican
+          - También importa VALOR TÉCNICO + MARGEN TÉCNICO de los productos
+            que lo traen en la planilla (cols CV/CW); los demás intocados
           ════════════════════════════════════════════════════════════════ */}
       {marginsImportOpen && (
         <div
@@ -1598,7 +1623,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <p className="text-base font-bold text-emerald-800 mb-2">
                       ✓ Márgenes aplicadas
                     </p>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Productos actualizados</p>
                         <p className="text-2xl font-black text-emerald-700">{marginsImportResult.actualizados}</p>
@@ -1606,6 +1631,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <div className="bg-white rounded-lg p-3 border border-blue-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Códigos sin producto</p>
                         <p className="text-2xl font-black text-blue-700">{marginsImportResult.noEncontrados}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-violet-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Con valor técnico</p>
+                        <p className="text-2xl font-black text-violet-700">{marginsImportResult.conTecnico}</p>
                       </div>
                     </div>
                   </div>
@@ -1623,6 +1652,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   )}
                   <div className="text-xs text-stone-500 italic">
                     La tabla se recargó con las márgenes y precios nuevos. Los costos no fueron modificados.
+                    {marginsImportResult.conTecnico > 0 && (
+                      <span className="block mt-1">
+                        Valor técnico y margen técnica importados para {marginsImportResult.conTecnico} productos.
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -1630,7 +1664,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               {!marginsImportLoading && !marginsImportResult && marginsImportPreview && (
                 <div className="space-y-4">
                   {/* Resumen */}
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
                       <p className="text-3xl font-black text-emerald-700">{marginsImportPreview.coinciden}</p>
@@ -1646,6 +1680,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <p className="text-3xl font-black text-amber-600">{marginsImportPreview.sinMargen}</p>
                       <p className="text-[10px] text-stone-500 mt-1">Sin margen Contado válida en el Excel</p>
                     </div>
+                    <div className="rounded-lg p-3 border border-violet-200 bg-violet-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Con valor técnico</p>
+                      <p className="text-3xl font-black text-violet-700">{marginsImportPreview.conTecnico}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos con VALOR/MARGEN TÉCNICO en el Excel</p>
+                    </div>
                   </div>
 
                   <div className="text-xs text-stone-600 bg-blue-50 rounded-lg p-3 border border-blue-200">
@@ -1653,6 +1692,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     Se actualizan <strong>solo márgenes (% CONTADO + bases + % C1..C30)</strong> y se recalculan
                     los <strong>precios (contado + 30 cuotas)</strong> con el costo actual de cada producto.
                     <strong> Los costos no se modifican.</strong>
+                    <span className="block mt-1">
+                      Además, a los <strong>{marginsImportPreview.conTecnico}</strong> productos que tienen
+                      "Valor Para Tecnico" en la planilla se les importa el <strong>VALOR TÉCNICO</strong> y el
+                      <strong> MARGEN TÉCNICO</strong>. A los demás no se les toca nada técnico.
+                    </span>
                     {marginsImportPreview.sinCosto > 0 && (
                       <span className="block mt-1 text-amber-700">
                         ⚠ {marginsImportPreview.sinCosto} productos sin costo guardado: se actualizarán solo sus márgenes (precios intocados).
@@ -1696,6 +1740,46 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                 <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">{(c.pct14A30 * 100).toFixed(2)}%</td>
                                 <td className="px-2 py-1.5 text-right tabular-nums text-stone-800">
                                   {c.precioContadoNuevo != null ? formatPYG(c.precioContadoNuevo) : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Muestra de productos con VALOR TÉCNICO (solo los que lo traen en el Excel) */}
+                  {marginsImportPreview.cambiosTecnico.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-stone-800 mb-2">
+                        <span className="inline-block h-2 w-2 rounded-full bg-violet-500 mr-1.5"></span>
+                        Productos con valor técnico (primeros {marginsImportPreview.cambiosTecnico.length} de {marginsImportPreview.conTecnico})
+                      </p>
+                      <div className="border border-violet-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead style={{ background: "#faf5ff" }}>
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">COD</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Valor técn. actual</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Valor técn. nuevo</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">% técn. nuevo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {marginsImportPreview.cambiosTecnico.map((c, i) => (
+                              <tr key={i} className="border-t border-stone-100">
+                                <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{c.sku}</td>
+                                <td className="px-2 py-1.5 text-stone-700 max-w-[220px] truncate" title={c.name}>{c.name || "—"}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-stone-500">
+                                  {c.valorTecnicoActual != null ? formatPYG(c.valorTecnicoActual) : "—"}
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums font-bold text-violet-700">
+                                  {formatPYG(c.valorTecnicoNuevo)}
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-violet-600">
+                                  {c.margenTecnicoNuevo != null ? `${(c.margenTecnicoNuevo * 100).toFixed(2)}%` : "—"}
                                 </td>
                               </tr>
                             ))}

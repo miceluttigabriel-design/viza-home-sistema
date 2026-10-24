@@ -1,6 +1,7 @@
 // POST /api/products/import-margins/preview
-// Recibe filas {cod, m, y, z, aa} ya parseadas en el navegador (SheetJS)
+// Recibe filas {cod, m, y, z, aa, vt, mt} ya parseadas en el navegador (SheetJS)
 // y devuelve la vista previa de qué productos van a ser actualizados.
+// vt/mt = Valor Para Técnico + Margen P/Técnico (solo algunos productos los traen).
 import { NextRequest, NextResponse } from "next/server";
 import { parseBody, requireAdmin, fetchMatchedProducts, buildMarginUpdate } from "../shared";
 
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
 
     let coinciden = 0;
     let sinCosto = 0;
+    let conTecnico = 0;
     const cambios: Array<{
       sku: string;
       name: string;
@@ -37,6 +39,13 @@ export async function POST(req: NextRequest) {
       pct7A13: number;
       pct14A30: number;
       precioContadoNuevo: number | null;
+    }> = [];
+    const cambiosTecnico: Array<{
+      sku: string;
+      name: string;
+      valorTecnicoActual: number | null;
+      valorTecnicoNuevo: number;
+      margenTecnicoNuevo: number | null;
     }> = [];
     const noEncontrados: string[] = [];
 
@@ -61,6 +70,19 @@ export async function POST(req: NextRequest) {
           precioContadoNuevo: update.priceContado ?? null,
         });
       }
+      // Datos técnicos: solo los productos que traen Valor Para Técnico en el Excel
+      if (typeof update.valorTecnico === "number") {
+        conTecnico++;
+        if (cambiosTecnico.length < 10) {
+          cambiosTecnico.push({
+            sku: product.sku,
+            name: product.name,
+            valorTecnicoActual: product.valorTecnico ?? null,
+            valorTecnicoNuevo: update.valorTecnico,
+            margenTecnicoNuevo: typeof update.margenTecnico === "number" ? update.margenTecnico : null,
+          });
+        }
+      }
     }
 
     return NextResponse.json({
@@ -71,7 +93,9 @@ export async function POST(req: NextRequest) {
       noEncontradosMuestra: noEncontrados.slice(0, 20),
       sinMargen,
       sinCosto,
+      conTecnico,
       cambios,
+      cambiosTecnico,
     });
   } catch (error) {
     console.error("Error preview import-margins:", error);

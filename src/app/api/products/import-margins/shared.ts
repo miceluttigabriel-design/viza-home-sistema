@@ -11,6 +11,8 @@ export interface MarginRow {
   y: number | null; // base 1 A 6
   z: number | null; // base 7 A 13
   aa: number | null; // base 14 A 30
+  vt: number | null; // Valor Para Técnico (col CV, precio en Gs) - solo algunos productos
+  mt: number | null; // Margen P/Técnico (col CW, fracción 0.05 = 5%) - solo algunos productos
 }
 
 // Redondea a 6 decimales para limpiar ruido de punto flotante del Excel (0.3999999999999999 → 0.4)
@@ -45,6 +47,11 @@ export function parseBody(raw: any): { rows: MarginRow[]; sinMargen: number } | 
       sinMargen++;
       continue;
     }
+    // Datos técnicos (opcionales): en la planilla, CV=0 o vacío significa
+    // "sin precio técnico". Solo se importan cuando hay valor > 0.
+    const vtRaw = num(r.vt);
+    const mtRaw = num(r.mt);
+    const hasTec = vtRaw !== null && vtRaw > 0;
     // Duplicados en el Excel: gana la última aparición
     const idx = rows.findIndex((x) => x.cod === cod);
     const clean: MarginRow = {
@@ -53,6 +60,8 @@ export function parseBody(raw: any): { rows: MarginRow[]; sinMargen: number } | 
       y: num(r.y) !== null ? round6(num(r.y) as number) : 0,
       z: num(r.z) !== null ? round6(num(r.z) as number) : 0,
       aa: num(r.aa) !== null ? round6(num(r.aa) as number) : 0,
+      vt: hasTec ? round6(vtRaw) : null,
+      mt: hasTec && mtRaw !== null ? round6(mtRaw) : null,
     };
     if (idx >= 0) rows[idx] = clean;
     else rows.push(clean);
@@ -91,6 +100,8 @@ export async function fetchMatchedProducts(rows: MarginRow[]) {
       pct7A13: true,
       pct14A30: true,
       priceContado: true,
+      valorTecnico: true,
+      margenTecnico: true,
     },
   });
   // Mapa normalizado: código → producto
@@ -108,6 +119,10 @@ export async function fetchMatchedProducts(rows: MarginRow[]) {
 // REGLA DE SEGURIDAD: los costos NO se tocan. Los precios se recalculan
 // con el costProd YA EXISTENTE en la BD. Si no tiene costo, solo se
 // actualizan los márgenes (precios intocados).
+// DATOS TÉCNICOS: valorTecnico/margenTecnico SOLO se incluyen cuando la fila
+// del Excel los trae (col CV > 0). Los productos sin datos técnicos quedan
+// intocados en esos campos. El VALOR TÉCNICO se guarda tal cual la planilla
+// (la planilla ya lo calcula: Costo Gs * (1 + Margen P/Técnico)).
 export function buildMarginUpdate(
   product: { costProd: number | null },
   row: MarginRow
@@ -142,6 +157,12 @@ export function buildMarginUpdate(
     }
     // Campo legado de compatibilidad del catálogo
     data.price = data.priceContado;
+  }
+
+  // Datos técnicos: solo si la fila del Excel los trae (CV > 0)
+  if (row.vt !== null && row.vt > 0) {
+    data.valorTecnico = row.vt;
+    if (row.mt !== null) data.margenTecnico = row.mt;
   }
 
   return data;
