@@ -604,7 +604,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-stone-100">
+    <div className="h-screen flex flex-col bg-stone-100 overflow-hidden">
       <header className="sticky top-0 z-30 border-b bg-white" style={{ borderColor: "#e7e5e4" }}>
         <div className="flex items-center gap-3 py-3 pr-4 sm:pr-6 lg:pr-8">
           {/* Cajita HORIZONTAL de botones, pegada al borde izquierdo, al lado del buscador */}
@@ -702,10 +702,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         onClose={() => setCambiarContrasenaOpen(false)}
       />
 
-      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
-        <div className="space-y-4">
+      <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
+        <div className="space-y-4 flex-1 min-h-0 flex flex-col">
           {/* (Buscador movido al header) */}
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 shrink-0">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <h2 className="text-lg font-bold text-stone-900">Gestión de productos</h2>
@@ -1073,8 +1073,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           </div>
 
           {/* Tabla estilo Excel - edición directa */}
-          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm" style={{ maxHeight: "calc(100vh - 130px)" }}>
-            <div className="overflow-auto">
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm flex-1 min-h-0">
+            <div className="overflow-auto h-full">
               <table className="admin-table border-collapse text-xs">
                 <thead className="border-b border-stone-200 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
                   <tr>
@@ -1220,7 +1220,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
           {/* Paginación */}
           {totalPages > 1 && !loadingProducts && (
-            <div className="mt-6 flex items-center justify-center gap-2 flex-wrap">
+            <div className="mt-6 shrink-0 flex items-center justify-center gap-2 flex-wrap">
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
