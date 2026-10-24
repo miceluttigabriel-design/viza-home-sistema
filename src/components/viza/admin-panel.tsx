@@ -1083,7 +1083,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       ACCIONES
                     </th>
                     {/* SKU */}
-                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#7a5800" }}>
+                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
                       COD
                     </th>
                     {COLUMNS.map((col) => {
@@ -2187,7 +2187,7 @@ const ExcelRow = memo(function ExcelRow({
       style={{ borderBottom: "1px solid #f1f5f9" }}
     >
       {/* Acciones - sticky */}
-      <td className="sticky left-0 z-10 px-2 py-0.5 text-center border-r border-stone-100 bg-white">
+      <td className="sticky left-0 z-10 px-2 py-0.5 text-center border-r border-stone-100 bg-[#D9B86B]">
         <div className="flex flex-row items-center justify-center gap-0.5 relative">
           <button
             id={`save-btn-${product.id}`}
@@ -2222,7 +2222,7 @@ const ExcelRow = memo(function ExcelRow({
         </div>
       </td>
       {/* SKU - sticky - con badge de última edición encima */}
-      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-[#b8860b] font-semibold border-r border-stone-100 bg-white align-top">
+      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-[#1c1917] font-semibold border-r border-stone-100 bg-[#D9B86B] align-top">
         {/* Badge de última edición manual del admin */}
         {product.ultimaEdicionAt && (() => {
           const d = new Date(product.ultimaEdicionAt);

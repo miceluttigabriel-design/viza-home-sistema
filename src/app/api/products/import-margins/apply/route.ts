@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
   parseBody,
-  requireAdmin,
+  requireSupremo,
   fetchMatchedProducts,
   buildMarginUpdate,
   computeDbMarginStats,
@@ -30,7 +30,7 @@ const BATCH_SIZE = 50;
 
 export async function POST(req: NextRequest) {
   try {
-    const denied = await requireAdmin();
+    const denied = await requireSupremo();
     if (denied) return denied;
 
     const raw = await req.json();

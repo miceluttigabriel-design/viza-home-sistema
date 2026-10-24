@@ -81,6 +81,21 @@ export async function requireAdmin(): Promise<NextResponse | null> {
   return null;
 }
 
+// Solo el SUPREMO_ADMIN puede ejecutar las operaciones críticas:
+// importar márgenes, importar la planilla de stock y borrar todos los productos.
+// Los admins comunes NO pueden, ni desde la UI ni llamando la API directamente.
+export async function requireSupremo(): Promise<NextResponse | null> {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  const role = (session.user as any)?.role;
+  if (role !== "supremo_admin") {
+    return NextResponse.json({ error: "Solo supremo_admin puede usar esta función" }, { status: 403 });
+  }
+  return null;
+}
+
 // Busca en la BD los productos que coinciden con los códigos del Excel
 // (match por sku o por codViza, normalizados)
 export async function fetchMatchedProducts(rows: MarginRow[]) {
