@@ -227,13 +227,11 @@ const COLUMNS: ColDef[] = [
     type: "calc" as const,
     group: "PRECIOS",
   })),
-  // VALOR TECNICO, MARGEN TECNICO, COLUNA1, COLUNA2 movidas al final
+  // VALOR TECNICO y MARGEN TECNICO al final
   { key: "valorTecnico", label: "VALOR TECNICO", type: "num", group: "DATOS FINALES" },
   { key: "margenTecnico", label: "MARGEN TECNICO", type: "num", group: "DATOS FINALES" },
-  { key: "coluna1", label: "COLUNA1", type: "text", group: "DATOS FINALES" },
-  { key: "coluna2", label: "COLUNA2", type: "text", group: "DATOS FINALES" },
-  // COSTO SISTEMA movida al final absoluto (ultima columna a la derecha)
-  { key: "costSistema", label: "COSTO SISTEMA", type: "num", group: "DATOS FINALES" },
+  // COLUNA1, COLUNA2 y COSTO SISTEMA: eliminadas del Panel ADM a pedido del usuario.
+  // Siguen existiendo en la base de datos y en import/export Excel; solo dejan de mostrarse.
 ];
 
 export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPanelProps) {
