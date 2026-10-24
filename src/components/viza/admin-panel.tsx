@@ -678,7 +678,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="BUSCAR PRODUCTO POR SKU, NOMBRE, MARCA, MODELO O FABRICANTE..."
               className="w-full h-14 pl-12 pr-12 rounded-xl border-2 border-[#D9B86B] text-base font-medium focus:border-rose-500 focus:ring-4 focus:ring-rose-100 outline-none bg-white shadow-sm"
               autoFocus
             />
