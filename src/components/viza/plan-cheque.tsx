@@ -124,6 +124,48 @@ export function PlanCheque() {
 
   return (
     <div className="space-y-5">
+      {/* CLIENTE (OPCIONAL) — mismo cuadro que el Plan Safra */}
+      <Section title="CLIENTE (OPCIONAL)" icon={<User className="h-4 w-4" />}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Field
+            label="Nombre completo"
+            value={clienteNombre}
+            onChange={(v) => setClienteField("Nombre", v)}
+            placeholder="Juan Pérez"
+          />
+          <Field
+            label="Teléfono / WhatsApp"
+            value={clienteTelefono}
+            onChange={(v) => setClienteField("Telefono", v)}
+            placeholder="+598 99 123 456"
+          />
+          <div>
+            <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+              Fecha de emisión
+            </label>
+            <input
+              type="text"
+              value={fechaEmision}
+              readOnly
+              className="w-full h-10 px-3 rounded-lg border border-stone-200 bg-stone-50 text-sm"
+            />
+          </div>
+        </div>
+        <div className="mt-3">
+          <Field
+            label="Observaciones comerciales"
+            value={clienteObservaciones}
+            onChange={(v) => setClienteField("Observaciones", v)}
+            placeholder="Condiciones del plan, plazo de entrega, etc."
+            textarea
+          />
+        </div>
+        <p className="text-[11px] text-stone-400 mt-2">
+          Todos los campos del cliente son opcionales. El plan se puede armar sin
+          estos datos.
+        </p>
+      </Section>
+
       {/* PRODUCTOS AGREGADOS (con buscador integrado) */}
       <Section title={`PRODUCTOS AGREGADOS (${productos.length})`} icon={<Package className="h-4 w-4" />}>
         {/* Buscador integrado dentro del cuadro PRODUCTOS AGREGADOS */}
@@ -289,5 +331,44 @@ function Section({ title, icon, action, children }: { title: string; icon: React
       </div>
       {children}
     </section>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  textarea,
+}: {
+  label: string;
+  value: string;
+  onChange?: (v: string) => void;
+  placeholder?: string;
+  textarea?: boolean;
+}) {
+  return (
+    <div>
+      <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+        {label}
+      </label>
+      {textarea ? (
+        <textarea
+          value={value}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          placeholder={placeholder}
+          rows={2}
+          className="w-full px-3 py-2 rounded-lg border border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none resize-none"
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          placeholder={placeholder}
+          className="w-full h-10 px-3 rounded-lg border border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+        />
+      )}
+    </div>
   );
 }
