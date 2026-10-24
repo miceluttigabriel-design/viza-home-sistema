@@ -133,10 +133,12 @@ export async function POST(req: NextRequest) {
     // ===== ENCABEZADO (nuevo diseño con logo + wave + 3 cajas) =====
     const now = new Date();
     const headerBottom = drawHeader(doc, pageW, margin, contentW, generateQuoteNumber(), "SAFRA", now, formatDateTimeEs, formatDateEs);
-    let y = headerBottom + 26;
 
     // ===== DATOS DEL CLIENTE (si hay) =====
-    y = 200;
+    // drawHeader devuelve el borde inferior de las 3 cajas (N°/FECHA/VÁLIDO):
+    // todo el contenido arranca DEBAJO de esa línea para no pisar el encabezado
+    // (mismo criterio que CHEQUE y MAYORISTA)
+    let y = headerBottom + 26;
     if (body.cliente && body.cliente.nombre) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
@@ -383,7 +385,7 @@ export async function POST(req: NextRequest) {
     const sumBoxW = 320;
     const sumBoxX = pageW - margin - sumBoxW;
 
-    doc.setFillColor(...DARK);
+    doc.setFillColor(...BLUE);
     doc.roundedRect(sumBoxX, y, sumBoxW, 80, 6, 6, "F");
 
     // Banda dorada superior
