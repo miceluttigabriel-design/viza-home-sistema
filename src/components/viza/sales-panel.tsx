@@ -32,6 +32,7 @@ import {
 import { formatPYG } from "@/lib/format";
 import { PlanSafra } from "./plan-safra";
 import { PlanCheque } from "./plan-cheque";
+import { PlanMayorista } from "./plan-mayorista";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 
 // === VIZA home brand palette ===
@@ -160,7 +161,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [calcDone, setCalcDone] = useState(false); // si ya se calculó al menos una vez
   const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [viewMode, setViewMode] = useState<"cotizador" | "safra" | "cheque">("cotizador");
+  const [viewMode, setViewMode] = useState<"cotizador" | "safra" | "cheque" | "mayorista">("cotizador");
   // Modal: cambiar mi propia contraseña (visible para todos los roles)
   const [cambiarContrasenaOpen, setCambiarContrasenaOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -794,6 +795,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             >
               CHEQUE
             </button>
+            <button
+              onClick={() => setViewMode("mayorista")}
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
+              style={
+                viewMode === "mayorista"
+                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
+                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
+              }
+            >
+              MAYORISTA
+            </button>
           </div>
 
           {/* LADO DERECHO: Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión - TODO JUNTO EN UN BLOQUE */}
@@ -848,6 +860,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
         {viewMode === "safra" && <PlanSafra />}
         {viewMode === "cheque" && <PlanCheque />}
+        {viewMode === "mayorista" && <PlanMayorista />}
 
         {viewMode === "cotizador" && (
         <>
