@@ -269,7 +269,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     errores: string[];
   } | null>(null);
   const [importApplying, setImportApplying] = useState(false);
-  const [importResult, setImportResult] = useState<{ creados: number; actualizados: number; errores: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ creados: number; actualizados: number; margenesAutomaticas: number; errores: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ─── IMPORTAR MÁRGENES (planilla LISTA VIZA HOME, hoja "base") ───
@@ -303,11 +303,24 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       valorTecnicoNuevo: number;
       margenTecnicoNuevo: number | null;
     }>;
+    autoSinMargen: number;
+    autoSinCosto: number;
+    autoMuestra: Array<{
+      sku: string;
+      name: string;
+      tipo: string | null;
+      margenAsignada: number;
+      fuente: string;
+    }>;
+    autoPromedioGlobal: number | null;
+    autoTipos: number;
   } | null>(null);
   const [marginsImportApplying, setMarginsImportApplying] = useState(false);
   const [marginsImportResult, setMarginsImportResult] = useState<{
     actualizados: number;
     conTecnico: number;
+    autoSinMargen: number;
+    autoActualizados: number;
     noEncontrados: number;
     fallidos: number;
     errores: string[];
@@ -1309,7 +1322,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <p className="text-base font-bold text-emerald-800 mb-2">
                       ✓ Importación completada
                     </p>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Productos nuevos creados</p>
                         <p className="text-2xl font-black text-emerald-700">{importResult.creados}</p>
@@ -1317,6 +1330,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Stocks actualizados</p>
                         <p className="text-2xl font-black text-blue-700">{importResult.actualizados}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-sky-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Con margen automática</p>
+                        <p className="text-2xl font-black text-sky-700">{importResult.margenesAutomaticas ?? 0}</p>
                       </div>
                     </div>
                   </div>
@@ -1621,7 +1638,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <p className="text-base font-bold text-emerald-800 mb-2">
                       ✓ Márgenes aplicadas
                     </p>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Productos actualizados</p>
                         <p className="text-2xl font-black text-emerald-700">{marginsImportResult.actualizados}</p>
@@ -1633,6 +1650,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <div className="bg-white rounded-lg p-3 border border-violet-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Con valor técnico</p>
                         <p className="text-2xl font-black text-violet-700">{marginsImportResult.conTecnico}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-sky-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Margen automática</p>
+                        <p className="text-2xl font-black text-sky-700">{marginsImportResult.autoActualizados}</p>
                       </div>
                     </div>
                   </div>
@@ -1655,6 +1676,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         Valor técnico y margen técnica importados para {marginsImportResult.conTecnico} productos.
                       </span>
                     )}
+                    {marginsImportResult.autoActualizados > 0 && (
+                      <span className="block mt-1">
+                        Margen automática (promedio por tipo) asignada a {marginsImportResult.autoActualizados} productos que no estaban en la planilla.
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -1662,7 +1688,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               {!marginsImportLoading && !marginsImportResult && marginsImportPreview && (
                 <div className="space-y-4">
                   {/* Resumen */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
                       <p className="text-3xl font-black text-emerald-700">{marginsImportPreview.coinciden}</p>
@@ -1683,6 +1709,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <p className="text-3xl font-black text-violet-700">{marginsImportPreview.conTecnico}</p>
                       <p className="text-[10px] text-stone-500 mt-1">Productos con VALOR/MARGEN TÉCNICO en el Excel</p>
                     </div>
+                    <div className="rounded-lg p-3 border border-sky-200 bg-sky-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Margen automática</p>
+                      <p className="text-3xl font-black text-sky-700">{marginsImportPreview.autoSinMargen}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos del panel con margen 0 que no están en el Excel</p>
+                    </div>
                   </div>
 
                   <div className="text-xs text-stone-600 bg-blue-50 rounded-lg p-3 border border-blue-200">
@@ -1694,6 +1725,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       Además, a los <strong>{marginsImportPreview.conTecnico}</strong> productos que tienen
                       "Valor Para Tecnico" en la planilla se les importa el <strong>VALOR TÉCNICO</strong> y el
                       <strong> MARGEN TÉCNICO</strong>. A los demás no se les toca nada técnico.
+                    </span>
+                    <span className="block mt-1">
+                      Y <strong>{marginsImportPreview.autoSinMargen}</strong> productos del panel que NO están
+                      en la planilla (margen 0) recibirán <strong>margen automática</strong>: promedio de su
+                      tipo{marginsImportPreview.autoTipos > 0 ? ` (${marginsImportPreview.autoTipos} tipos con promedio)` : ""}
+                      {marginsImportPreview.autoPromedioGlobal != null && (
+                        <> — promedio general {(marginsImportPreview.autoPromedioGlobal * 100).toFixed(2)}%</>
+                      )}.
                     </span>
                     {marginsImportPreview.sinCosto > 0 && (
                       <span className="block mt-1 text-amber-700">
@@ -1779,6 +1818,42 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                 <td className="px-2 py-1.5 text-right tabular-nums text-violet-600">
                                   {c.margenTecnicoNuevo != null ? `${(c.margenTecnicoNuevo * 100).toFixed(2)}%` : "—"}
                                 </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Muestra de productos con MARGEN AUTOMÁTICA (no están en el Excel, margen 0) */}
+                  {marginsImportPreview.autoMuestra.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-stone-800 mb-2">
+                        <span className="inline-block h-2 w-2 rounded-full bg-sky-500 mr-1.5"></span>
+                        Margen automática por tipo (primeros {marginsImportPreview.autoMuestra.length} de {marginsImportPreview.autoSinMargen})
+                      </p>
+                      <div className="border border-sky-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead style={{ background: "#f0f9ff" }}>
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">COD</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Tipo</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">% CONTADO asignada</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Fuente del promedio</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {marginsImportPreview.autoMuestra.map((c, i) => (
+                              <tr key={i} className="border-t border-stone-100">
+                                <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{c.sku}</td>
+                                <td className="px-2 py-1.5 text-stone-700 max-w-[220px] truncate" title={c.name}>{c.name || "—"}</td>
+                                <td className="px-2 py-1.5 text-stone-600">{c.tipo || "—"}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums font-bold text-sky-700">
+                                  {(c.margenAsignada * 100).toFixed(2)}%
+                                </td>
+                                <td className="px-2 py-1.5 text-stone-500">{c.fuente}</td>
                               </tr>
                             ))}
                           </tbody>

@@ -167,3 +167,134 @@ export function buildMarginUpdate(
 
   return data;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// MÁRGENES AUTOMÁTICAS (promedio por tipo de producto)
+// ════════════════════════════════════════════════════════════════════
+// Los productos que NO están en el planilla (o los nuevos importados) quedan
+// con margen 0. Para ellos se asigna el PROMEDIO de márgenes de los productos
+// del mismo TIPO (con margen > 0 en la BD); si el tipo no tiene promedio,
+// se usa el promedio por SUB-GRUPO; si tampoco hay, el promedio GENERAL.
+
+export interface MargenPromedio {
+  m: number; // promedio % Contado
+  y: number; // promedio base 1 A 6
+  z: number; // promedio base 7 A 13
+  aa: number; // promedio base 14 A 30
+  count: number; // cuántos productos se promediaron
+}
+
+export function normalizeKey(s: string | null | undefined): string {
+  return String(s ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+function avgOf(values: Array<{ m: number; y: number; z: number; aa: number }>): MargenPromedio | null {
+  if (values.length === 0) return null;
+  const sum = values.reduce(
+    (acc, v) => ({ m: acc.m + v.m, y: acc.y + v.y, z: acc.z + v.z, aa: acc.aa + v.aa }),
+    { m: 0, y: 0, z: 0, aa: 0 }
+  );
+  const n = values.length;
+  return {
+    m: round6(sum.m / n),
+    y: round6(sum.y / n),
+    z: round6(sum.z / n),
+    aa: round6(sum.aa / n),
+    count: n,
+  };
+}
+
+export interface MarginStats {
+  byTipo: Map<string, MargenPromedio>;
+  bySubGrupo: Map<string, MargenPromedio>;
+  global: MargenPromedio | null;
+}
+
+// Promedios de márgenes calculados desde la BD (solo productos con margen > 0)
+export async function computeDbMarginStats(): Promise<MarginStats> {
+  const rows = await db.product.findMany({
+    where: { marginContado: { gt: 0 } },
+    select: {
+      tipo: true,
+      subGrupo: true,
+      marginContado: true,
+      pct1A6: true,
+      pct7A13: true,
+      pct14A30: true,
+    },
+  });
+
+  const groupsTipo = new Map<string, Array<{ m: number; y: number; z: number; aa: number }>>();
+  const groupsSub = new Map<string, Array<{ m: number; y: number; z: number; aa: number }>>();
+  const all: Array<{ m: number; y: number; z: number; aa: number }> = [];
+
+  for (const r of rows) {
+    const v = {
+      m: r.marginContado ?? 0,
+      y: r.pct1A6 ?? 0,
+      z: r.pct7A13 ?? 0,
+      aa: r.pct14A30 ?? 0,
+    };
+    all.push(v);
+    const t = normalizeKey(r.tipo);
+    if (t) {
+      const arr = groupsTipo.get(t) || [];
+      arr.push(v);
+      groupsTipo.set(t, arr);
+    }
+    const s = normalizeKey(r.subGrupo);
+    if (s) {
+      const arr = groupsSub.get(s) || [];
+      arr.push(v);
+      groupsSub.set(s, arr);
+    }
+  }
+
+  const byTipo = new Map<string, MargenPromedio>();
+  for (const [k, arr] of groupsTipo) {
+    const avg = avgOf(arr);
+    if (avg) byTipo.set(k, avg);
+  }
+  const bySubGrupo = new Map<string, MargenPromedio>();
+  for (const [k, arr] of groupsSub) {
+    const avg = avgOf(arr);
+    if (avg) bySubGrupo.set(k, avg);
+  }
+
+  return { byTipo, bySubGrupo, global: avgOf(all) };
+}
+
+// Elige el promedio para un producto: TIPO → SUB-GRUPO → GENERAL
+export function pickPromedio(
+  stats: MarginStats,
+  keys: { tipo?: string | null; subGrupo?: string | null }
+): { avg: MargenPromedio; fuente: string } | null {
+  const t = normalizeKey(keys.tipo);
+  if (t && stats.byTipo.has(t)) {
+    return { avg: stats.byTipo.get(t)!, fuente: `tipo ${t}` };
+  }
+  const s = normalizeKey(keys.subGrupo);
+  if (s && stats.bySubGrupo.has(s)) {
+    return { avg: stats.bySubGrupo.get(s)!, fuente: `grupo ${s}` };
+  }
+  if (stats.global) {
+    return { avg: stats.global, fuente: "promedio general" };
+  }
+  return null;
+}
+
+// Update completo de márgenes automáticas para un producto
+// (mismas fórmulas acumulativas y de precios del importador; costos intactos;
+//  precios solo se recalculan si el producto tiene costo > 0)
+export function buildAutoMarginUpdate(
+  costProd: number | null,
+  avg: MargenPromedio
+): Record<string, number> {
+  return buildMarginUpdate(
+    { costProd },
+    { cod: "", m: avg.m, y: avg.y, z: avg.z, aa: avg.aa, vt: null, mt: null }
+  );
+}

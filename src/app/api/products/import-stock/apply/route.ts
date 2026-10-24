@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
+import { computeDbMarginStats, pickPromedio, type MarginStats } from "../../import-margins/shared";
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/products/import-stock/apply
@@ -103,6 +104,46 @@ function recalculateFull(p: any): void {
   p.cost = p.costProd ?? 0;
 }
 
+// Construye el producto nuevo con MARGEN AUTOMÁTICA:
+// los nuevos no vienen con márgenes en la planilla de stock, así que reciben
+// el promedio de su sub-grupo (o tipo, o promedio general) de los productos
+// que ya tienen margen en la BD. Si la BD aún no tiene márgenes, quedan en 0.
+function buildNuevoProduct(
+  n: { sku: string; name: string | null; referencia: string | null; subGrupo: string | null; stock: number; costProd: number | null },
+  stats: MarginStats | null
+): any {
+  const p: any = {
+    sku: n.sku,
+    name: n.name || `PRODUCTO ${n.sku}`,
+    referencia: n.referencia,
+    subGrupo: n.subGrupo,
+    stock: n.stock,
+    costProd: n.costProd,
+    showInCatalog: false,
+    brand: null,
+    category: n.subGrupo,
+    subcategory: n.subGrupo,
+    description: n.name,
+    // Márgenes default en 0 — se reemplazan por el promedio si hay datos
+    marginContado: 0,
+    pct1A6: 0,
+    pct7A13: 0,
+    pct14A30: 0,
+  };
+  if (stats) {
+    const pick = pickPromedio(stats, { subGrupo: n.subGrupo, tipo: null });
+    if (pick) {
+      p.marginContado = pick.avg.m;
+      p.pct1A6 = pick.avg.y;
+      p.pct7A13 = pick.avg.z;
+      p.pct14A30 = pick.avg.aa;
+    }
+  }
+  // Disparar la cadena de cálculo completa (costGs → costProd → márgenes → precios)
+  recalculateFull(p);
+  return p;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1. Auth: solo supremo_admin
@@ -173,34 +214,20 @@ export async function POST(req: NextRequest) {
     // 5. BULK CREATE: una sola operación para todos los nuevos
     // ─────────────────────────────────────────────────────
     let creados = 0;
+    let margenesAutomaticas = 0;
     if (trulyNew.length > 0) {
+      // Promedios de márgenes de la BD (productos con margen > 0) para
+      // asignar margen automática a los nuevos según su sub-grupo/tipo.
+      const stats = await computeDbMarginStats();
       // Construir arreglo de datos con tipo explícito para evitar error de
       // inferencia de tipos de Prisma con createMany.
       // IMPORTANTE: el "Codigo Fabrica" del Excel se guarda en el campo
       // `referencia` (columna REFERENCIA del grupo DATOS), NO en `codViza`.
       // También disparamos el cálculo automático de márgenes y precios
-      // a partir del costProd importado, con márgenes default en 0.
-      const nuevosData: any[] = trulyNew.map(n => {
-        const p: any = {
-          sku: n.sku,
-          name: n.name || `PRODUCTO ${n.sku}`,
-          referencia: n.referencia,
-          subGrupo: n.subGrupo,
-          stock: n.stock,
-          costProd: n.costProd,
-          showInCatalog: false,
-          brand: null,
-          category: n.subGrupo,
-          subcategory: n.subGrupo,
-          description: n.name,
-          // Márgenes default en 0 — el admin los edita después
-          marginContado: 0,
-          pct1A6: 0,
-          pct7A13: 0,
-          pct14A30: 0,
-        };
-        // Disparar la cadena de cálculo completa (costGs → costProd → márgenes → precios)
-        recalculateFull(p);
+      // a partir del costProd importado, con margen automática por tipo.
+      const nuevosData: any[] = trulyNew.map((n) => {
+        const p = buildNuevoProduct(n, stats);
+        if (p.marginContado > 0) margenesAutomaticas++;
         return p;
       });
       try {
@@ -217,24 +244,8 @@ export async function POST(req: NextRequest) {
         errores.push(`createMany falló: ${msg}. Intentando individual…`);
         for (const n of trulyNew) {
           try {
-            const p: any = {
-              sku: n.sku,
-              name: n.name || `PRODUCTO ${n.sku}`,
-              referencia: n.referencia,
-              subGrupo: n.subGrupo,
-              stock: n.stock,
-              costProd: n.costProd,
-              showInCatalog: false,
-              brand: null,
-              category: n.subGrupo,
-              subcategory: n.subGrupo,
-              description: n.name,
-              marginContado: 0,
-              pct1A6: 0,
-              pct7A13: 0,
-              pct14A30: 0,
-            };
-            recalculateFull(p);
+            const p = buildNuevoProduct(n, stats);
+            if (p.marginContado > 0) margenesAutomaticas++;
             await db.product.create({ data: p });
             creados++;
           } catch (e2: any) {
@@ -296,6 +307,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       creados,
       actualizados: actualizadosCount,
+      margenesAutomaticas,
       errores,
     });
   } catch (error) {

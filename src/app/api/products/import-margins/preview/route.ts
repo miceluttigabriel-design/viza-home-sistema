@@ -2,8 +2,19 @@
 // Recibe filas {cod, m, y, z, aa, vt, mt} ya parseadas en el navegador (SheetJS)
 // y devuelve la vista previa de qué productos van a ser actualizados.
 // vt/mt = Valor Para Técnico + Margen P/Técnico (solo algunos productos los traen).
+// ADEMÁS: detecta los productos del panel con margen 0 (que no están en la
+// planilla) y calcula qué margen automática les corresponde (promedio por tipo).
 import { NextRequest, NextResponse } from "next/server";
-import { parseBody, requireAdmin, fetchMatchedProducts, buildMarginUpdate } from "../shared";
+import { db } from "@/lib/db";
+import {
+  parseBody,
+  requireAdmin,
+  fetchMatchedProducts,
+  buildMarginUpdate,
+  computeDbMarginStats,
+  pickPromedio,
+  buildAutoMarginUpdate,
+} from "../shared";
 
 export const maxDuration = 60;
 
@@ -30,6 +41,7 @@ export async function POST(req: NextRequest) {
     let coinciden = 0;
     let sinCosto = 0;
     let conTecnico = 0;
+    const matchedIds = new Set<string>();
     const cambios: Array<{
       sku: string;
       name: string;
@@ -56,6 +68,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
       coinciden++;
+      matchedIds.add(product.id);
       const update = buildMarginUpdate(product, row);
       if (!(product.costProd ?? 0 > 0)) sinCosto++;
       if (cambios.length < 10) {
@@ -85,6 +98,51 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ─── MÁRGENES AUTOMÁTICAS ───
+    // Productos del panel con margen 0/null que NO vienen en la planilla:
+    // reciben el promedio de su tipo (o sub-grupo, o promedio general).
+    const zeroProducts = await db.product.findMany({
+      where: {
+        OR: [{ marginContado: null }, { marginContado: 0 }],
+        id: { notIn: Array.from(matchedIds) },
+      },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        tipo: true,
+        subGrupo: true,
+        costProd: true,
+      },
+    });
+
+    let autoSinMargen = 0;
+    let autoSinCosto = 0;
+    const stats = await computeDbMarginStats();
+    const autoMuestra: Array<{
+      sku: string;
+      name: string;
+      tipo: string | null;
+      margenAsignada: number;
+      fuente: string;
+    }> = [];
+
+    for (const p of zeroProducts) {
+      const pick = pickPromedio(stats, { tipo: p.tipo, subGrupo: p.subGrupo });
+      if (!pick) continue; // no hay datos para promediar (BD sin márgenes)
+      autoSinMargen++;
+      if (!(p.costProd ?? 0 > 0)) autoSinCosto++;
+      if (autoMuestra.length < 10) {
+        autoMuestra.push({
+          sku: p.sku,
+          name: p.name,
+          tipo: p.tipo,
+          margenAsignada: pick.avg.m,
+          fuente: pick.fuente,
+        });
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       totalCodigos: rows.length,
@@ -96,6 +154,11 @@ export async function POST(req: NextRequest) {
       conTecnico,
       cambios,
       cambiosTecnico,
+      autoSinMargen,
+      autoSinCosto,
+      autoMuestra,
+      autoPromedioGlobal: stats.global ? stats.global.m : null,
+      autoTipos: stats.byTipo.size,
     });
   } catch (error) {
     console.error("Error preview import-margins:", error);
