@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { drawHeader, drawFooter, formatPYG, formatDateEs, formatDateTimeEs, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
+import { drawHeader, drawFooter, formatPYG, formatDateEs, formatDateTimeEs, BLUE, GOLD, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 
 // === Tipos del payload del Presupuesto MAYORISTA ===
 
@@ -76,10 +76,12 @@ export async function POST(req: NextRequest) {
 
     // ===== ENCABEZADO (mismo diseño que SAFRA/CHEQUE) =====
     const now = new Date();
-    drawHeader(doc, pageW, margin, contentW, generateQuoteNumber(), "MAYORISTA", now, formatDateTimeEs, formatDateEs);
+    // drawHeader devuelve el borde inferior de las 3 cajas (N°/FECHA/VÁLIDO):
+    // todo el contenido arranca DEBAJO de esa línea para no pisar el encabezado
+    const headerBottom = drawHeader(doc, pageW, margin, contentW, generateQuoteNumber(), "MAYORISTA", now, formatDateTimeEs, formatDateEs);
 
     // ===== DATOS DEL CLIENTE (si hay) =====
-    let y = 200;
+    let y = headerBottom + 26;
     if (body.cliente && body.cliente.nombre) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
@@ -224,7 +226,7 @@ export async function POST(req: NextRequest) {
     const sumBoxH = 56;
     const sumBoxX = pageW - margin - sumBoxW;
 
-    doc.setFillColor(...DARK);
+    doc.setFillColor(...BLUE);
     doc.roundedRect(sumBoxX, y, sumBoxW, sumBoxH, 6, 6, "F");
 
     // Banda dorada superior
