@@ -184,9 +184,13 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   // Datos principales (pegados al SKU)
   { key: "referencia", label: "REFERENCIA", type: "text", group: "DATOS" },
-  // Columnas FABRICANTE, CATEGORIA, DIVISION, TIPO, MARCA, MODELO y PRODUCTO
+  // Columnas CATEGORIA, DIVISION, TIPO, MARCA, MODELO y PRODUCTO
   // ocultas de esta tabla a pedido del usuario (los datos siguen en la base).
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
+  // FABRICANTE restaurada a pedido del usuario: el campo ya existía en la base
+  // de datos y en import/export Excel; ahora también se muestra y es editable
+  // en esta tabla (filtro por columna y búsqueda global ya lo soportaban).
+  { key: "fabricante", label: "FABRICANTE", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   // STOCK movida ENTRE COD SHOW y Costo R$ (atras de Costo R$ = antes, en frente de COD SHOW = despues)
