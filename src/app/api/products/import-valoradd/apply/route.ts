@@ -1,6 +1,6 @@
 // POST /api/products/import-valoradd/apply
-// Aplica el % ADD y el VALOR ADD del Excel (planilla LISTA VIZA HOME, hoja
-// "base") a los productos que coinciden por COD (sku o codViza).
+// Aplica el % ADD, el VALOR ADD y la SAFRA del Excel (planilla LISTA VIZA
+// HOME, hoja "base") a los productos que coinciden por COD (sku o codViza).
 // REGLAS DE SEGURIDAD:
 //   - SOLO se tocan las columnas % ADD y VALOR ADD cuando la fila del Excel
 //     las trae, más lo que el propio sistema recalcula cuando el admin edita
@@ -8,14 +8,16 @@
 //     de costos (rsToGs, usToGs, rsNoUS, usNoGs, subCost, minusDisc, plusAdd,
 //     plusAdd2, minusDescV), Costo Prod., márgenes 1..30, precios 1..30,
 //     priceContado y los campos legados price/cost del catálogo de vendedores.
+//   - SAFRA (col CL, String en la base) es un dato INDEPENDIENTE de la cadena
+//     de costos: se escribe SOLO cuando la fila la trae y NO recalcula nada.
 //   - NUNCA se crean productos.
-//   - NUNCA se borra un % ADD o VALOR ADD existente (filas sin esos valores
-//     se ignoran; un campo ausente en la fila deja el campo del producto
-//     intacto).
+//   - NUNCA se borra un % ADD, VALOR ADD o SAFRA existente (filas sin esos
+//     valores se ignoran; un campo ausente en la fila deja el campo del
+//     producto intacto).
 //   - Productos que ya tienen exactamente esos valores quedan intocados.
 //   - No se tocan: costos de entrada (costBR/costUS/costGs), % DESC,
 //     GASTOS ADM, VALOR DESC., bases de porcentajes, % Contado, stock,
-//     etiquetas, fabricante ni ningún otro dato.
+//     etiquetas ni fabricante.
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
@@ -24,6 +26,7 @@ import {
   fetchMatchedProducts,
   buildValorAddUpdate,
   round6,
+  normSafra,
 } from "../shared";
 import type { ValorAddRow, ProductForValorAdd } from "../shared";
 
@@ -45,6 +48,9 @@ function filaYaAplicada(product: ProductForValorAdd, row: ValorAddRow): boolean 
   ) {
     return false;
   }
+  if (row.safra !== null && !(normSafra(product.safra) === row.safra)) {
+    return false;
+  }
   return true;
 }
 
@@ -61,16 +67,16 @@ export async function POST(req: NextRequest) {
     const { rows } = parsed;
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "El Excel no contiene filas con COD VIZA + VALOR ADD o % ADD (hoja 'base')" },
+        { error: "El Excel no contiene filas con COD VIZA + VALOR ADD, % ADD o SAFRA (hoja 'base')" },
         { status: 400 }
       );
     }
 
     const { byCod } = await fetchMatchedProducts(rows);
 
-    // Construir updates: % ADD y/o VALOR ADD nuevos + cadena de costos/precios
-    // recalculada (misma fórmula que la edición manual del admin)
-    const updates: Array<{ id: string; sku: string; data: Record<string, number | null> }> = [];
+    // Construir updates: % ADD / VALOR ADD / SAFRA nuevos + cadena de
+    // costos/precios recalculada (misma fórmula que la edición manual del admin)
+    const updates: Array<{ id: string; sku: string; data: Record<string, number | string | null> }> = [];
     const noEncontrados: string[] = [];
     let yaIgual = 0;
 
@@ -87,6 +93,7 @@ export async function POST(req: NextRequest) {
       const { data } = buildValorAddUpdate(product, {
         valorAdd: row.valorAdd,
         addPct: row.addPct,
+        safra: row.safra,
       });
       updates.push({ id: product.id, sku: product.sku, data });
     }
@@ -123,6 +130,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error apply import-valoradd:", error);
-    return NextResponse.json({ error: "Error al aplicar VALOR ADD" }, { status: 500 });
+    return NextResponse.json({ error: "Error al aplicar VALOR ADD, % ADD o SAFRA" }, { status: 500 });
   }
 }

@@ -1,11 +1,12 @@
 // POST /api/products/import-valoradd/preview
-// Vista previa de la importación de % ADD y VALOR ADD desde la planilla
-// LISTA VIZA HOME. SOLO LEE la base (findMany con select) — nunca modifica
-// nada. El hermano apply es quien ejecuta los updates.
+// Vista previa de la importación de % ADD, VALOR ADD y SAFRA desde la
+// planilla LISTA VIZA HOME. SOLO LEE la base (findMany con select) — nunca
+// modifica nada. El hermano apply es quien ejecuta los updates.
 // Para cada producto coincidente se calcula el MISMO update que haría el apply
-// (cadena de costos + precios recalculados como en la edición manual), así la
-// vista previa muestra el impacto real: % ADD, VALOR ADD, Costo Prod. y
-// Precio Contado antes → después.
+// (cadena de costos + precios recalculados como en la edición manual; la
+// SAFRA se guarda tal cual, no recalcula nada), así la vista previa muestra
+// el impacto real: % ADD, VALOR ADD, SAFRA, Costo Prod. y Precio Contado
+// antes → después.
 import { NextRequest, NextResponse } from "next/server";
 import {
   parseBody,
@@ -13,6 +14,7 @@ import {
   fetchMatchedProducts,
   buildValorAddUpdate,
   round6,
+  normSafra,
 } from "../shared";
 import type { ValorAddRow, ProductForValorAdd } from "../shared";
 
@@ -31,6 +33,9 @@ function filaYaAplicada(product: ProductForValorAdd, row: ValorAddRow): boolean 
   ) {
     return false;
   }
+  if (row.safra !== null && !(normSafra(product.safra) === row.safra)) {
+    return false;
+  }
   return true;
 }
 
@@ -44,10 +49,10 @@ export async function POST(req: NextRequest) {
     if (!parsed) {
       return NextResponse.json({ error: "Formato de datos inválido" }, { status: 400 });
     }
-    const { rows, sinValores, conValorAdd, conAddPct } = parsed;
+    const { rows, sinValores, conValorAdd, conAddPct, conSafra } = parsed;
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "El Excel no contiene filas con COD VIZA + VALOR ADD o % ADD (hoja 'base')" },
+        { error: "El Excel no contiene filas con COD VIZA + VALOR ADD, % ADD o SAFRA (hoja 'base')" },
         { status: 400 }
       );
     }
@@ -61,6 +66,8 @@ export async function POST(req: NextRequest) {
       addPctNuevo: number | null;
       valorAddActual: number | null;
       valorAddNuevo: number | null;
+      safraActual: string | null;
+      safraNuevo: string | null;
       costProdActual: number | null;
       costProdNuevo: number | null;
       precioActual: number | null;
@@ -86,9 +93,14 @@ export async function POST(req: NextRequest) {
         const {
           addPctNuevo,
           valorAddNuevo,
+          safraNuevo,
           costProdNuevo,
           priceNuevo: precioNuevo,
-        } = buildValorAddUpdate(product, { valorAdd: row.valorAdd, addPct: row.addPct });
+        } = buildValorAddUpdate(product, {
+          valorAdd: row.valorAdd,
+          addPct: row.addPct,
+          safra: row.safra,
+        });
         cambios.push({
           sku: product.sku,
           name: product.name,
@@ -96,6 +108,8 @@ export async function POST(req: NextRequest) {
           addPctNuevo: row.addPct !== null ? addPctNuevo : null, // null = la fila no trae % ADD (no cambia)
           valorAddActual: product.valorAdd,
           valorAddNuevo: row.valorAdd !== null ? valorAddNuevo : null, // null = la fila no trae VALOR ADD (no cambia)
+          safraActual: product.safra,
+          safraNuevo: row.safra !== null ? safraNuevo : null, // null = la fila no trae SAFRA (no cambia)
           costProdActual: product.costProd,
           costProdNuevo,
           precioActual: product.priceContado,
@@ -115,6 +129,7 @@ export async function POST(req: NextRequest) {
       sinValores,
       conValorAdd,
       conAddPct,
+      conSafra,
       cambios,
     });
   } catch (error) {

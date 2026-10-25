@@ -1,9 +1,9 @@
-// Lógica compartida para importar VALOR ADD y % ADD desde la planilla
+// Lógica compartida para importar VALOR ADD, % ADD y SAFRA desde la planilla
 // LISTA VIZA HOME (hoja "base": headers en fila 2, columnas COD VIZA +
-// "% Add" col M + "Valor Add" col S). Ruta hermana de import-margins /
-// import-fabricante: mismo mecanismo (SheetJS en el navegador + JSON
-// compacto). RUTA NUEVA Y AISLADA: no toca ninguna importación existente
-// (productos, márgenes, fabricantes, stock).
+// "% Add" col M + "Valor Add" col S + "SAFRA" col CL). Ruta hermana de
+// import-margins / import-fabricante: mismo mecanismo (SheetJS en el
+// navegador + JSON compacto). RUTA NUEVA Y AISLADA: no toca ninguna
+// importación existente (productos, márgenes, fabricantes, stock).
 //
 // % ADD (col M) y VALOR ADD (col S) son INPUTS de la cadena de costos:
 //   ... L = MENOS DESC. % → N = L + L*M (% ADD) → P = N + N*O (GASTOS ADM)
@@ -14,9 +14,12 @@
 // /api/products/[id] llama recalculate con los mismos campos). Acá se
 // reutiliza esa misma fórmula.
 //
-// Cada fila del Excel puede traer % ADD, VALOR ADD, ambos o ninguno:
+// Cada fila del Excel puede traer % ADD, VALOR ADD, SAFRA, varios o ninguno:
 //   - % ADD viene como fracción decimal (0.25 = 25%), igual que se guarda
 //     en la base (la tabla lo muestra como 25 y divide entre 100).
+//   - SAFRA (col CL) es un dato independiente (String en la base): NO forma
+//     parte de la cadena de costos, se guarda tal cual y no dispara
+//     recálculos. Números del Excel se guardan como texto limpio (7 -> "7").
 //   - Un campo null significa "esta fila no trae ese valor": el campo del
 //     producto queda INTACTO (nunca se borra un valor existente).
 
@@ -29,6 +32,17 @@ export interface ValorAddRow {
   cod: string;
   valorAdd: number | null;
   addPct: number | null;
+  safra: string | null;
+}
+
+// Normaliza la SAFRA (col CL, String en la base): número del Excel → texto
+// sin decimales colgantes (7 -> "7", 6.0 -> "6"), texto → trim. null = la
+// fila no trae SAFRA (el campo del producto queda intacto).
+export function normSafra(v: any): string | null {
+  if (v === null || v === undefined || v === "") return null;
+  const s = String(v).trim().replace(/\.0$/, "");
+  if (!s || s.length > 50) return null;
+  return s;
 }
 
 // Redondea a 6 decimales para limpiar ruido de punto flotante del Excel
@@ -47,8 +61,9 @@ export function normalizeCod(s: string): string {
 // Valida y normaliza el body recibido desde el navegador (ya parseado con SheetJS)
 // REGLAS:
 //   - Filas sin COD se descartan.
-//   - Filas SIN % ADD y SIN VALOR ADD se cuentan aparte (sinValores) y NO se
-//     aplican: el importador NUNCA borra los valores que ya tiene el producto.
+//   - Filas SIN % ADD, SIN VALOR ADD y SIN SAFRA se cuentan aparte
+//     (sinValores) y NO se aplican: el importador NUNCA borra los valores
+//     que ya tiene el producto.
 //   - Duplicados en el Excel: gana la última aparición (igual que las otras
 //     importaciones).
 //   - VALOR ADD se acepta en guaraníes (cualquier número finito, positivo, 0 o
@@ -59,12 +74,14 @@ export function parseBody(raw: any): {
   sinValores: number;
   conValorAdd: number;
   conAddPct: number;
+  conSafra: number;
 } | null {
   if (!raw || !Array.isArray(raw.rows)) return null;
   const rows: ValorAddRow[] = [];
   let sinValores = 0;
   let conValorAdd = 0;
   let conAddPct = 0;
+  let conSafra = 0;
   for (const r of raw.rows) {
     if (!r || typeof r !== "object") continue;
     const cod = normalizeCod(String(r.cod ?? ""));
@@ -84,19 +101,23 @@ export function parseBody(raw: any): {
       if (Number.isFinite(ap) && Math.abs(ap) <= 10) addPct = round6(ap);
     }
 
-    if (valorAdd === null && addPct === null) {
-      // Sin ninguno de los dos: no se aplica nada a esta fila
+    // SAFRA (col CL, String en la base, dato independiente de la cadena de costos)
+    const safra = normSafra(r.safra);
+
+    if (valorAdd === null && addPct === null && safra === null) {
+      // Sin ninguno de los tres: no se aplica nada a esta fila
       sinValores++;
       continue;
     }
     if (valorAdd !== null) conValorAdd++;
     if (addPct !== null) conAddPct++;
+    if (safra !== null) conSafra++;
 
     const idx = rows.findIndex((x) => x.cod === cod);
-    if (idx >= 0) rows[idx] = { cod, valorAdd, addPct };
-    else rows.push({ cod, valorAdd, addPct });
+    if (idx >= 0) rows[idx] = { cod, valorAdd, addPct, safra };
+    else rows.push({ cod, valorAdd, addPct, safra });
   }
-  return { rows, sinValores, conValorAdd, conAddPct };
+  return { rows, sinValores, conValorAdd, conAddPct, conSafra };
 }
 
 // Solo el SUPREMO_ADMIN puede ejecutar esta importación (misma regla que
@@ -141,6 +162,7 @@ export interface ProductForValorAdd {
   pct7A13: number | null;
   pct14A30: number | null;
   marginContado: number | null;
+  safra: string | null;
 }
 
 export async function fetchMatchedProducts(rows: ValorAddRow[]) {
@@ -168,6 +190,7 @@ export async function fetchMatchedProducts(rows: ValorAddRow[]) {
       pct7A13: true,
       pct14A30: true,
       marginContado: true,
+      safra: true,
     },
   });
   // Mapa normalizado: código → producto
@@ -248,29 +271,31 @@ function recalculate(p: any): void {
   p.cost = p.costProd ?? 0;
 }
 
-// Calcula el update completo para un producto al que se le aplica % ADD y/o
-// VALOR ADD del Excel. Imita EXACTAMENTE el PUT /api/products/[id]:
+// Calcula el update completo para un producto al que se le aplica % ADD,
+// VALOR ADD y/o SAFRA del Excel. Imita EXACTAMENTE el PUT /api/products/[id]:
 //   1. merged = producto actual + los valores que la fila SÍ trae (un campo
 //      null en la fila = ese campo del producto queda intacto)
 //   2. Caso especial: productos viejos importados solo con Costo Prod. (sin
 //      costBR/costUS/costGs) usan ese costo como base para que la cadena no
 //      se vaya a 0 al recalcular.
 //   3. recalculate() → costProd, márgenes y precios recalculados.
-// Devuelve el `data` para Prisma (solo incluye % ADD / VALOR ADD si la fila
-// los trae) + los valores nuevos para la vista previa.
+// Devuelve el `data` para Prisma (solo incluye % ADD / VALOR ADD / SAFRA si
+// la fila los trae) + los valores nuevos para la vista previa.
 export function buildValorAddUpdate(
   product: ProductForValorAdd,
-  valores: { valorAdd: number | null; addPct: number | null }
+  valores: { valorAdd: number | null; addPct: number | null; safra: string | null }
 ): {
-  data: Record<string, number | null>;
+  data: Record<string, number | string | null>;
   valorAddNuevo: number | null;
   addPctNuevo: number | null;
+  safraNuevo: string | null;
   costProdNuevo: number | null;
   priceNuevo: number | null;
 } {
   const merged: any = { ...product };
   if (valores.valorAdd !== null) merged.valorAdd = valores.valorAdd;
   if (valores.addPct !== null) merged.addPct = valores.addPct;
+  if (valores.safra !== null) merged.safra = valores.safra;
   const sinCostoEntrada =
     !(merged.costBR > 0) && !(merged.costUS > 0) && !(merged.costGs > 0);
   if (sinCostoEntrada && (product.costProd ?? 0) > 0) {
@@ -278,9 +303,12 @@ export function buildValorAddUpdate(
   }
   recalculate(merged);
 
-  const data: Record<string, number | null> = {};
+  const data: Record<string, number | string | null> = {};
   if (valores.valorAdd !== null) data.valorAdd = valores.valorAdd;
   if (valores.addPct !== null) data.addPct = valores.addPct;
+  // SAFRA: dato independiente (String), se escribe solo si la fila la trae;
+  // NO participa del recálculo de costos ni de precios.
+  if (valores.safra !== null) data.safra = valores.safra;
   data.rsNoUS = merged.rsNoUS;
   data.usNoGs = merged.usNoGs;
   data.rsToGs = merged.rsToGs;
@@ -303,6 +331,7 @@ export function buildValorAddUpdate(
     data,
     valorAddNuevo: (merged.valorAdd ?? null) as number | null,
     addPctNuevo: (merged.addPct ?? null) as number | null,
+    safraNuevo: (merged.safra ?? null) as string | null,
     costProdNuevo: merged.costProd ?? null,
     priceNuevo: merged.priceContado ?? null,
   };

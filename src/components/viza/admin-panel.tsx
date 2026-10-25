@@ -391,14 +391,16 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // Guarda las filas {cod, fabricante, marca} parseadas entre la vista previa y el apply
   const fabRowsRef = useRef<Array<{ cod: string; fabricante: string | null; marca: string | null }> | null>(null);
 
-  // ─── IMPORTAR VALOR + % ADD (planilla LISTA VIZA HOME, hoja "base") ───
+  // ─── IMPORTAR VALOR + % ADD + SAFRA (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES / FABRICANTES: el Excel se procesa EN
-  // EL NAVEGADOR (SheetJS) y solo se envía un JSON compacto { cod, valorAdd, addPct }.
+  // EL NAVEGADOR (SheetJS) y solo se envía un JSON compacto { cod, valorAdd, addPct, safra }.
   // % ADD (col M, fracción decimal 0.25 = 25%) y VALOR ADD (col S, guaraníes) son
   // inputs de la cadena de costos: al aplicarlos, la API recalcula Costo Prod.,
   // márgenes y precios EXACTAMENTE igual que cuando el admin los edita a mano en
-  // la tabla (PUT /api/products/[id]). Cada fila puede traer uno, otro, ambos o
-  // ninguno; un campo ausente deja el campo del producto intacto (nunca borra).
+  // la tabla (PUT /api/products/[id]). SAFRA (col CL) es un dato independiente
+  // (String en la base): se guarda tal cual y no recalcula nada. Cada fila puede
+  // traer uno, varios o ninguno; un campo ausente deja el campo del producto
+  // intacto (nunca borra).
   const [vaImportOpen, setVaImportOpen] = useState(false);
   const [vaImportLoading, setVaImportLoading] = useState(false);
   const [vaImportPreview, setVaImportPreview] = useState<{
@@ -411,6 +413,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     sinValores: number;
     conValorAdd: number;
     conAddPct: number;
+    conSafra: number;
     cambios: Array<{
       sku: string;
       name: string;
@@ -418,6 +421,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       addPctNuevo: number | null;
       valorAddActual: number | null;
       valorAddNuevo: number | null;
+      safraActual: string | null;
+      safraNuevo: string | null;
       costProdActual: number | null;
       costProdNuevo: number | null;
       precioActual: number | null;
@@ -433,8 +438,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     errores: string[];
   } | null>(null);
   const vaFileInputRef = useRef<HTMLInputElement | null>(null);
-  // Guarda las filas {cod, valorAdd, addPct} parseadas entre la vista previa y el apply
-  const vaRowsRef = useRef<Array<{ cod: string; valorAdd: number | null; addPct: number | null }> | null>(null);
+  // Guarda las filas {cod, valorAdd, addPct, safra} parseadas entre la vista previa y el apply
+  const vaRowsRef = useRef<Array<{ cod: string; valorAdd: number | null; addPct: number | null; safra: string | null }> | null>(null);
 
   // ─── DELETE ALL (borrar TODOS los productos) ───
   // Botón rojo solo para supremo_admin. Borra toda la tabla de productos.
@@ -846,24 +851,36 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           break;
         }
       }
-      // La columna % ADD es OPCIONAL (planillas viejas solo traen VALOR ADD):
-      // si no está, todo sigue funcionando igual que antes.
+      // Las columnas % ADD y SAFRA son OPCIONALES (planillas viejas solo traen
+      // VALOR ADD): si no están, todo sigue funcionando igual que antes.
       const colAddPct = colMap["% ADD"] ?? colMap["%ADD"];
-      if (headerIdx < 0 || (colMap["VALOR ADD"] === undefined && colAddPct === undefined)) {
-        throw new Error("No se encontró la hoja 'base' con COD VIZA y VALOR ADD o % ADD");
+      const colSafra = colMap["SAFRA"];
+      if (
+        headerIdx < 0 ||
+        (colMap["VALOR ADD"] === undefined && colAddPct === undefined && colSafra === undefined)
+      ) {
+        throw new Error("No se encontró la hoja 'base' con COD VIZA y VALOR ADD, % ADD o SAFRA");
       }
+      // SAFRA (col CL, String en la base): número del Excel → texto limpio ("7"),
+      // texto → trim. null = la fila no trae SAFRA (el producto queda intacto).
+      const toSafra = (v: any): string | null => {
+        if (v === null || v === undefined || v === "") return null;
+        const s = toStr(v).trim().replace(/\.0$/, "");
+        return s ? s.slice(0, 50) : null;
+      };
 
-      const rows: Array<{ cod: string; valorAdd: number | null; addPct: number | null }> = [];
+      const rows: Array<{ cod: string; valorAdd: number | null; addPct: number | null; safra: string | null }> = [];
       for (let r = headerIdx + 1; r < aoa.length; r++) {
         const row = aoa[r] || [];
         const cod = toStr(row[colMap["COD VIZA"]]).replace(/\.0$/, "");
         if (!cod) continue;
-        // Se envían TODAS las filas con código, incluso sin % ADD ni VALOR ADD:
-        // la API las cuenta (sinValores) y NUNCA borra los valores existentes.
+        // Se envían TODAS las filas con código, incluso sin % ADD / VALOR ADD /
+        // SAFRA: la API las cuenta (sinValores) y NUNCA borra valores existentes.
         rows.push({
           cod,
           valorAdd: colMap["VALOR ADD"] !== undefined ? num(row[colMap["VALOR ADD"]]) : null,
           addPct: colAddPct !== undefined ? num(row[colAddPct]) : null,
+          safra: colSafra !== undefined ? toSafra(row[colSafra]) : null,
         });
       }
       if (rows.length === 0) throw new Error("El Excel no contiene filas con COD VIZA");
@@ -2606,13 +2623,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
 
       {/* ════════════════════════════════════════════════════════════════
-          MODAL: IMPORTAR VALOR + % ADD (planilla LISTA VIZA HOME, hoja "base")
+          MODAL: IMPORTAR VALOR + % ADD + SAFRA (planilla LISTA VIZA HOME, hoja "base")
           - Mismo flujo de márgenes/fabricantes: vista previa + apply
           - % ADD (col M) y VALOR ADD (col S) son inputs de la cadena de costos:
             al aplicarlos el sistema recalcula Costo Prod., márgenes y precios
-            igual que la edición manual
-          - Cada fila puede traer % ADD, VALOR ADD, ambos o ninguno; un campo
-            ausente deja el campo del producto intacto (NUNCA borra)
+            igual que la edición manual. SAFRA (col CL) es independiente: se
+            guarda tal cual, sin recálculos
+          - Cada fila puede traer % ADD, VALOR ADD, SAFRA, varios o ninguno; un
+            campo ausente deja el campo del producto intacto (NUNCA borra)
           ════════════════════════════════════════════════════════════════ */}
       {vaImportOpen && (
         <div
@@ -2632,7 +2650,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
             >
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                Importar VALOR + % ADD (planilla VIZA HOME)
+                Importar VALOR + % ADD + SAFRA (planilla VIZA HOME)
               </h3>
               <button
                 onClick={() => {
@@ -2662,7 +2680,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     style={{ background: "#f0fdf4", borderColor: "#86efac" }}
                   >
                     <p className="text-base font-bold text-emerald-800 mb-2">
-                      ✓ VALOR + % ADD aplicados
+                      ✓ VALOR + % ADD + SAFRA aplicados
                     </p>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
@@ -2696,10 +2714,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </div>
                   )}
                   <div className="text-xs text-stone-500 italic">
-                    La tabla se recargó con los % ADD y VALOR ADD nuevos. Para cada producto actualizado
-                    se recalculó Costo Prod. y los precios con las mismas fórmulas del sistema (igual que
-                    editarlos a mano). Costos de entrada, % DESC, GASTOS ADM, VALOR DESC., bases de
-                    porcentajes, stock y fabricantes quedaron intactos.
+                    La tabla se recargó con los % ADD, VALOR ADD y SAFRA nuevos. Para cada producto
+                    actualizado se recalculó Costo Prod. y los precios con las mismas fórmulas del
+                    sistema (igual que editarlos a mano); la SAFRA se guardó tal cual (no recalcula
+                    nada). Costos de entrada, % DESC, GASTOS ADM, VALOR DESC., bases de porcentajes,
+                    stock y fabricantes quedaron intactos.
                   </div>
                 </div>
               )}
@@ -2711,7 +2730,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
                       <p className="text-3xl font-black text-emerald-700">{vaImportPreview.aActualizar}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben % ADD y/o VALOR ADD</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben % ADD, VALOR ADD y/o SAFRA</p>
                     </div>
                     <div className="rounded-lg p-3 border border-stone-200 bg-stone-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Ya correctos</p>
@@ -2724,23 +2743,25 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <p className="text-[10px] text-stone-500 mt-1">Códigos del Excel que no existen en el sistema</p>
                     </div>
                     <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
-                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin % ADD ni VALOR ADD</p>
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin % ADD, VALOR ADD ni SAFRA</p>
                       <p className="text-3xl font-black text-amber-600">{vaImportPreview.sinValores}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Filas sin ninguno de los dos valores en el Excel (quedan intocadas)</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Filas sin ninguno de esos valores en el Excel (quedan intocadas)</p>
                     </div>
                   </div>
 
                   <div className="text-xs text-stone-600 bg-amber-50 rounded-lg p-3 border border-amber-200">
                     <strong>{vaImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base"
-                    ({vaImportPreview.conAddPct} con % ADD, {vaImportPreview.conValorAdd} con VALOR ADD).
-                    Se actualizan <strong>SOLO las columnas % ADD y VALOR ADD</strong> de los productos que
-                    coinciden por COD. Como son parte de la cadena de costos, a cada producto actualizado
-                    se le <strong>recalcula Costo Prod. y los precios</strong> con las mismas fórmulas del
-                    sistema (exactamente igual que editarlos a mano en la tabla).
+                    ({vaImportPreview.conAddPct} con % ADD, {vaImportPreview.conValorAdd} con VALOR ADD,{" "}
+                    {vaImportPreview.conSafra} con SAFRA).
+                    Se actualizan <strong>SOLO las columnas % ADD, VALOR ADD y SAFRA</strong> de los
+                    productos que coinciden por COD. % ADD y VALOR ADD son parte de la cadena de costos:
+                    a cada producto actualizado se le <strong>recalcula Costo Prod. y los precios</strong>{" "}
+                    con las mismas fórmulas del sistema (exactamente igual que editarlos a mano). La
+                    SAFRA (col CL) es un dato independiente: se guarda tal cual y no recalcula nada.
                     <span className="block mt-1">
                       No se crean productos y no se tocan costos de entrada, % DESC, GASTOS ADM,
                       VALOR DESC., bases de porcentajes, % Contado, stock, etiquetas ni fabricantes.
-                      Las filas sin % ADD o sin VALOR ADD dejan ese campo como está (nunca se borra).
+                      Las filas sin % ADD, sin VALOR ADD o sin SAFRA dejan ese campo como está (nunca se borra).
                     </span>
                   </div>
 
@@ -2758,6 +2779,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">% ADD</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">VALOR ADD</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">SAFRA</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo Prod. actual → nuevo</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Precio Contado actual → nuevo</th>
                             </tr>
@@ -2782,6 +2804,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                   ) : (
                                     <>
                                       {c.valorAddActual !== null ? formatPYG(c.valorAddActual) : "— (vacío)"} → {formatPYG(c.valorAddNuevo)}
+                                    </>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-bold text-amber-700 whitespace-nowrap">
+                                  {c.safraNuevo === null ? (
+                                    <span className="font-normal text-stone-400">—</span>
+                                  ) : (
+                                    <>
+                                      {c.safraActual !== null && c.safraActual !== "" ? c.safraActual : "— (vacío)"} → {c.safraNuevo}
                                     </>
                                   )}
                                 </td>
@@ -2839,12 +2870,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     {vaImportApplying ? (
                       <>
                         <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
-                        Aplicando VALOR + % ADD…
+                        Aplicando VALOR + % ADD + SAFRA…
                       </>
                     ) : (
                       <>
                         <Check className="h-4 w-4" />
-                        APLICAR VALOR + % ADD
+                        APLICAR VALOR + % ADD + SAFRA
                       </>
                     )}
                   </button>
