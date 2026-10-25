@@ -9,7 +9,10 @@
 //     plusAdd2, minusDescV), Costo Prod., márgenes 1..30, precios 1..30,
 //     priceContado y los campos legados price/cost del catálogo de vendedores.
 //   - SAFRA (col CL, String en la base) es un dato INDEPENDIENTE de la cadena
-//     de costos: se escribe SOLO cuando la fila la trae y NO recalcula nada.
+//     de costos: se escribe SOLO cuando la fila la trae Y el producto está sin
+//     SAFRA utilizable (vacío / "null" / 0) — REGLA "SOLO DONDE FALTA": los
+//     productos que YA tienen SAFRA quedan EXACTAMENTE igual (nunca se
+//     sobrescribe, aunque el Excel traiga otro valor). NO recalcula nada.
 //   - NUNCA se crean productos.
 //   - NUNCA se borra un % ADD, VALOR ADD o SAFRA existente (filas sin esos
 //     valores se ignoran; un campo ausente en la fila deja el campo del
@@ -26,7 +29,7 @@ import {
   fetchMatchedProducts,
   buildValorAddUpdate,
   round6,
-  normSafra,
+  safraEstaVacia,
 } from "../shared";
 import type { ValorAddRow, ProductForValorAdd } from "../shared";
 
@@ -35,6 +38,8 @@ export const maxDuration = 60;
 const BATCH_SIZE = 50;
 
 // ¿La fila ya está aplicada en el producto? (misma regla que el preview)
+// SAFRA: una fila que trae SAFRA para un producto que YA la tiene no genera
+// ningún cambio de SAFRA (no cuenta como pendiente por ese campo).
 function filaYaAplicada(product: ProductForValorAdd, row: ValorAddRow): boolean {
   if (
     row.valorAdd !== null &&
@@ -48,7 +53,7 @@ function filaYaAplicada(product: ProductForValorAdd, row: ValorAddRow): boolean 
   ) {
     return false;
   }
-  if (row.safra !== null && !(normSafra(product.safra) === row.safra)) {
+  if (row.safra !== null && safraEstaVacia(product.safra)) {
     return false;
   }
   return true;
@@ -79,12 +84,21 @@ export async function POST(req: NextRequest) {
     const updates: Array<{ id: string; sku: string; data: Record<string, number | string | null> }> = [];
     const noEncontrados: string[] = [];
     let yaIgual = 0;
+    let safraAgregadas = 0;
+    let safraMantenidas = 0;
 
     for (const row of rows) {
       const product = byCod.get(row.cod);
       if (!product) {
         noEncontrados.push(row.cod);
         continue;
+      }
+      // Contadores de SAFRA (mismos criterios que el preview): la fila trae
+      // SAFRA y el producto está sin ella → se la AGREGA; ya la tiene → su
+      // SAFRA se MANTIENE igual (nunca se sobrescribe).
+      if (row.safra !== null) {
+        if (safraEstaVacia(product.safra)) safraAgregadas++;
+        else safraMantenidas++;
       }
       if (filaYaAplicada(product, row)) {
         yaIgual++;
@@ -124,6 +138,8 @@ export async function POST(req: NextRequest) {
       totalCodigos: rows.length,
       actualizados,
       yaIgual,
+      safraAgregadas,
+      safraMantenidas,
       noEncontrados: noEncontrados.length,
       fallidos: errores.length,
       errores: errores.slice(0, 50),

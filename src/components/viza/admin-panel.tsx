@@ -398,9 +398,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // inputs de la cadena de costos: al aplicarlos, la API recalcula Costo Prod.,
   // márgenes y precios EXACTAMENTE igual que cuando el admin los edita a mano en
   // la tabla (PUT /api/products/[id]). SAFRA (col CL) es un dato independiente
-  // (String en la base): se guarda tal cual y no recalcula nada. Cada fila puede
-  // traer uno, varios o ninguno; un campo ausente deja el campo del producto
-  // intacto (nunca borra).
+  // (String en la base) y sigue la REGLA "SOLO DONDE FALTA" (pedido del usuario):
+  // se agrega ÚNICAMENTE a los productos que NO tienen SAFRA (vacío, "null" o 0);
+  // los que YA la tienen quedan EXACTAMENTE igual (nunca se sobrescribe, aunque
+  // el Excel traiga otro valor). Cada fila puede traer uno, varios o ninguno; un
+  // campo ausente deja el campo del producto intacto (nunca borra).
   const [vaImportOpen, setVaImportOpen] = useState(false);
   const [vaImportLoading, setVaImportLoading] = useState(false);
   const [vaImportPreview, setVaImportPreview] = useState<{
@@ -414,6 +416,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     conValorAdd: number;
     conAddPct: number;
     conSafra: number;
+    safraAAgregar: number;
+    safraMantenidas: number;
     cambios: Array<{
       sku: string;
       name: string;
@@ -423,6 +427,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       valorAddNuevo: number | null;
       safraActual: string | null;
       safraNuevo: string | null;
+      safraMantenida: boolean;
       costProdActual: number | null;
       costProdNuevo: number | null;
       precioActual: number | null;
@@ -433,6 +438,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const [vaImportResult, setVaImportResult] = useState<{
     actualizados: number;
     yaIgual: number;
+    safraAgregadas: number;
+    safraMantenidas: number;
     noEncontrados: number;
     fallidos: number;
     errores: string[];
@@ -2650,8 +2657,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           - Mismo flujo de márgenes/fabricantes: vista previa + apply
           - % ADD (col M) y VALOR ADD (col S) son inputs de la cadena de costos:
             al aplicarlos el sistema recalcula Costo Prod., márgenes y precios
-            igual que la edición manual. SAFRA (col CL) es independiente: se
-            guarda tal cual, sin recálculos
+            igual que la edición manual. SAFRA (col CL) es independiente y va
+            con REGLA "SOLO DONDE FALTA": se agrega solo a productos sin
+            SAFRA; los que ya la tienen quedan igual (nunca se sobrescribe)
           - Cada fila puede traer % ADD, VALOR ADD, SAFRA, varios o ninguno; un
             campo ausente deja el campo del producto intacto (NUNCA borra)
           ════════════════════════════════════════════════════════════════ */}
@@ -2722,6 +2730,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         <p className="text-stone-500 text-xs font-semibold uppercase">Costos y precios recalculados</p>
                         <p className="text-2xl font-black text-amber-600">{vaImportResult.actualizados}</p>
                       </div>
+                      <div className="bg-white rounded-lg p-3 border border-violet-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">SAFRA agregadas (solo faltantes)</p>
+                        <p className="text-2xl font-black text-violet-700">{vaImportResult.safraAgregadas}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-stone-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">SAFRA mantenidas (ya tenían)</p>
+                        <p className="text-2xl font-black text-stone-600">{vaImportResult.safraMantenidas}</p>
+                      </div>
                     </div>
                   </div>
                   {vaImportResult.errores.length > 0 && (
@@ -2739,9 +2755,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   <div className="text-xs text-stone-500 italic">
                     La tabla se recargó con los % ADD, VALOR ADD y SAFRA nuevos. Para cada producto
                     actualizado se recalculó Costo Prod. y los precios con las mismas fórmulas del
-                    sistema (igual que editarlos a mano); la SAFRA se guardó tal cual (no recalcula
-                    nada). Costos de entrada, % DESC, GASTOS ADM, VALOR DESC., bases de porcentajes,
-                    stock y fabricantes quedaron intactos.
+                    sistema (igual que editarlos a mano); la SAFRA solo se agregó donde faltaba —
+                    los productos que ya tenían SAFRA quedaron EXACTAMENTE igual. Costos de entrada,
+                    % DESC, GASTOS ADM, VALOR DESC., bases de porcentajes, stock y fabricantes
+                    quedaron intactos.
                   </div>
                 </div>
               )}
@@ -2753,7 +2770,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
                       <p className="text-3xl font-black text-emerald-700">{vaImportPreview.aActualizar}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben % ADD, VALOR ADD y/o SAFRA</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben % ADD, VALOR ADD y/o SAFRA nueva (solo donde falta)</p>
                     </div>
                     <div className="rounded-lg p-3 border border-stone-200 bg-stone-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Ya correctos</p>
@@ -2780,7 +2797,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     productos que coinciden por COD. % ADD y VALOR ADD son parte de la cadena de costos:
                     a cada producto actualizado se le <strong>recalcula Costo Prod. y los precios</strong>{" "}
                     con las mismas fórmulas del sistema (exactamente igual que editarlos a mano). La
-                    SAFRA (col CL) es un dato independiente: se guarda tal cual y no recalcula nada.
+                    SAFRA (col CL) es un dato independiente y sigue la REGLA <strong>"SOLO DONDE
+                    FALTA"</strong>: se van a agregar <strong>{vaImportPreview.safraAAgregar}</strong> SAFRA
+                    (únicamente a productos que NO la tienen) y se mantienen <strong>{vaImportPreview.safraMantenidas}</strong>{" "}
+                    (productos que ya la tienen — quedan EXACTAMENTE igual, nunca se sobrescribe).
                     <span className="block mt-1">
                       No se crean productos y no se tocan costos de entrada, % DESC, GASTOS ADM,
                       VALOR DESC., bases de porcentajes, % Contado, stock, etiquetas ni fabricantes.
@@ -2833,9 +2853,16 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                 <td className="px-2 py-1.5 text-right font-bold text-amber-700 whitespace-nowrap">
                                   {c.safraNuevo === null ? (
                                     <span className="font-normal text-stone-400">—</span>
+                                  ) : c.safraMantenida ? (
+                                    <span
+                                      className="font-normal text-stone-500"
+                                      title="El producto ya tiene SAFRA: queda exactamente igual (no se sobrescribe)"
+                                    >
+                                      mantiene {c.safraNuevo}
+                                    </span>
                                   ) : (
                                     <>
-                                      {c.safraActual !== null && c.safraActual !== "" ? c.safraActual : "— (vacío)"} → {c.safraNuevo}
+                                      {c.safraActual !== null && c.safraActual !== "" ? c.safraActual : "— (vacío)"} → <span className="font-bold text-violet-700">{c.safraNuevo}</span>
                                     </>
                                   )}
                                 </td>

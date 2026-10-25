@@ -18,8 +18,11 @@
 //   - % ADD viene como fracción decimal (0.25 = 25%), igual que se guarda
 //     en la base (la tabla lo muestra como 25 y divide entre 100).
 //   - SAFRA (col CL) es un dato independiente (String en la base): NO forma
-//     parte de la cadena de costos, se guarda tal cual y no dispara
-//     recálculos. Números del Excel se guardan como texto limpio (7 -> "7").
+//     parte de la cadena de costos, no dispara recálculos. REGLA "SOLO DONDE
+//     FALTA": se escribe ÚNICAMENTE en productos SIN SAFRA utilizable (vacío,
+//     "null" o 0); los que YA tienen SAFRA quedan EXACTAMENTE igual (nunca se
+//     sobrescribe, aunque el Excel traiga otro valor). Números del Excel se
+//     guardan como texto limpio (7 -> "7").
 //   - Un campo null significa "esta fila no trae ese valor": el campo del
 //     producto queda INTACTO (nunca se borra un valor existente).
 
@@ -43,6 +46,21 @@ export function normSafra(v: any): string | null {
   const s = String(v).trim().replace(/\.0$/, "");
   if (!s || s.length > 50) return null;
   return s;
+}
+
+// ¿El producto está SIN SAFRA utilizable? El Plan SAFRA (parseSafra en
+// src/store/plan-safra.ts) lee como 0% todo lo que sea null, vacío, "null"
+// o no numérico; un "0" explícito también es 0%. Esos casos cuentan como
+// "sin SAFRA": son los ÚNICOS donde el importador SÍ escribe la SAFRA del
+// Excel. Si el producto ya tiene un valor real (ej. "7", "4.5"), queda
+// intocado (regla del usuario: solo agregar donde falta).
+export function safraEstaVacia(s: string | null | undefined): boolean {
+  if (s === null || s === undefined) return true;
+  const t = String(s).trim();
+  if (!t || t.toLowerCase() === "null") return true;
+  const n = parseFloat(t.replace(",", "."));
+  if (Number.isNaN(n) || n === 0) return true;
+  return false;
 }
 
 // Redondea a 6 decimales para limpiar ruido de punto flotante del Excel
@@ -274,13 +292,16 @@ function recalculate(p: any): void {
 // Calcula el update completo para un producto al que se le aplica % ADD,
 // VALOR ADD y/o SAFRA del Excel. Imita EXACTAMENTE el PUT /api/products/[id]:
 //   1. merged = producto actual + los valores que la fila SÍ trae (un campo
-//      null en la fila = ese campo del producto queda intacto)
+//      null en la fila = ese campo del producto queda intacto). SAFRA: solo
+//      entra si el producto NO tiene SAFRA utilizable (regla "solo donde
+//      falta"); los que ya la tienen conservan la suya.
 //   2. Caso especial: productos viejos importados solo con Costo Prod. (sin
 //      costBR/costUS/costGs) usan ese costo como base para que la cadena no
 //      se vaya a 0 al recalcular.
 //   3. recalculate() → costProd, márgenes y precios recalculados.
-// Devuelve el `data` para Prisma (solo incluye % ADD / VALOR ADD / SAFRA si
-// la fila los trae) + los valores nuevos para la vista previa.
+// Devuelve el `data` para Prisma (solo incluye % ADD / VALOR ADD si la fila
+// los trae; SAFRA solo si la fila la trae Y el producto estaba sin SAFRA)
+// + los valores nuevos para la vista previa.
 export function buildValorAddUpdate(
   product: ProductForValorAdd,
   valores: { valorAdd: number | null; addPct: number | null; safra: string | null }
@@ -295,7 +316,10 @@ export function buildValorAddUpdate(
   const merged: any = { ...product };
   if (valores.valorAdd !== null) merged.valorAdd = valores.valorAdd;
   if (valores.addPct !== null) merged.addPct = valores.addPct;
-  if (valores.safra !== null) merged.safra = valores.safra;
+  // SAFRA: SOLO se llena cuando el producto NO tiene SAFRA utilizable. Si ya
+  // la tiene, merged conserva la del producto (nunca se sobrescribe).
+  const llenarSafra = valores.safra !== null && safraEstaVacia(product.safra);
+  if (llenarSafra) merged.safra = valores.safra;
   const sinCostoEntrada =
     !(merged.costBR > 0) && !(merged.costUS > 0) && !(merged.costGs > 0);
   if (sinCostoEntrada && (product.costProd ?? 0) > 0) {
@@ -306,9 +330,11 @@ export function buildValorAddUpdate(
   const data: Record<string, number | string | null> = {};
   if (valores.valorAdd !== null) data.valorAdd = valores.valorAdd;
   if (valores.addPct !== null) data.addPct = valores.addPct;
-  // SAFRA: dato independiente (String), se escribe solo si la fila la trae;
-  // NO participa del recálculo de costos ni de precios.
-  if (valores.safra !== null) data.safra = valores.safra;
+  // SAFRA: dato independiente (String). Se escribe SOLO si la fila la trae Y
+  // el producto estaba sin SAFRA (regla "solo donde falta": los que ya la
+  // tienen quedan exactamente igual). NO participa del recálculo de costos
+  // ni de precios.
+  if (llenarSafra) data.safra = valores.safra;
   data.rsNoUS = merged.rsNoUS;
   data.usNoGs = merged.usNoGs;
   data.rsToGs = merged.rsToGs;

@@ -4,9 +4,9 @@
 // modifica nada. El hermano apply es quien ejecuta los updates.
 // Para cada producto coincidente se calcula el MISMO update que haría el apply
 // (cadena de costos + precios recalculados como en la edición manual; la
-// SAFRA se guarda tal cual, no recalcula nada), así la vista previa muestra
-// el impacto real: % ADD, VALOR ADD, SAFRA, Costo Prod. y Precio Contado
-// antes → después.
+// SAFRA se llena SOLO en productos sin SAFRA — los que ya la tienen quedan
+// igual), así la vista previa muestra el impacto real: % ADD, VALOR ADD,
+// SAFRA, Costo Prod. y Precio Contado antes → después.
 import { NextRequest, NextResponse } from "next/server";
 import {
   parseBody,
@@ -14,12 +14,15 @@ import {
   fetchMatchedProducts,
   buildValorAddUpdate,
   round6,
-  normSafra,
+  safraEstaVacia,
 } from "../shared";
 import type { ValorAddRow, ProductForValorAdd } from "../shared";
 
 // ¿La fila ya está aplicada en el producto? Un campo null en la fila significa
-// "no trae ese valor" → ese campo no participa de la comparación.
+// "no trae ese valor" → ese campo no participa de la comparación. SAFRA: como
+// el importador SOLO llena SAFRA en productos sin SAFRA, una fila que trae
+// SAFRA para un producto que YA la tiene no genera ningún cambio de SAFRA
+// (no cuenta como pendiente por ese campo).
 function filaYaAplicada(product: ProductForValorAdd, row: ValorAddRow): boolean {
   if (
     row.valorAdd !== null &&
@@ -33,7 +36,7 @@ function filaYaAplicada(product: ProductForValorAdd, row: ValorAddRow): boolean 
   ) {
     return false;
   }
-  if (row.safra !== null && !(normSafra(product.safra) === row.safra)) {
+  if (row.safra !== null && safraEstaVacia(product.safra)) {
     return false;
   }
   return true;
@@ -68,6 +71,7 @@ export async function POST(req: NextRequest) {
       valorAddNuevo: number | null;
       safraActual: string | null;
       safraNuevo: string | null;
+      safraMantenida: boolean;
       costProdActual: number | null;
       costProdNuevo: number | null;
       precioActual: number | null;
@@ -76,12 +80,22 @@ export async function POST(req: NextRequest) {
     const noEncontrados: string[] = [];
     let aActualizar = 0;
     let yaIgual = 0;
+    let safraAAgregar = 0;
+    let safraMantenidas = 0;
 
     for (const row of rows) {
       const product = byCod.get(row.cod);
       if (!product) {
         noEncontrados.push(row.cod);
         continue;
+      }
+      // Contadores de SAFRA (sobre TODAS las filas coincidentes, antes de
+      // saber si la fila tiene otro cambio pendiente): la fila trae SAFRA y
+      // el producto está sin ella → se la van a AGREGAR; ya la tiene → su
+      // SAFRA se MANTIENE igual (nunca se sobrescribe).
+      if (row.safra !== null) {
+        if (safraEstaVacia(product.safra)) safraAAgregar++;
+        else safraMantenidas++;
       }
       if (filaYaAplicada(product, row)) {
         // Ya tiene exactamente esos valores: queda intocado
@@ -110,6 +124,7 @@ export async function POST(req: NextRequest) {
           valorAddNuevo: row.valorAdd !== null ? valorAddNuevo : null, // null = la fila no trae VALOR ADD (no cambia)
           safraActual: product.safra,
           safraNuevo: row.safra !== null ? safraNuevo : null, // null = la fila no trae SAFRA (no cambia)
+          safraMantenida: row.safra !== null && !safraEstaVacia(product.safra), // true = ya la tenía, queda igual
           costProdActual: product.costProd,
           costProdNuevo,
           precioActual: product.priceContado,
@@ -130,6 +145,8 @@ export async function POST(req: NextRequest) {
       conValorAdd,
       conAddPct,
       conSafra,
+      safraAAgregar,
+      safraMantenidas,
       cambios,
     });
   } catch (error) {
