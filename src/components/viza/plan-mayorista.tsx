@@ -274,7 +274,6 @@ export function PlanMayorista() {
               setSearch(e.target.value);
               setShowResults(true);
             }}
-            placeholder="Buscar producto por nombre, SKU o marca... (ej: heladera, sofá, moto 110cc)"
             className="w-full h-14 pl-12 pr-4 rounded-xl border-2 bg-white text-base font-medium focus:outline-none shadow-sm focus:ring-4"
             style={{ borderColor: "#e7e5e4" }}
             onFocus={(e) => {

@@ -917,7 +917,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 setSearch(e.target.value);
                 setShowResults(true);
               }}
-              placeholder="Buscar producto por nombre, SKU o marca... (ej: heladera, sofá, moto 110cc)"
               className="w-full h-12 pl-12 pr-4 rounded-xl border-2 border-stone-200 bg-white text-base font-medium focus:outline-none shadow-sm focus:ring-4"
               style={{
                 borderColor: "#e7e5e4",

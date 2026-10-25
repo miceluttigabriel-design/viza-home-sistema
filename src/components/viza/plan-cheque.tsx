@@ -173,7 +173,6 @@ export function PlanCheque() {
         <div ref={searchRef} className="relative mb-4">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400" />
           <input type="text" value={search} onChange={(e) => { setSearch(e.target.value); setShowResults(true); }}
-            placeholder="Buscar producto por nombre, SKU o marca..."
             className="w-full h-12 pl-12 pr-4 rounded-xl border-2 bg-white text-base font-medium focus:outline-none shadow-sm focus:ring-4" style={{ borderColor: "#e7e5e4" }} />
           {showResults && search.trim() && (
             <div className="absolute z-40 top-full mt-2 w-full bg-white rounded-xl border border-stone-200 shadow-2xl max-h-96 overflow-y-auto">
