@@ -14,13 +14,15 @@
 import { EyeOff } from "lucide-react";
 import { formatPYG } from "@/lib/format";
 
-// === Colores del cuadrito (tonos internos de la marca) ===
-const COSTO_BG = "#1c2533"; // azul casi negro (DARK de la marca)
-const COSTO_BORDER = "#46536b";
-const COSTO_TXT = "#cbd5e1"; // gris claro
-const COSTO_VALOR = "#e5cb8a"; // dorado claro de la marca
-const COSTO_TOTAL = "#D9B86B"; // dorado de la marca
-const COSTO_NOTA = "#94a3b8";
+// === Colores del cuadrito (paleta de la marca VIZA) ===
+// Fondo AZUL del logo (#155789) — el mismo azul de los cuadros de totales
+// y del encabezado de las tablas de productos.
+const COSTO_BG = "#155789"; // AZUL VIZA
+const COSTO_BORDER = "#0d3d5e"; // azul oscuro de la marca (borde dashed)
+const COSTO_TXT = "#ffffff"; // blanco (nombres de productos / etiqueta total)
+const COSTO_VALOR = "#e5cb8a"; // dorado claro de la marca (valores de costo)
+const COSTO_TOTAL = "#ffffff"; // total en blanco, destaca sobre el azul
+const COSTO_NOTA = "rgba(255,255,255,0.75)"; // nota semitransparente
 
 export interface CostoInternoItem {
   key: string;
@@ -106,7 +108,7 @@ export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
       {/* Total del costo (lo que el vendedor necesita para armar el crédito) */}
       <div
         className="flex items-center justify-between gap-3 mt-2 pt-2 border-t"
-        style={{ borderColor: "rgba(229,203,138,0.25)" }}
+        style={{ borderColor: "rgba(255,255,255,0.3)" }}
       >
         <span
           className="text-[10px] font-bold uppercase tracking-wide"
