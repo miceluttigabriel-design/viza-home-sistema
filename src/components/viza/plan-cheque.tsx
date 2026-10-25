@@ -96,6 +96,7 @@ export function PlanCheque() {
 
   const handleGenerarPDF = async () => {
     if (resultados.length === 0) { toast.error("Calculá los cheques primero"); return; }
+    if (!clienteNombre.trim()) { toast.error("Completá el Nombre del cliente para generar el presupuesto"); return; }
     setGeneratingPdf(true);
     try {
       const payload = {
@@ -129,11 +130,11 @@ export function PlanCheque() {
 
   return (
     <div className="space-y-5">
-      {/* CLIENTE (OPCIONAL) — mismo cuadro que el Plan Safra */}
-      <Section title="CLIENTE (OPCIONAL)" icon={<User className="h-4 w-4" />}>
+      {/* CLIENTE — el Nombre es OBLIGATORIO para generar el presupuesto */}
+      <Section title="CLIENTE" icon={<User className="h-4 w-4" />}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field
-            label="Nombre completo"
+            label="Nombre completo *"
             value={clienteNombre}
             onChange={(v) => setClienteField("Nombre", v)}
             placeholder="Juan Pérez"
@@ -161,8 +162,8 @@ export function PlanCheque() {
           />
         </div>
         <p className="text-[11px] text-stone-400 mt-2">
-          Todos los campos del cliente son opcionales. El plan se puede armar sin
-          estos datos.
+          El Nombre del cliente es obligatorio para generar el presupuesto. Los
+          demás campos son opcionales.
         </p>
       </Section>
 
@@ -315,14 +316,19 @@ export function PlanCheque() {
         </Section>
       )}
 
-      {/* BOTONES */}
+      {/* BOTONES (GENERAR bloqueado sin Nombre del cliente) */}
+      {!clienteNombre.trim() && (
+        <p className="text-xs font-semibold text-amber-700 text-center">
+          Completá el Nombre del cliente para habilitar el botón GENERAR PRESUPUESTO.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <button onClick={() => { if (confirm("¿Vaciar el plan con cheque?")) { clear(); toast.success("Plan vaciado"); } }}
           className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all hover:scale-[1.01] hover:brightness-110"
           style={{ backgroundColor: "#b91c1c", boxShadow: "0 10px 25px -8px rgba(185, 28, 28, 0.45)" }}>
           <Trash2 className="h-4 w-4" />LIMPIAR
         </button>
-        <button onClick={handleGenerarPDF} disabled={generatingPdf || resultados.length === 0}
+        <button onClick={handleGenerarPDF} disabled={generatingPdf || resultados.length === 0 || !clienteNombre.trim()}
           className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:brightness-110"
           style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`, color: AZUL_OSCURO, boxShadow: "0 8px 20px -8px rgba(217, 184, 107, 0.55)" }}>
           <FileText className="h-4 w-4" />GENERAR PDF

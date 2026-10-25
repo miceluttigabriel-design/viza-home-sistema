@@ -223,6 +223,10 @@ export function PlanSafra() {
       toast.error("No hay productos para generar el PDF");
       return;
     }
+    if (!clienteNombre.trim()) {
+      toast.error("Completá el Nombre del cliente para generar el presupuesto");
+      return;
+    }
     // Validar que ningún refuerzo supere mes 18
     const refuerzosFueraDePlazo = refuerzos.filter((r) => r.mes > 18 || r.mes < 1);
     if (refuerzosFueraDePlazo.length > 0) {
@@ -339,11 +343,11 @@ export function PlanSafra() {
 
   return (
     <div className="space-y-5">
-      {/* === B. CLIENTE (OPCIONAL) === */}
-      <Section title="CLIENTE (OPCIONAL)" icon={<User className="h-4 w-4" />}>
+      {/* === B. CLIENTE — el Nombre es OBLIGATORIO para generar el presupuesto === */}
+      <Section title="CLIENTE" icon={<User className="h-4 w-4" />}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field
-            label="Nombre completo"
+            label="Nombre completo *"
             value={clienteNombre}
             onChange={(v) => setClienteField("Nombre", v)}
             placeholder="Juan Pérez"
@@ -371,8 +375,8 @@ export function PlanSafra() {
           />
         </div>
         <p className="text-[11px] text-stone-400 mt-2">
-          Todos los campos del cliente son opcionales. El plan se puede armar sin
-          estos datos.
+          El Nombre del cliente es obligatorio para generar el presupuesto. Los
+          demás campos son opcionales.
         </p>
       </Section>
 
@@ -802,7 +806,12 @@ export function PlanSafra() {
         </Section>
       )}
 
-      {/* === I. BOTONES === */}
+      {/* === I. BOTONES (GENERAR bloqueado sin Nombre del cliente) === */}
+      {!clienteNombre.trim() && (
+        <p className="text-xs font-semibold text-amber-700 text-center">
+          Completá el Nombre del cliente para habilitar el botón GENERAR PRESUPUESTO.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* CALCULAR */}
         <button
@@ -835,7 +844,7 @@ export function PlanSafra() {
         {/* GENERAR PDF */}
         <button
           onClick={handleGenerarPDF}
-          disabled={generatingPdf || productos.length === 0 || !cumple50 || !cuadra || refuerzos.some(r => r.mes > 18 || r.mes < 1)}
+          disabled={generatingPdf || productos.length === 0 || !cumple50 || !cuadra || !clienteNombre.trim() || refuerzos.some(r => r.mes > 18 || r.mes < 1)}
           className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:brightness-110"
           style={{
             backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,

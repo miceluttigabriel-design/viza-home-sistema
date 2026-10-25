@@ -569,6 +569,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       toast.error("Calculá el presupuesto primero");
       return;
     }
+    if (!cliente.nombre.trim()) {
+      toast.error("Completá el Nombre del cliente para generar el presupuesto");
+      return;
+    }
     // ESCENARIO D: Si ninguna opción está marcada, NO bloqueamos la generación
     // del PDF. El PDF mostrará un mensaje "Consulte opciones de financiación"
     // en lugar de las secciones de planes. (Antes se bloqueaba con toast.error.)
@@ -868,10 +872,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
 
         {viewMode === "cotizador" && (
         <>
-        {/* 1. CLIENTE (OPCIONAL) */}
-        <Section title="CLIENTE (OPCIONAL)" icon={<User className="h-4 w-4" />}>
+        {/* 1. CLIENTE — el Nombre es OBLIGATORIO para generar el presupuesto */}
+        <Section title="CLIENTE" icon={<User className="h-4 w-4" />}>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Nombre completo" value={cliente.nombre} onChange={(v) => setClienteField("nombre", v)} placeholder="Juan Pérez" />
+            <Field label="Nombre completo *" value={cliente.nombre} onChange={(v) => setClienteField("nombre", v)} placeholder="Juan Pérez" />
             <Field label="Teléfono / WhatsApp" value={cliente.telefono} onChange={(v) => setClienteField("telefono", v)} placeholder="+598 99 123 456" />
             <Field label="Documento (opcional)" value={cliente.documento} onChange={(v) => setClienteField("documento", v)} placeholder="CI o RUC" />
           </div>
@@ -882,7 +886,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             <Field label="Observaciones comerciales" value={cliente.observaciones} onChange={(v) => setClienteField("observaciones", v)} placeholder="Forma de pago, plazo de entrega, etc." textarea />
           </div>
           <p className="text-[11px] text-stone-400 mt-2">
-            Todos los campos del cliente son opcionales. La cotización se puede armar sin estos datos.
+            El Nombre del cliente es obligatorio para generar el presupuesto. Los demás campos son opcionales.
           </p>
         </Section>
 
@@ -1434,10 +1438,15 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 </div>
               </div>
 
-              {/* 7. BOTÓN GENERAR PDF */}
+              {/* 7. BOTÓN GENERAR PDF (bloqueado sin Nombre del cliente) */}
+              {!cliente.nombre.trim() && (
+                <p className="text-xs font-semibold text-amber-700 text-center mt-4 mb-1">
+                  Completá el Nombre del cliente para habilitar el botón GENERAR PRESUPUESTO.
+                </p>
+              )}
               <button
                 onClick={handleGenerarPDF}
-                disabled={generatingPdf}
+                disabled={generatingPdf || !cliente.nombre.trim()}
                 className="w-full mt-5 h-14 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 transition-all hover:brightness-110"
                 style={{
                   backgroundImage: `linear-gradient(to right, ${AZUL_OSCURO}, ${AZUL})`,

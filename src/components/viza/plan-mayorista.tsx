@@ -148,6 +148,10 @@ export function PlanMayorista() {
       toast.error("No hay productos para generar el PDF");
       return;
     }
+    if (!clienteNombre.trim()) {
+      toast.error("Completá el Nombre del cliente para generar el presupuesto");
+      return;
+    }
     // Doble control (la UI ya bloquea agregarlos): ningún producto sin precio técnico.
     const sinPrecio = productos.filter((p) => p.priceTecnico <= 0);
     if (sinPrecio.length > 0) {
@@ -206,11 +210,11 @@ export function PlanMayorista() {
 
   return (
     <div className="space-y-5">
-      {/* === A. CLIENTE (OPCIONAL) - idéntico al Plan Safra/Cheque === */}
-      <Section title="CLIENTE (OPCIONAL)" icon={<User className="h-4 w-4" />}>
+      {/* === A. CLIENTE — el Nombre es OBLIGATORIO para generar el presupuesto === */}
+      <Section title="CLIENTE" icon={<User className="h-4 w-4" />}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field
-            label="Nombre completo"
+            label="Nombre completo *"
             value={clienteNombre}
             onChange={(v) => setClienteField("Nombre", v)}
             placeholder="Juan Pérez"
@@ -238,8 +242,8 @@ export function PlanMayorista() {
           />
         </div>
         <p className="text-[11px] text-stone-400 mt-2">
-          Todos los campos del cliente son opcionales. El presupuesto se puede
-          armar sin estos datos.
+          El Nombre del cliente es obligatorio para generar el presupuesto. Los
+          demás campos son opcionales.
         </p>
       </Section>
 
@@ -479,7 +483,12 @@ export function PlanMayorista() {
         />
       </Section>
 
-      {/* === C. BOTONES === */}
+      {/* === C. BOTONES (GENERAR bloqueado sin Nombre del cliente) === */}
+      {!clienteNombre.trim() && (
+        <p className="text-xs font-semibold text-amber-700 text-center">
+          Completá el Nombre del cliente para habilitar el botón GENERAR PRESUPUESTO.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* LIMPIAR */}
         <button
@@ -497,7 +506,7 @@ export function PlanMayorista() {
         {/* GENERAR PDF */}
         <button
           onClick={handleGenerarPDF}
-          disabled={generatingPdf || productos.length === 0}
+          disabled={generatingPdf || productos.length === 0 || !clienteNombre.trim()}
           className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:brightness-110"
           style={{
             backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
