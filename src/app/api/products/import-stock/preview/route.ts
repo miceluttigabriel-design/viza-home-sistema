@@ -3,6 +3,13 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import ExcelJS from "exceljs";
+import {
+  computeDbMarginStats,
+  pickPromedio,
+  computeDbSafraStats,
+  pickSafraPromedio,
+  formatSafra,
+} from "../../import-margins/shared";
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -207,12 +214,20 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Verificar cuáles SKUs ya existen en la base (consulta masiva)
+    // costGs se lee para poder mostrar en la vista previa el CAMBIO DE COSTO
+    // (COSTO GS actual → nuevo) de cada producto existente.
     const codigosList = Object.keys(grouped);
     const existentes = await db.product.findMany({
       where: { sku: { in: codigosList } },
-      select: { sku: true, stock: true, name: true },
+      select: { sku: true, stock: true, name: true, costGs: true },
     });
     const existentesMap = new Map(existentes.map((p) => [p.sku, p]));
+
+    // 6.b Márgenes automáticas + SAFRA automática que recibirían los NUEVOS
+    // (mismas funciones que usa el apply: promedio por sub-grupo → general,
+    // calculado sobre los productos que ya tienen margen/SAFRA en la BD).
+    const stats = await computeDbMarginStats();
+    const safraStats = await computeDbSafraStats();
 
     // 7. Construir preview: separar en `nuevos` y `actualizados`
     const nuevos: Array<{
@@ -222,6 +237,10 @@ export async function POST(req: NextRequest) {
       subGrupo: string | null;
       stock: number;
       costProd: number | null;
+      // Automáticas que se le van a asignar al crearlo (informativo):
+      margenAuto: number | null; // % Contado promedio (fracción 0.35 = 35%)
+      margenFuente: string | null; // "grupo X" | "promedio general"
+      safraAuto: string | null; // % SAFRA promedio (tasa Plan SAFRA)
     }> = [];
 
     const actualizados: Array<{
@@ -229,21 +248,29 @@ export async function POST(req: NextRequest) {
       nameActual: string | null;
       stockActual: number;
       stockNuevo: number;
+      // Garantía visual: en existentes SOLO se tocan COSTO GS y STOCK
+      costoActual: number | null; // COSTO GS actual en la BD
+      costoNuevo: number | null; // COSTO UNIT. ULTIMA COMPRA del Excel (null = no toca costo)
     }> = [];
 
     for (const codigo of codigosList) {
       const data = grouped[codigo];
       const existente = existentesMap.get(codigo);
       if (existente) {
-        // SKU ya existe en la base → actualizar stock (REEMPLAZAR, no sumar)
+        // SKU ya existe en la base → actualizar SOLO costo (COSTO GS) + stock
+        // (márgenes, precios, descripciones y todo lo demás queda intocado)
         actualizados.push({
           sku: codigo,
           nameActual: existente.name,
           stockActual: existente.stock,
           stockNuevo: data.stockSumado,
+          costoActual: existente.costGs ?? null,
+          costoNuevo: data.costProd,
         });
       } else {
-        // SKU nuevo → crear producto
+        // SKU nuevo → crear producto con márgenes + SAFRA automáticas
+        const pick = pickPromedio(stats, { subGrupo: data.subGrupo, tipo: null });
+        const pickSafra = pickSafraPromedio(safraStats, { subGrupo: data.subGrupo, tipo: null });
         nuevos.push({
           sku: codigo,
           name: data.name,
@@ -251,6 +278,9 @@ export async function POST(req: NextRequest) {
           subGrupo: data.subGrupo,
           stock: data.stockSumado,
           costProd: data.costProd,
+          margenAuto: pick ? pick.avg.m : null,
+          margenFuente: pick ? pick.fuente : null,
+          safraAuto: pickSafra ? formatSafra(pickSafra.avg) : null,
         });
       }
     }

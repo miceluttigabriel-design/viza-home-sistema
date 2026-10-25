@@ -289,12 +289,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     codigosUnicos: number;
     nuevosCount: number;
     actualizadosCount: number;
-    nuevos: Array<{ sku: string; name: string | null; referencia: string | null; subGrupo: string | null; stock: number; costProd: number | null }>;
-    actualizados: Array<{ sku: string; nameActual: string | null; stockActual: number; stockNuevo: number }>;
+    nuevos: Array<{ sku: string; name: string | null; referencia: string | null; subGrupo: string | null; stock: number; costProd: number | null; margenAuto: number | null; margenFuente: string | null; safraAuto: string | null }>;
+    actualizados: Array<{ sku: string; nameActual: string | null; stockActual: number; stockNuevo: number; costoActual: number | null; costoNuevo: number | null }>;
     errores: string[];
   } | null>(null);
   const [importApplying, setImportApplying] = useState(false);
-  const [importResult, setImportResult] = useState<{ creados: number; actualizados: number; margenesAutomaticas: number; errores: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ creados: number; actualizados: number; conCostoActualizado?: number; margenesAutomaticas: number; conSafraAutomatica?: number; errores: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ─── IMPORTAR MÁRGENES (planilla LISTA VIZA HOME, hoja "base") ───
@@ -1775,13 +1775,21 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         <p className="text-stone-500 text-xs font-semibold uppercase">Productos nuevos creados</p>
                         <p className="text-2xl font-black text-emerald-700">{importResult.creados}</p>
                       </div>
-                      <div className="bg-white rounded-lg p-3 border border-emerald-200">
-                        <p className="text-stone-500 text-xs font-semibold uppercase">Stocks actualizados</p>
+                      <div className="bg-white rounded-lg p-3 border border-blue-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Costo + stock actualizados</p>
                         <p className="text-2xl font-black text-blue-700">{importResult.actualizados}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-sky-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Con costo nuevo aplicado</p>
+                        <p className="text-2xl font-black text-sky-700">{importResult.conCostoActualizado ?? 0}</p>
                       </div>
                       <div className="bg-white rounded-lg p-3 border border-sky-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Con margen automática</p>
                         <p className="text-2xl font-black text-sky-700">{importResult.margenesAutomaticas ?? 0}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-violet-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Con SAFRA automática</p>
+                        <p className="text-2xl font-black text-violet-700">{importResult.conSafraAutomatica ?? 0}</p>
                       </div>
                     </div>
                   </div>
@@ -1813,12 +1821,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Productos nuevos</p>
                       <p className="text-3xl font-black text-emerald-700">{importPreview.nuevosCount}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Se van a CREAR con SKU, descripción, codViza, subGrupo, stock y costo</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Se van a CREAR con descripción, stock, costo, MÁRGENES AUTOMÁTICAS y SAFRA automática (promedio de su sub-grupo)</p>
                     </div>
                     <div className="rounded-lg p-3 border border-blue-200 bg-blue-50">
-                      <p className="text-stone-500 text-xs font-semibold uppercase">Stocks actualizados</p>
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Costo + stock actualizados</p>
                       <p className="text-3xl font-black text-blue-700">{importPreview.actualizadosCount}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Solo se REEMPLAZA el campo stock (resto intocado)</p>
+                      <p className="text-[10px] text-stone-500 mt-1">SOLO se tocan COSTO GS y STOCK; márgenes, precios, descripciones y todo lo editado queda INTACTO</p>
                     </div>
                   </div>
 
@@ -1830,7 +1838,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   {importPreview.nuevos.length > 0 && (
                     <div>
                       <p className="text-sm font-bold text-stone-800 mb-2">
-                        Productos nuevos a crear ({importPreview.nuevos.length})
+                        Productos nuevos a crear con margen + SAFRA automáticas ({importPreview.nuevos.length})
                       </p>
                       <div className="border border-stone-200 rounded-lg overflow-hidden">
                         <table className="w-full text-xs">
@@ -1838,9 +1846,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                             <tr>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">SKU</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
-                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Referencia</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock</th>
-                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo Prod.</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Margen auto.</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">SAFRA</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1848,10 +1857,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               <tr key={i} className="border-t border-stone-100">
                                 <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{p.sku}</td>
                                 <td className="px-2 py-1.5 text-stone-700">{p.name || "—"}</td>
-                                <td className="px-2 py-1.5 text-stone-600">{p.referencia || "—"}</td>
                                 <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700 font-semibold">{p.stock}</td>
                                 <td className="px-2 py-1.5 text-right tabular-nums text-stone-700">
                                   {p.costProd != null ? p.costProd.toLocaleString("es-PY") : "—"}
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-sky-700" title={p.margenFuente || undefined}>
+                                  {p.margenAuto != null ? `${(p.margenAuto * 100).toFixed(2)}%` : "—"}
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-violet-700">
+                                  {p.safraAuto != null ? `${p.safraAuto}%` : "—"}
                                 </td>
                               </tr>
                             ))}
@@ -1870,7 +1884,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   {importPreview.actualizados.length > 0 && (
                     <div>
                       <p className="text-sm font-bold text-stone-800 mb-2">
-                        Stocks a actualizar ({importPreview.actualizados.length})
+                        Costo + stock a actualizar ({importPreview.actualizados.length})
                       </p>
                       <div className="border border-stone-200 rounded-lg overflow-hidden">
                         <table className="w-full text-xs">
@@ -1881,11 +1895,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock actual</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Stock nuevo</th>
                               <th className="text-center px-2 py-1.5 font-semibold text-stone-600">Cambio</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo GS actual</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo GS nuevo</th>
                             </tr>
                           </thead>
                           <tbody>
                             {importPreview.actualizados.slice(0, 8).map((p, i) => {
                               const diff = p.stockNuevo - p.stockActual;
+                              const costoCambia = p.costoNuevo != null && p.costoActual != null && p.costoNuevo !== p.costoActual;
                               return (
                                 <tr key={i} className="border-t border-stone-100">
                                   <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{p.sku}</td>
@@ -1896,6 +1913,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                     <span className={diff > 0 ? "text-emerald-600" : diff < 0 ? "text-rose-600" : "text-stone-500"}>
                                       {diff > 0 ? "+" : ""}{diff}
                                     </span>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">
+                                    {p.costoActual != null ? p.costoActual.toLocaleString("es-PY") : "—"}
+                                  </td>
+                                  <td className={`px-2 py-1.5 text-right tabular-nums font-semibold ${costoCambia ? "text-sky-700" : "text-stone-500"}`}>
+                                    {p.costoNuevo != null ? p.costoNuevo.toLocaleString("es-PY") : "sin costo nuevo"}
                                   </td>
                                 </tr>
                               );

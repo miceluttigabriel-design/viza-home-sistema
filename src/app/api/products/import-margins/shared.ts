@@ -313,3 +313,116 @@ export function buildAutoMarginUpdate(
     { cod: "", m: avg.m, y: avg.y, z: avg.z, aa: avg.aa, vt: null, mt: null }
   );
 }
+
+// ════════════════════════════════════════════════════════════════════
+// SAFRA AUTOMÁTICA (promedio por tipo / sub-grupo / general)
+// ════════════════════════════════════════════════════════════════════
+// El Plan SAFRA lee el campo `safra` del producto (SOLO LECTURA, col CL de la
+// planilla) como TASA DE INTERÉS MENSUAL (%) del cronograma. La planilla de
+// inventario (hoja "Consulta") NO trae SAFRA, así que los productos NUEVOS
+// creados por la importación de inventario reciben el PROMEDIO de SAFRA de los
+// productos del mismo TIPO (o sub-grupo, o general) que ya tienen SAFRA en la
+// BD. Mismo criterio de las márgenes automáticas de arriba.
+// REGLA: SAFRA NO participa de la cadena de costos (es independiente).
+
+// Parsea el string SAFRA de la BD ("7", "4.5", "null", "") a número.
+// Devuelve null cuando no representa un % usable (así no contamina el promedio).
+export function parseSafraPct(s: string | null | undefined): number | null {
+  if (s === null || s === undefined) return null;
+  const t = String(s).trim();
+  if (!t || t.toLowerCase() === "null") return null;
+  const n = parseFloat(t.replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Formatea el promedio como el string limpio que guarda la BD:
+// 7 → "7", 6.5 → "6.5", 6.6666… → "6.67" (máximo 2 decimales, sin ceros extra)
+export function formatSafra(n: number): string {
+  const r = Math.round(n * 100) / 100;
+  return String(r);
+}
+
+export interface SafraPromedio {
+  avg: number; // promedio % SAFRA (tasa de interés mensual)
+  count: number; // cuántos productos se promediaron
+}
+
+export interface SafraStats {
+  byTipo: Map<string, SafraPromedio>;
+  bySubGrupo: Map<string, SafraPromedio>;
+  global: SafraPromedio | null;
+}
+
+// Promedios de SAFRA calculados desde la BD (solo productos con SAFRA usable)
+export async function computeDbSafraStats(): Promise<SafraStats> {
+  const rows = await db.product.findMany({
+    where: { safra: { not: null } },
+    select: { tipo: true, subGrupo: true, safra: true },
+  });
+
+  const groupsTipo = new Map<string, number[]>();
+  const groupsSub = new Map<string, number[]>();
+  const all: number[] = [];
+
+  for (const r of rows) {
+    const v = parseSafraPct(r.safra);
+    if (v === null) continue;
+    all.push(v);
+    const t = normalizeKey(r.tipo);
+    if (t) {
+      const arr = groupsTipo.get(t) || [];
+      arr.push(v);
+      groupsTipo.set(t, arr);
+    }
+    const s = normalizeKey(r.subGrupo);
+    if (s) {
+      const arr = groupsSub.get(s) || [];
+      arr.push(v);
+      groupsSub.set(s, arr);
+    }
+  }
+
+  const avgOf = (values: number[]): SafraPromedio | null => {
+    if (values.length === 0) return null;
+    const sum = values.reduce((a, b) => a + b, 0);
+    return { avg: round6(sum / values.length), count: values.length };
+  };
+
+  const byTipo = new Map<string, SafraPromedio>();
+  for (const [k, arr] of groupsTipo) {
+    const avg = avgOf(arr);
+    if (avg) byTipo.set(k, avg);
+  }
+  const bySubGrupo = new Map<string, SafraPromedio>();
+  for (const [k, arr] of groupsSub) {
+    const avg = avgOf(arr);
+    if (avg) bySubGrupo.set(k, avg);
+  }
+
+  return { byTipo, bySubGrupo, global: avgOf(all) };
+}
+
+// Elige el promedio de SAFRA para un producto: TIPO → SUB-GRUPO → GENERAL
+export function pickSafraPromedio(
+  stats: SafraStats,
+  keys: { tipo?: string | null; subGrupo?: string | null }
+): { avg: number; count: number; fuente: string } | null {
+  const t = normalizeKey(keys.tipo);
+  if (t && stats.byTipo.has(t)) {
+    const p = stats.byTipo.get(t)!;
+    return { avg: p.avg, count: p.count, fuente: `tipo ${t}` };
+  }
+  const s = normalizeKey(keys.subGrupo);
+  if (s && stats.bySubGrupo.has(s)) {
+    const p = stats.bySubGrupo.get(s)!;
+    return { avg: p.avg, count: p.count, fuente: `grupo ${s}` };
+  }
+  if (stats.global) {
+    return {
+      avg: stats.global.avg,
+      count: stats.global.count,
+      fuente: "promedio general",
+    };
+  }
+  return null;
+}
