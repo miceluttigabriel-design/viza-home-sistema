@@ -10,6 +10,19 @@ import { useChequeStore, parseSafra, addDays } from "@/store/cheque";
 import { formatPYG } from "@/lib/format";
 import { CostoInterno, extractCosto } from "./costo-interno";
 
+// FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
+// momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
+// FECHA DE EMISIÓN y para VÁLIDO HASTA (emisión + 10 días), así el presupuesto
+// muestra siempre el día real en que se emite (el servidor vive en UTC).
+function emisionHoy(): { fecha: string; hora: string } {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return {
+    fecha: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+    hora: `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,
+  };
+}
+
 const AZUL = "#155789";
 const AZUL_OSCURO = "#0d3d5e";
 const DORADO = "#D9B86B";
@@ -99,8 +112,9 @@ export function PlanCheque() {
     if (!clienteNombre.trim()) { toast.error("Completá el Nombre del cliente para generar el presupuesto"); return; }
     setGeneratingPdf(true);
     try {
+      const em = emisionHoy(); // emisión = día/hora real de generar el presupuesto
       const payload = {
-        cliente: { nombre: clienteNombre, telefono: clienteTelefono, documento: clienteDocumento, observaciones: clienteObservaciones, fecha: fechaEmision },
+        cliente: { nombre: clienteNombre, telefono: clienteTelefono, documento: clienteDocumento, observaciones: clienteObservaciones, fecha: em.fecha, hora: em.hora },
         productos: productos.map(p => ({ sku: p.sku, name: p.name, quantity: p.quantity, priceContado: p.priceContado, subtotalContado: p.priceContado * p.quantity, safraPct: p.safraPct })),
         cascoAplicado: !!cascoEnCarrito, cascoValor: cascoValorExacto, cascoDescripcion: cascoEnCarrito?.name || "",
         totalContadoBruto,

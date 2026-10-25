@@ -26,6 +26,7 @@ interface SafraPdfPayload {
     documento?: string; // RUC o CI (opcional)
     observaciones: string;
     fecha: string; // ISO fecha de emisión
+    hora?: string; // HH:MM:SS local del vendedor (momento de generar el PDF)
   };
   productos: SafraPdfProducto[];
   totalContado: number;
@@ -67,6 +68,25 @@ interface SafraPdfPayload {
 
 
 
+
+// FECHA DE EMISIÓN: se usa la fecha/hora LOCAL que envía el navegador del
+// vendedor en el momento exacto de generar el PDF (cliente.fecha / cliente.hora).
+// El servidor vive en UTC y puede estar en otro día/hora que Uruguay (UTC-3),
+// por eso new Date() queda solo como fallback si el payload no trae fecha.
+// Formato esperado: fecha "YYYY-MM-DD", hora "HH:MM:SS".
+function parseFechaEmision(fecha?: string, hora?: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((fecha ?? "").trim());
+  if (!m) return null;
+  let hh = 12; let mm = 0; let ss = 0;
+  const t = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec((hora ?? "").trim());
+  if (t) {
+    hh = Number(t[1]);
+    mm = Number(t[2]);
+    ss = Number(t[3] ?? 0);
+  }
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hh, mm, ss);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 function generateQuoteNumber(): string {
   const now = new Date();
@@ -131,7 +151,7 @@ export async function POST(req: NextRequest) {
     const contentW = pageW - margin * 2;
 
     // ===== ENCABEZADO (nuevo diseño con logo + wave + 3 cajas) =====
-    const now = new Date();
+    const now = parseFechaEmision(body.cliente?.fecha, body.cliente?.hora) ?? new Date();
     const headerBottom = drawHeader(doc, pageW, margin, contentW, generateQuoteNumber(), "SAFRA", now, formatDateTimeEs, formatDateEs);
 
     // ===== DATOS DEL CLIENTE (si hay) =====
@@ -211,7 +231,7 @@ export async function POST(req: NextRequest) {
     let xx = margin + 6;
     doc.text("#", xx, y + 16);
     xx += colN;
-    doc.text("SKU", xx, y + 16);
+    doc.text("COD", xx, y + 16);
     xx += colSku;
     doc.text("DESCRIPCIÓN", xx, y + 16);
     xx += colName;

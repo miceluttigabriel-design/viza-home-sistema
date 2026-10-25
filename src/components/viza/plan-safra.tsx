@@ -22,6 +22,19 @@ import { usePlanSafraStore, parseSafra } from "@/store/plan-safra";
 import { formatPYG } from "@/lib/format";
 import { CostoInterno, extractCosto } from "./costo-interno";
 
+// FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
+// momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
+// FECHA DE EMISIÓN y para VÁLIDO HASTA (emisión + 10 días), así el presupuesto
+// muestra siempre el día real en que se emite (el servidor vive en UTC).
+function emisionHoy(): { fecha: string; hora: string } {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return {
+    fecha: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+    hora: `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,
+  };
+}
+
 // === VIZA home brand palette ===
 const AZUL = "#155789";
 const AZUL_OSCURO = "#0d3d5e";
@@ -260,13 +273,15 @@ export function PlanSafra() {
       // Asegurar que el cronograma esté actualizado antes de generar el PDF
       calcularCronograma();
 
+      const em = emisionHoy(); // emisión = día/hora real de generar el presupuesto
       const payload = {
         cliente: {
           nombre: clienteNombre,
           telefono: clienteTelefono,
           documento: clienteDocumento,
           observaciones: clienteObservaciones,
-          fecha: fechaEmision,
+          fecha: em.fecha,
+          hora: em.hora,
         },
         productos: productos.map((p) => ({
           sku: p.sku,

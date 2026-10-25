@@ -36,6 +36,19 @@ import { PlanMayorista } from "./plan-mayorista";
 import { CostoInterno, extractCosto } from "./costo-interno";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 
+// FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
+// momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
+// FECHA DE EMISIÓN y para VÁLIDO HASTA (emisión + 10 días), así el presupuesto
+// muestra siempre el día real en que se emite (el servidor vive en UTC).
+function emisionHoy(): { fecha: string; hora: string } {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return {
+    fecha: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+    hora: `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,
+  };
+}
+
 // === VIZA home brand palette ===
 const AZUL = "#155789";
 const AZUL_OSCURO = "#0d3d5e";
@@ -633,13 +646,15 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             }))
           : null;
 
+      const em = emisionHoy(); // emisión = día/hora real de generar el presupuesto
       const payload = {
         cliente: {
           nombre: cliente.nombre,
           telefono: cliente.telefono,
           documento: cliente.documento,
           observaciones: cliente.observaciones,
-          fecha: cliente.fecha,
+          fecha: em.fecha,
+          hora: em.hora,
         },
         items: items.map((it) => ({
           sku: it.sku,
