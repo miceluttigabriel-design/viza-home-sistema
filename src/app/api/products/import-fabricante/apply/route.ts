@@ -2,11 +2,13 @@
 // Aplica el FABRICANTE y la MARCA del Excel (planilla LISTA VIZA HOME, hoja
 // "base") a los productos que coinciden por COD (sku o codViza).
 // REGLAS DE SEGURIDAD (nada más se toca):
-//   - SOLO se actualizan los campos fabricante y brand (MARCA).
-//   - La MARCA explícita del Excel SIEMPRE gana: se escribe en brand aunque
-//     ya tuviera el espejo del fabricante de una importación anterior.
-//   - Si la fila NO trae MARCA, brand se completa con el fabricante SOLO si
-//     está vacío (espejo del catálogo de vendedores, convención del sistema).
+//   - SOLO se actualizan los campos fabricante, marca y (espejo) brand.
+//   - La MARCA del Excel (col CT) se escribe en el campo "marca": el mismo
+//     campo que usan la importación de productos y el export, y el que muestra
+//     la columna MARCA de la tabla admin. SIEMPRE gana sobre el valor previo.
+//   - brand (catálogo de vendedores) queda como espejo del FABRICANTE, igual
+//     que en la importación de productos (brand = FABRICANTE): se completa
+//     SOLO si está vacío, nunca sobrescribe un brand existente.
 //   - NUNCA se crean productos.
 //   - NUNCA se tocan costos, márgenes, precios, stock, etiquetas, ni ningún
 //     otro campo.
@@ -42,12 +44,11 @@ export async function POST(req: NextRequest) {
 
     const { byCod } = await fetchMatchedProducts(rows);
 
-    // Construir updates: solo fabricante y/o brand (MARCA)
+    // Construir updates: solo fabricante, marca y/o brand (espejo del fabricante)
     const updates: Array<{
       id: string;
       sku: string;
       data: Record<string, string>;
-      traeMarca: boolean;
     }> = [];
     const noEncontrados: string[] = [];
     let yaIgual = 0;
@@ -58,11 +59,12 @@ export async function POST(req: NextRequest) {
         noEncontrados.push(row.cod);
         continue;
       }
+      const marcaActual = (product.marca ?? "").trim();
       const brandActual = (product.brand ?? "").trim();
       const fabCambia =
         row.fabricante !== null &&
         (product.fabricante ?? "").trim() !== row.fabricante;
-      const marcaCambia = row.marca !== null && brandActual !== row.marca;
+      const marcaCambia = row.marca !== null && marcaActual !== row.marca;
       if (!fabCambia && !marcaCambia) {
         yaIgual++;
         continue;
@@ -72,18 +74,21 @@ export async function POST(req: NextRequest) {
         data.fabricante = row.fabricante;
       }
       if (marcaCambia && row.marca !== null) {
-        // MARCA explícita del Excel: siempre gana sobre el espejo anterior
-        data.brand = row.marca;
-      } else if (!brandActual && fabCambia && row.fabricante !== null) {
-        // La fila no trae MARCA: espejo del catálogo de vendedores, SOLO si
-        // brand está vacío (misma convención de la versión anterior)
+        // MARCA explícita del Excel: va al campo "marca" (col CT), el mismo
+        // campo que usan la importación de productos y el export. Siempre gana.
+        data.marca = row.marca;
+      }
+      if (!brandActual && fabCambia && row.fabricante !== null) {
+        // Espejo del catálogo de vendedores (igual que la importación de
+        // productos: brand = FABRICANTE), SOLO si brand está vacío; nunca
+        // sobrescribe un brand existente.
         data.brand = row.fabricante;
       }
       if (Object.keys(data).length === 0) {
         yaIgual++;
         continue;
       }
-      updates.push({ id: product.id, sku: product.sku, data, traeMarca: row.marca !== null });
+      updates.push({ id: product.id, sku: product.sku, data });
     }
 
     // Ejecutar updates en lotes paralelos (rápido incluso con ~3.500 productos,
@@ -100,10 +105,8 @@ export async function POST(req: NextRequest) {
       results.forEach((r, idx) => {
         if (r.status === "fulfilled") {
           actualizados++;
-          if (batch[idx].data.brand !== undefined) {
-            if (batch[idx].traeMarca) conMarcaNueva++;
-            else conBrandEspejo++;
-          }
+          if (batch[idx].data.marca !== undefined) conMarcaNueva++;
+          if (batch[idx].data.brand !== undefined) conBrandEspejo++;
         } else {
           const sku = batch[idx].sku;
           errores.push(

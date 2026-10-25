@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         row.fabricante !== null &&
         (product.fabricante ?? "").trim() !== row.fabricante;
       const marcaCambia =
-        row.marca !== null && (product.brand ?? "").trim() !== row.marca;
+        row.marca !== null && (product.marca ?? "").trim() !== row.marca;
       if (!fabCambia && !marcaCambia) {
         // Ya tiene exactamente esos valores: queda intocado
         yaIgual++;
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
           name: product.name,
           fabricanteActual: product.fabricante,
           fabricanteNuevo: fabCambia ? row.fabricante : null,
-          marcaActual: product.brand,
+          marcaActual: product.marca,
           marcaNuevo: marcaCambia ? row.marca : null,
         });
       }

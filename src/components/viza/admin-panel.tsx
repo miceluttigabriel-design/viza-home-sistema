@@ -194,13 +194,16 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   // Datos principales (pegados al SKU)
   { key: "referencia", label: "REFERENCIA", type: "text", group: "DATOS" },
-  // Columnas CATEGORIA, DIVISION, TIPO, MARCA, MODELO y PRODUCTO
-  // ocultas de esta tabla a pedido del usuario (los datos siguen en la base).
+  // Columnas CATEGORIA, DIVISION, TIPO, MODELO y PRODUCTO ocultas de esta
+  // tabla a pedido del usuario (los datos siguen en la base).
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
-  // FABRICANTE restaurada a pedido del usuario: el campo ya existía en la base
-  // de datos y en import/export Excel; ahora también se muestra y es editable
-  // en esta tabla (filtro por columna y búsqueda global ya lo soportaban).
+  // FABRICANTE y MARCA restauradas a pedido del usuario: los campos ya
+  // existían en la base de datos y en import/export Excel; ahora también se
+  // muestran y son editables en esta tabla (filtro por columna y búsqueda
+  // global ya lo soportaban). MARCA es la col CT del Excel: el botón IMPORTAR
+  // FABRICANTES Y MARCAS escribe aquí las marcas de la planilla.
   { key: "fabricante", label: "FABRICANTE", type: "text", group: "DATOS FINALES" },
+  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   // STOCK movida ENTRE COD SHOW y Costo R$ (atras de Costo R$ = antes, en frente de COD SHOW = despues)
@@ -352,9 +355,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // ─── IMPORTAR FABRICANTES Y MARCAS (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES: el Excel se procesa EN EL NAVEGADOR
   // (SheetJS) y solo se envía un JSON compacto { cod, fabricante, marca }. La API
-  // solo actualiza FABRICANTE y MARCA (brand, el catálogo de vendedores); nada
-  // más se toca. La MARCA explícita del Excel siempre gana; si la fila no trae
-  // MARCA, brand se completa con el fabricante SOLO si está vacío (espejo).
+  // solo actualiza FABRICANTE y MARCA (campo marca, col CT — el mismo que usan
+  // la importación de productos y el export, y el que muestra la columna MARCA
+  // de esta tabla); nada más se toca. La MARCA explícita del Excel siempre gana;
+  // el catálogo de vendedores (brand) queda como espejo del FABRICANTE SOLO
+  // donde estaba vacío (convención del sistema).
   const [fabImportOpen, setFabImportOpen] = useState(false);
   const [fabImportLoading, setFabImportLoading] = useState(false);
   const [fabImportPreview, setFabImportPreview] = useState<{
@@ -716,7 +721,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         throw new Error("No se encontró la hoja 'base' con columnas COD VIZA y FABRICANTE");
       }
       // Columna MARCA (opcional en planillas viejas): celdas 0 / "-" = sin marca
-      const colMarca = colMap["MARCA"] ?? -1;
+      // Se acepta también el encabezado "MARCAS" (plural) por si la planilla lo trae
+      const colMarca = colMap["MARCA"] ?? colMap["MARCAS"] ?? -1;
       if (colMarca < 0) {
         toast.info("La planilla no tiene columna MARCA: solo se importarán FABRICANTES.");
       }
@@ -2440,8 +2446,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   )}
                   <div className="text-xs text-stone-500 italic">
                     La tabla se recargó con los fabricantes y marcas nuevos. Solo se actualizaron las
-                    columnas FABRICANTE y MARCA (el catálogo de vendedores de los productos que no
-                    traían marca en la fila quedó completado con el fabricante).
+                    columnas FABRICANTE y MARCA (el catálogo de vendedores quedó como espejo del
+                    fabricante solo donde estaba vacío).
                     Costos, márgenes, precios y stock quedaron intactos.
                   </div>
                 </div>
@@ -2481,9 +2487,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   <div className="text-xs text-stone-600 bg-blue-50 rounded-lg p-3 border border-blue-200">
                     <strong>{fabImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base".
                     Se actualizan <strong>SOLO las columnas FABRICANTE y MARCA</strong> de los productos
-                    que coinciden por COD; la MARCA va al catálogo de vendedores. Si una fila no trae
-                    MARCA (0 o "-"), el catálogo de ese producto se completa con el fabricante solo si
-                    estaba vacío (convención del sistema).
+                    que coinciden por COD; la MARCA va al campo MARCA de la base (col CT, el mismo
+                    que usa la importación de productos). El catálogo de vendedores se completa con
+                    el fabricante solo donde estaba vacío (convención del sistema).
                     <span className="block mt-1">
                       <strong>No se crean productos y no se tocan</strong> costos, márgenes, precios,
                       stock, etiquetas ni ningún otro dato.

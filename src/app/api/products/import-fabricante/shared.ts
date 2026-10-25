@@ -10,9 +10,13 @@
 //     producto queda INTACTO (el importador NUNCA borra un valor existente).
 //   - En la columna MARCA de la planilla, las celdas SIN marca vienen con 0
 //     o "-" → se tratan como vacías (null).
-//   - MARCA escribe el campo "brand" de la base (el que muestra el catálogo
-//     de vendedores como MARCA). La MARCA explícita del Excel SIEMPRE gana
-//     sobre el espejo del fabricante que pudo quedar de importaciones previas.
+//   - MARCA escribe el campo "marca" de la base (col CT del Excel: el mismo
+//     campo que usan la importación de productos y el export, y el que muestra
+//     la columna MARCA de la tabla admin). La MARCA explícita del Excel
+//     SIEMPRE gana sobre cualquier valor previo del producto.
+//   - El campo "brand" (catálogo de vendedores) queda como espejo del
+//     FABRICANTE, igual que en la importación de productos (brand = FABRICANTE):
+//     se completa SOLO si está vacío, nunca sobrescribe.
 
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
@@ -119,6 +123,7 @@ export async function fetchMatchedProducts(rows: FabricanteRow[]) {
       codViza: true,
       name: true,
       fabricante: true,
+      marca: true,
       brand: true,
     },
   });
