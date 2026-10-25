@@ -1,15 +1,24 @@
-// Lógica compartida para importar VALOR ADD desde la planilla LISTA VIZA HOME
-// (hoja "base": headers en fila 2, columnas COD VIZA + "Valor Add" col S).
-// Ruta hermana de import-margins / import-fabricante: mismo mecanismo
-// (SheetJS en el navegador + JSON compacto). RUTA NUEVA Y AISLADA: no toca
-// ninguna importación existente (productos, márgenes, fabricantes, stock).
+// Lógica compartida para importar VALOR ADD y % ADD desde la planilla
+// LISTA VIZA HOME (hoja "base": headers en fila 2, columnas COD VIZA +
+// "% Add" col M + "Valor Add" col S). Ruta hermana de import-margins /
+// import-fabricante: mismo mecanismo (SheetJS en el navegador + JSON
+// compacto). RUTA NUEVA Y AISLADA: no toca ninguna importación existente
+// (productos, márgenes, fabricantes, stock).
 //
-// VALOR ADD es un INPUT de la cadena de costos (col S del Excel):
-//   ... R = MENOS DESC. V → T = Costo Prod. = ROUND((R + S)/1000)*1000
-// Por eso, a diferencia de import-fabricante (solo texto), aplicar VALOR ADD
-// recalcula la cadena de costos y los precios — EXACTAMENTE igual que cuando
-// el admin edita VALOR ADD a mano en la tabla (PUT /api/products/[id] llama
-// recalculate con los mismos campos). Acá se reutiliza esa misma fórmula.
+// % ADD (col M) y VALOR ADD (col S) son INPUTS de la cadena de costos:
+//   ... L = MENOS DESC. % → N = L + L*M (% ADD) → P = N + N*O (GASTOS ADM)
+//   → R = P - Q (VALOR DESC.) → T = Costo Prod. = ROUND((R + S)/1000)*1000
+// Por eso, a diferencia de import-fabricante (solo texto), aplicar % ADD /
+// VALOR ADD recalcula la cadena de costos y los precios — EXACTAMENTE igual
+// que cuando el admin edita % ADD o VALOR ADD a mano en la tabla (PUT
+// /api/products/[id] llama recalculate con los mismos campos). Acá se
+// reutiliza esa misma fórmula.
+//
+// Cada fila del Excel puede traer % ADD, VALOR ADD, ambos o ninguno:
+//   - % ADD viene como fracción decimal (0.25 = 25%), igual que se guarda
+//     en la base (la tabla lo muestra como 25 y divide entre 100).
+//   - Un campo null significa "esta fila no trae ese valor": el campo del
+//     producto queda INTACTO (nunca se borra un valor existente).
 
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
@@ -18,7 +27,8 @@ import { authOptions } from "@/lib/auth";
 
 export interface ValorAddRow {
   cod: string;
-  valorAdd: number;
+  valorAdd: number | null;
+  addPct: number | null;
 }
 
 // Redondea a 6 decimales para limpiar ruido de punto flotante del Excel
@@ -37,30 +47,56 @@ export function normalizeCod(s: string): string {
 // Valida y normaliza el body recibido desde el navegador (ya parseado con SheetJS)
 // REGLAS:
 //   - Filas sin COD se descartan.
-//   - Filas SIN VALOR ADD se cuentan aparte (sinValorAdd) y NO se aplican:
-//     el importador NUNCA borra el valor que ya tiene el producto.
+//   - Filas SIN % ADD y SIN VALOR ADD se cuentan aparte (sinValores) y NO se
+//     aplican: el importador NUNCA borra los valores que ya tiene el producto.
 //   - Duplicados en el Excel: gana la última aparición (igual que las otras
 //     importaciones).
-//   - Se acepta cualquier número finito (positivo, 0 o negativo, por si la
-//     planilla algún día trae un descuento); se rechazan valores absurdos.
-export function parseBody(raw: any): { rows: ValorAddRow[]; sinValorAdd: number } | null {
+//   - VALOR ADD se acepta en guaraníes (cualquier número finito, positivo, 0 o
+//     negativo); % ADD es una fracción decimal (0.25 = 25%) y se limita a
+//     ±1000% para rechazar valores absurdos.
+export function parseBody(raw: any): {
+  rows: ValorAddRow[];
+  sinValores: number;
+  conValorAdd: number;
+  conAddPct: number;
+} | null {
   if (!raw || !Array.isArray(raw.rows)) return null;
   const rows: ValorAddRow[] = [];
-  let sinValorAdd = 0;
+  let sinValores = 0;
+  let conValorAdd = 0;
+  let conAddPct = 0;
   for (const r of raw.rows) {
     if (!r || typeof r !== "object") continue;
     const cod = normalizeCod(String(r.cod ?? ""));
     if (!cod || cod.length > 50) continue;
-    const va = Number(r.valorAdd);
-    if (r.valorAdd === null || r.valorAdd === undefined || r.valorAdd === "" || !Number.isFinite(va) || Math.abs(va) > 1e12) {
-      sinValorAdd++;
+
+    // VALOR ADD (guaraníes)
+    let valorAdd: number | null = null;
+    if (r.valorAdd !== null && r.valorAdd !== undefined && r.valorAdd !== "") {
+      const va = Number(r.valorAdd);
+      if (Number.isFinite(va) && Math.abs(va) <= 1e12) valorAdd = round6(va);
+    }
+
+    // % ADD (fracción decimal, ej. 0.25 = 25%)
+    let addPct: number | null = null;
+    if (r.addPct !== null && r.addPct !== undefined && r.addPct !== "") {
+      const ap = Number(r.addPct);
+      if (Number.isFinite(ap) && Math.abs(ap) <= 10) addPct = round6(ap);
+    }
+
+    if (valorAdd === null && addPct === null) {
+      // Sin ninguno de los dos: no se aplica nada a esta fila
+      sinValores++;
       continue;
     }
+    if (valorAdd !== null) conValorAdd++;
+    if (addPct !== null) conAddPct++;
+
     const idx = rows.findIndex((x) => x.cod === cod);
-    if (idx >= 0) rows[idx] = { cod, valorAdd: round6(va) };
-    else rows.push({ cod, valorAdd: round6(va) });
+    if (idx >= 0) rows[idx] = { cod, valorAdd, addPct };
+    else rows.push({ cod, valorAdd, addPct });
   }
-  return { rows, sinValorAdd };
+  return { rows, sinValores, conValorAdd, conAddPct };
 }
 
 // Solo el SUPREMO_ADMIN puede ejecutar esta importación (misma regla que
@@ -85,7 +121,7 @@ export async function requireSupremo(): Promise<NextResponse | null> {
 // hermanas. SOLO LECTURA: este fetch no modifica nada.
 // Se seleccionan los campos del producto que la cadena de costos necesita
 // para recalcular (los mismos que usa PUT /api/products/[id] al editar
-// VALOR ADD a mano) + los valores actuales para la vista previa.
+// % ADD / VALOR ADD a mano) + los valores actuales para la vista previa.
 export interface ProductForValorAdd {
   id: string;
   sku: string;
@@ -146,8 +182,9 @@ export async function fetchMatchedProducts(rows: ValorAddRow[]) {
 }
 
 // Recalcula los campos derivados según las fórmulas del Excel.
-// MISMA función que PUT /api/products/[id] (recalculate): así importar VALOR ADD
-// produce exactamente el mismo resultado que editarlo a mano en la tabla.
+// MISMA función que PUT /api/products/[id] (recalculate): así importar
+// % ADD / VALOR ADD produce exactamente el mismo resultado que editarlos
+// a mano en la tabla.
 function recalculate(p: any): void {
   const cambioRS = 1100; // $C$1 del Excel
   const cambioUS = 6000; // $G$1 del Excel
@@ -211,23 +248,29 @@ function recalculate(p: any): void {
   p.cost = p.costProd ?? 0;
 }
 
-// Calcula el update completo para un producto al que se le aplica un VALOR ADD
-// del Excel. Imita EXACTAMENTE el PUT /api/products/[id]:
-//   1. merged = producto actual + valorAdd nuevo
+// Calcula el update completo para un producto al que se le aplica % ADD y/o
+// VALOR ADD del Excel. Imita EXACTAMENTE el PUT /api/products/[id]:
+//   1. merged = producto actual + los valores que la fila SÍ trae (un campo
+//      null en la fila = ese campo del producto queda intacto)
 //   2. Caso especial: productos viejos importados solo con Costo Prod. (sin
 //      costBR/costUS/costGs) usan ese costo como base para que la cadena no
 //      se vaya a 0 al recalcular.
 //   3. recalculate() → costProd, márgenes y precios recalculados.
-// Devuelve el `data` para Prisma + los valores nuevos para la vista previa.
+// Devuelve el `data` para Prisma (solo incluye % ADD / VALOR ADD si la fila
+// los trae) + los valores nuevos para la vista previa.
 export function buildValorAddUpdate(
   product: ProductForValorAdd,
-  valorAdd: number
+  valores: { valorAdd: number | null; addPct: number | null }
 ): {
   data: Record<string, number | null>;
+  valorAddNuevo: number | null;
+  addPctNuevo: number | null;
   costProdNuevo: number | null;
   priceNuevo: number | null;
 } {
-  const merged: any = { ...product, valorAdd };
+  const merged: any = { ...product };
+  if (valores.valorAdd !== null) merged.valorAdd = valores.valorAdd;
+  if (valores.addPct !== null) merged.addPct = valores.addPct;
   const sinCostoEntrada =
     !(merged.costBR > 0) && !(merged.costUS > 0) && !(merged.costGs > 0);
   if (sinCostoEntrada && (product.costProd ?? 0) > 0) {
@@ -235,22 +278,22 @@ export function buildValorAddUpdate(
   }
   recalculate(merged);
 
-  const data: Record<string, number | null> = {
-    valorAdd,
-    rsNoUS: merged.rsNoUS,
-    usNoGs: merged.usNoGs,
-    rsToGs: merged.rsToGs,
-    usToGs: merged.usToGs,
-    subCost: merged.subCost,
-    minusDisc: merged.minusDisc,
-    plusAdd: merged.plusAdd,
-    plusAdd2: merged.plusAdd2,
-    minusDescV: merged.minusDescV,
-    costProd: merged.costProd,
-    priceContado: merged.priceContado,
-    price: merged.priceContado ?? 0,
-    cost: merged.costProd ?? 0,
-  };
+  const data: Record<string, number | null> = {};
+  if (valores.valorAdd !== null) data.valorAdd = valores.valorAdd;
+  if (valores.addPct !== null) data.addPct = valores.addPct;
+  data.rsNoUS = merged.rsNoUS;
+  data.usNoGs = merged.usNoGs;
+  data.rsToGs = merged.rsToGs;
+  data.usToGs = merged.usToGs;
+  data.subCost = merged.subCost;
+  data.minusDisc = merged.minusDisc;
+  data.plusAdd = merged.plusAdd;
+  data.plusAdd2 = merged.plusAdd2;
+  data.minusDescV = merged.minusDescV;
+  data.costProd = merged.costProd;
+  data.priceContado = merged.priceContado;
+  data.price = merged.priceContado ?? 0;
+  data.cost = merged.costProd ?? 0;
   for (let i = 1; i <= 30; i++) {
     data[`marginC${i}`] = merged[`marginC${i}`];
     data[`price${i}`] = merged[`price${i}`];
@@ -258,6 +301,8 @@ export function buildValorAddUpdate(
 
   return {
     data,
+    valorAddNuevo: (merged.valorAdd ?? null) as number | null,
+    addPctNuevo: (merged.addPct ?? null) as number | null,
     costProdNuevo: merged.costProd ?? null,
     priceNuevo: merged.priceContado ?? null,
   };

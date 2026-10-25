@@ -1,17 +1,19 @@
 // POST /api/products/import-valoradd/apply
-// Aplica el VALOR ADD del Excel (planilla LISTA VIZA HOME, hoja "base")
-// a los productos que coinciden por COD (sku o codViza).
+// Aplica el % ADD y el VALOR ADD del Excel (planilla LISTA VIZA HOME, hoja
+// "base") a los productos que coinciden por COD (sku o codViza).
 // REGLAS DE SEGURIDAD:
-//   - SOLO se toca la columna VALOR ADD y lo que el propio sistema recalcula
-//     cuando el admin edita VALOR ADD a mano en la tabla (PUT
-//     /api/products/[id]): cadena de costos (rsToGs, usToGs, rsNoUS, usNoGs,
-//     subCost, minusDisc, plusAdd, plusAdd2, minusDescV), Costo Prod.,
-//     márgenes 1..30, precios 1..30, priceContado y los campos legados
-//     price/cost del catálogo de vendedores.
+//   - SOLO se tocan las columnas % ADD y VALOR ADD cuando la fila del Excel
+//     las trae, más lo que el propio sistema recalcula cuando el admin edita
+//     % ADD o VALOR ADD a mano en la tabla (PUT /api/products/[id]): cadena
+//     de costos (rsToGs, usToGs, rsNoUS, usNoGs, subCost, minusDisc, plusAdd,
+//     plusAdd2, minusDescV), Costo Prod., márgenes 1..30, precios 1..30,
+//     priceContado y los campos legados price/cost del catálogo de vendedores.
 //   - NUNCA se crean productos.
-//   - NUNCA se borra un VALOR ADD existente (filas sin valor se ignoran).
-//   - Productos que ya tienen exactamente ese VALOR ADD quedan intocados.
-//   - No se tocan: costos de entrada (costBR/costUS/costGs), % DESC, % ADD,
+//   - NUNCA se borra un % ADD o VALOR ADD existente (filas sin esos valores
+//     se ignoran; un campo ausente en la fila deja el campo del producto
+//     intacto).
+//   - Productos que ya tienen exactamente esos valores quedan intocados.
+//   - No se tocan: costos de entrada (costBR/costUS/costGs), % DESC,
 //     GASTOS ADM, VALOR DESC., bases de porcentajes, % Contado, stock,
 //     etiquetas, fabricante ni ningún otro dato.
 import { NextRequest, NextResponse } from "next/server";
@@ -23,10 +25,28 @@ import {
   buildValorAddUpdate,
   round6,
 } from "../shared";
+import type { ValorAddRow, ProductForValorAdd } from "../shared";
 
 export const maxDuration = 60;
 
 const BATCH_SIZE = 50;
+
+// ¿La fila ya está aplicada en el producto? (misma regla que el preview)
+function filaYaAplicada(product: ProductForValorAdd, row: ValorAddRow): boolean {
+  if (
+    row.valorAdd !== null &&
+    !(product.valorAdd !== null && round6(product.valorAdd) === round6(row.valorAdd))
+  ) {
+    return false;
+  }
+  if (
+    row.addPct !== null &&
+    !(product.addPct !== null && round6(product.addPct) === round6(row.addPct))
+  ) {
+    return false;
+  }
+  return true;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,15 +61,15 @@ export async function POST(req: NextRequest) {
     const { rows } = parsed;
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "El Excel no contiene filas con COD VIZA + VALOR ADD (hoja 'base')" },
+        { error: "El Excel no contiene filas con COD VIZA + VALOR ADD o % ADD (hoja 'base')" },
         { status: 400 }
       );
     }
 
     const { byCod } = await fetchMatchedProducts(rows);
 
-    // Construir updates: valorAdd nuevo + cadena de costos/precios recalculada
-    // (misma fórmula que la edición manual del admin)
+    // Construir updates: % ADD y/o VALOR ADD nuevos + cadena de costos/precios
+    // recalculada (misma fórmula que la edición manual del admin)
     const updates: Array<{ id: string; sku: string; data: Record<string, number | null> }> = [];
     const noEncontrados: string[] = [];
     let yaIgual = 0;
@@ -60,12 +80,14 @@ export async function POST(req: NextRequest) {
         noEncontrados.push(row.cod);
         continue;
       }
-      const actual = product.valorAdd;
-      if (actual !== null && round6(actual) === round6(row.valorAdd)) {
+      if (filaYaAplicada(product, row)) {
         yaIgual++;
         continue;
       }
-      const { data } = buildValorAddUpdate(product, row.valorAdd);
+      const { data } = buildValorAddUpdate(product, {
+        valorAdd: row.valorAdd,
+        addPct: row.addPct,
+      });
       updates.push({ id: product.id, sku: product.sku, data });
     }
 

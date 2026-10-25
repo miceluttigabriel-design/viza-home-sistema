@@ -33,6 +33,15 @@ import { toast } from "sonner";
 import { formatPYG } from "@/lib/format";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 
+// Formatea una fracción decimal de porcentaje (0.25 = 25%) igual que la tabla
+// (valor × 100), pero compacto: 25%, 28%, 35.3%, 108.8% (sin ceros colgantes)
+const fmtPctVal = (v: number | null | undefined): string => {
+  if (v === null || v === undefined) return "—";
+  const n = v * 100;
+  const s = Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  return `${s}%`;
+};
+
 interface Product {
   id: string;
   sku: string;
@@ -369,12 +378,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // Guarda las filas {cod, fabricante} parseadas entre la vista previa y el apply
   const fabRowsRef = useRef<Array<{ cod: string; fabricante: string }> | null>(null);
 
-  // ─── IMPORTAR VALOR ADD (planilla LISTA VIZA HOME, hoja "base") ───
+  // ─── IMPORTAR VALOR + % ADD (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES / FABRICANTES: el Excel se procesa EN
-  // EL NAVEGADOR (SheetJS) y solo se envía un JSON compacto { cod, valorAdd }.
-  // VALOR ADD es input de la cadena de costos (col S del Excel): al aplicarlo,
-  // la API recalcula Costo Prod., márgenes y precios EXACTAMENTE igual que
-  // cuando el admin edita VALOR ADD a mano en la tabla (PUT /api/products/[id]).
+  // EL NAVEGADOR (SheetJS) y solo se envía un JSON compacto { cod, valorAdd, addPct }.
+  // % ADD (col M, fracción decimal 0.25 = 25%) y VALOR ADD (col S, guaraníes) son
+  // inputs de la cadena de costos: al aplicarlos, la API recalcula Costo Prod.,
+  // márgenes y precios EXACTAMENTE igual que cuando el admin los edita a mano en
+  // la tabla (PUT /api/products/[id]). Cada fila puede traer uno, otro, ambos o
+  // ninguno; un campo ausente deja el campo del producto intacto (nunca borra).
   const [vaImportOpen, setVaImportOpen] = useState(false);
   const [vaImportLoading, setVaImportLoading] = useState(false);
   const [vaImportPreview, setVaImportPreview] = useState<{
@@ -384,12 +395,16 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     yaIgual: number;
     noEncontrados: number;
     noEncontradosMuestra: string[];
-    sinValorAdd: number;
+    sinValores: number;
+    conValorAdd: number;
+    conAddPct: number;
     cambios: Array<{
       sku: string;
       name: string;
+      addPctActual: number | null;
+      addPctNuevo: number | null;
       valorAddActual: number | null;
-      valorAddNuevo: number;
+      valorAddNuevo: number | null;
       costProdActual: number | null;
       costProdNuevo: number | null;
       precioActual: number | null;
@@ -405,8 +420,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     errores: string[];
   } | null>(null);
   const vaFileInputRef = useRef<HTMLInputElement | null>(null);
-  // Guarda las filas {cod, valorAdd} parseadas entre la vista previa y el apply
-  const vaRowsRef = useRef<Array<{ cod: string; valorAdd: number | null }> | null>(null);
+  // Guarda las filas {cod, valorAdd, addPct} parseadas entre la vista previa y el apply
+  const vaRowsRef = useRef<Array<{ cod: string; valorAdd: number | null; addPct: number | null }> | null>(null);
 
   // ─── DELETE ALL (borrar TODOS los productos) ───
   // Botón rojo solo para supremo_admin. Borra toda la tabla de productos.
@@ -750,11 +765,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     }
   };
 
-  // ─── IMPORTAR VALOR ADD: procesar el Excel EN EL NAVEGADOR ───
+  // ─── IMPORTAR VALOR + % ADD: procesar el Excel EN EL NAVEGADOR ───
   // Lee la hoja "base" de la planilla LISTA VIZA HOME (headers en fila 2),
-  // extrae COD VIZA + "Valor Add" (col S) y envía un JSON compacto a
-  // /api/products/import-valoradd/preview. Mismo flujo que márgenes/fabricantes:
-  // primero vista previa (solo lectura) y después el apply explícito.
+  // extrae COD VIZA + "Valor Add" (col S) + "% Add" (col M, fracción decimal:
+  // 0.25 = 25%) y envía un JSON compacto a /api/products/import-valoradd/preview.
+  // Mismo flujo que márgenes/fabricantes: primero vista previa (solo lectura)
+  // y después el apply explícito.
   const handleValorAddFile = async (file: File) => {
     setVaImportOpen(true);
     setVaImportLoading(true);
@@ -805,18 +821,25 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           break;
         }
       }
-      if (headerIdx < 0 || colMap["VALOR ADD"] === undefined) {
-        throw new Error("No se encontró la hoja 'base' con columnas COD VIZA y VALOR ADD");
+      // La columna % ADD es OPCIONAL (planillas viejas solo traen VALOR ADD):
+      // si no está, todo sigue funcionando igual que antes.
+      const colAddPct = colMap["% ADD"] ?? colMap["%ADD"];
+      if (headerIdx < 0 || (colMap["VALOR ADD"] === undefined && colAddPct === undefined)) {
+        throw new Error("No se encontró la hoja 'base' con COD VIZA y VALOR ADD o % ADD");
       }
 
-      const rows: Array<{ cod: string; valorAdd: number | null }> = [];
+      const rows: Array<{ cod: string; valorAdd: number | null; addPct: number | null }> = [];
       for (let r = headerIdx + 1; r < aoa.length; r++) {
         const row = aoa[r] || [];
         const cod = toStr(row[colMap["COD VIZA"]]).replace(/\.0$/, "");
         if (!cod) continue;
-        // Se envían TODAS las filas con código, incluso sin VALOR ADD:
-        // la API las cuenta (sinValorAdd) y NUNCA borra el valor existente.
-        rows.push({ cod, valorAdd: num(row[colMap["VALOR ADD"]]) });
+        // Se envían TODAS las filas con código, incluso sin % ADD ni VALOR ADD:
+        // la API las cuenta (sinValores) y NUNCA borra los valores existentes.
+        rows.push({
+          cod,
+          valorAdd: colMap["VALOR ADD"] !== undefined ? num(row[colMap["VALOR ADD"]]) : null,
+          addPct: colAddPct !== undefined ? num(row[colAddPct]) : null,
+        });
       }
       if (rows.length === 0) throw new Error("El Excel no contiene filas con COD VIZA");
       vaRowsRef.current = rows;
@@ -1220,10 +1243,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       }}
                       className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
                       style={{ background: "linear-gradient(135deg, #b45309 0%, #d97706 100%)" }}
-                      title="Importar VALOR ADD desde la planilla LISTA VIZA HOME (hoja base). Recalcula Costo Prod. y precios igual que la edición manual; nada más se toca."
+                      title="Importar % ADD y VALOR ADD desde la planilla LISTA VIZA HOME (hoja base). Recalcula Costo Prod. y precios igual que la edición manual; nada más se toca."
                     >
                       <Coins className="h-3.5 w-3.5" />
-                      IMPORTAR VALOR ADD
+                      IMPORTAR VALOR + % ADD
                     </button>
                   </>
                 )}
@@ -2536,11 +2559,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
 
       {/* ════════════════════════════════════════════════════════════════
-          MODAL: IMPORTAR VALOR ADD (planilla LISTA VIZA HOME, hoja "base")
+          MODAL: IMPORTAR VALOR + % ADD (planilla LISTA VIZA HOME, hoja "base")
           - Mismo flujo de márgenes/fabricantes: vista previa + apply
-          - VALOR ADD es input de la cadena de costos: al aplicarlo el sistema
-            recalcula Costo Prod., márgenes y precios igual que la edición manual
-          - NUNCA borra un VALOR ADD existente; filas sin valor intocadas
+          - % ADD (col M) y VALOR ADD (col S) son inputs de la cadena de costos:
+            al aplicarlos el sistema recalcula Costo Prod., márgenes y precios
+            igual que la edición manual
+          - Cada fila puede traer % ADD, VALOR ADD, ambos o ninguno; un campo
+            ausente deja el campo del producto intacto (NUNCA borra)
           ════════════════════════════════════════════════════════════════ */}
       {vaImportOpen && (
         <div
@@ -2560,7 +2585,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
             >
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                Importar VALOR ADD (planilla VIZA HOME)
+                Importar VALOR + % ADD (planilla VIZA HOME)
               </h3>
               <button
                 onClick={() => {
@@ -2590,7 +2615,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     style={{ background: "#f0fdf4", borderColor: "#86efac" }}
                   >
                     <p className="text-base font-bold text-emerald-800 mb-2">
-                      ✓ VALOR ADD aplicado
+                      ✓ VALOR + % ADD aplicados
                     </p>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
@@ -2598,7 +2623,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         <p className="text-2xl font-black text-emerald-700">{vaImportResult.actualizados}</p>
                       </div>
                       <div className="bg-white rounded-lg p-3 border border-stone-200">
-                        <p className="text-stone-500 text-xs font-semibold uppercase">Ya tenían ese valor</p>
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Ya tenían esos valores</p>
                         <p className="text-2xl font-black text-stone-600">{vaImportResult.yaIgual}</p>
                       </div>
                       <div className="bg-white rounded-lg p-3 border border-blue-200">
@@ -2624,10 +2649,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </div>
                   )}
                   <div className="text-xs text-stone-500 italic">
-                    La tabla se recargó con los VALOR ADD nuevos. Para cada producto actualizado se
-                    recalculó Costo Prod. y los precios con las mismas fórmulas del sistema (igual que
-                    editar VALOR ADD a mano). Costos de entrada, % DESC, % ADD, GASTOS ADM, VALOR DESC.,
-                    stock y fabricantes quedaron intactos.
+                    La tabla se recargó con los % ADD y VALOR ADD nuevos. Para cada producto actualizado
+                    se recalculó Costo Prod. y los precios con las mismas fórmulas del sistema (igual que
+                    editarlos a mano). Costos de entrada, % DESC, GASTOS ADM, VALOR DESC., bases de
+                    porcentajes, stock y fabricantes quedaron intactos.
                   </div>
                 </div>
               )}
@@ -2639,7 +2664,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
                       <p className="text-3xl font-black text-emerald-700">{vaImportPreview.aActualizar}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben VALOR ADD</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben % ADD y/o VALOR ADD</p>
                     </div>
                     <div className="rounded-lg p-3 border border-stone-200 bg-stone-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Ya correctos</p>
@@ -2652,21 +2677,23 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <p className="text-[10px] text-stone-500 mt-1">Códigos del Excel que no existen en el sistema</p>
                     </div>
                     <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
-                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin valor en fila</p>
-                      <p className="text-3xl font-black text-amber-600">{vaImportPreview.sinValorAdd}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Filas sin VALOR ADD en el Excel (quedan intocadas)</p>
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin % ADD ni VALOR ADD</p>
+                      <p className="text-3xl font-black text-amber-600">{vaImportPreview.sinValores}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Filas sin ninguno de los dos valores en el Excel (quedan intocadas)</p>
                     </div>
                   </div>
 
                   <div className="text-xs text-stone-600 bg-amber-50 rounded-lg p-3 border border-amber-200">
-                    <strong>{vaImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base".
-                    Se actualiza <strong>SOLO la columna VALOR ADD</strong> de los productos que coinciden
-                    por COD. Como VALOR ADD es parte de la cadena de costos, a cada producto actualizado se
-                    le <strong>recalcula Costo Prod. y los precios</strong> con las mismas fórmulas del
-                    sistema (exactamente igual que editar VALOR ADD a mano en la tabla).
+                    <strong>{vaImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base"
+                    ({vaImportPreview.conAddPct} con % ADD, {vaImportPreview.conValorAdd} con VALOR ADD).
+                    Se actualizan <strong>SOLO las columnas % ADD y VALOR ADD</strong> de los productos que
+                    coinciden por COD. Como son parte de la cadena de costos, a cada producto actualizado
+                    se le <strong>recalcula Costo Prod. y los precios</strong> con las mismas fórmulas del
+                    sistema (exactamente igual que editarlos a mano en la tabla).
                     <span className="block mt-1">
-                      No se crean productos y no se tocan costos de entrada, % DESC, % ADD, GASTOS ADM,
+                      No se crean productos y no se tocan costos de entrada, % DESC, GASTOS ADM,
                       VALOR DESC., bases de porcentajes, % Contado, stock, etiquetas ni fabricantes.
+                      Las filas sin % ADD o sin VALOR ADD dejan ese campo como está (nunca se borra).
                     </span>
                   </div>
 
@@ -2682,6 +2709,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                             <tr>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">COD</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">% ADD</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">VALOR ADD</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo Prod. actual → nuevo</th>
                               <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Precio Contado actual → nuevo</th>
@@ -2693,7 +2721,22 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                 <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{c.sku}</td>
                                 <td className="px-2 py-1.5 text-stone-700 max-w-[220px] truncate" title={c.name}>{c.name || "—"}</td>
                                 <td className="px-2 py-1.5 text-right font-bold text-amber-700 whitespace-nowrap">
-                                  {c.valorAddActual !== null ? formatPYG(c.valorAddActual) : "— (vacío)"} → {formatPYG(c.valorAddNuevo)}
+                                  {c.addPctNuevo === null ? (
+                                    <span className="font-normal text-stone-400">—</span>
+                                  ) : (
+                                    <>
+                                      {c.addPctActual !== null ? fmtPctVal(c.addPctActual) : "— (vacío)"} → {fmtPctVal(c.addPctNuevo)}
+                                    </>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-bold text-amber-700 whitespace-nowrap">
+                                  {c.valorAddNuevo === null ? (
+                                    <span className="font-normal text-stone-400">—</span>
+                                  ) : (
+                                    <>
+                                      {c.valorAddActual !== null ? formatPYG(c.valorAddActual) : "— (vacío)"} → {formatPYG(c.valorAddNuevo)}
+                                    </>
+                                  )}
                                 </td>
                                 <td className="px-2 py-1.5 text-right text-stone-600 whitespace-nowrap">
                                   {c.costProdActual !== null ? formatPYG(c.costProdActual) : "—"}
@@ -2749,12 +2792,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     {vaImportApplying ? (
                       <>
                         <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
-                        Aplicando VALOR ADD…
+                        Aplicando VALOR + % ADD…
                       </>
                     ) : (
                       <>
                         <Check className="h-4 w-4" />
-                        APLICAR VALOR ADD
+                        APLICAR VALOR + % ADD
                       </>
                     )}
                   </button>
