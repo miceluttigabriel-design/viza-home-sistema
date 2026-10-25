@@ -42,6 +42,10 @@ export interface SafraProducto {
   // % SAFRA leído del Panel Admin (SOLO LECTURA - nunca se modifica en la BD)
   safraPct: number;
   quantity: number;
+  // === COSTO (INTERNO - SOLO VENDEDOR) ===
+  // Costo UNITARIO de la BASE (cost = costProd). Solo para el cuadrito
+  // "Costo de productos" de la pantalla; NUNCA se envía a ningún PDF.
+  cost?: number;
 }
 
 // Un pago manual hecho por el vendedor (entrada o refuerzo)

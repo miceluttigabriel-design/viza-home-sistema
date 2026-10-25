@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { usePlanMayoristaStore } from "@/store/mayorista";
 import { formatPYG } from "@/lib/format";
+import { CostoInterno, extractCosto } from "./costo-interno";
 
 // === VIZA home brand palette ===
 const AZUL = "#155789";
@@ -113,6 +114,10 @@ export function PlanMayorista() {
       name: product.name,
       priceTecnico: precioTecnico,
       quantity: 1,
+      // Costo UNITARIO de la BASE: SOLO para el cuadrito interno del vendedor.
+      // Nunca viaja en el payload del PDF (ese payload solo lleva sku/name/
+      // quantity/priceTecnico/subtotal).
+      cost: extractCosto(product),
     });
     setSearch("");
     setSearchResults([]);
@@ -462,6 +467,16 @@ export function PlanMayorista() {
             </button>
           </div>
         )}
+
+        {/* === CUADRO DE COSTOS (SOLO VENDEDOR - nunca sale en ningún PDF) === */}
+        <CostoInterno
+          items={productos.map((p) => ({
+            key: p.id,
+            name: p.name,
+            quantity: p.quantity,
+            cost: p.cost,
+          }))}
+        />
       </Section>
 
       {/* === C. BOTONES === */}

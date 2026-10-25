@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { usePlanSafraStore, parseSafra } from "@/store/plan-safra";
 import { formatPYG } from "@/lib/format";
+import { CostoInterno, extractCosto } from "./costo-interno";
 
 // === VIZA home brand palette ===
 const AZUL = "#155789";
@@ -140,6 +141,10 @@ export function PlanSafra() {
       priceContado: product.priceContado ?? 0,
       safraPct,
       quantity: 1,
+      // Costo UNITARIO de la BASE: SOLO para el cuadrito interno del vendedor.
+      // Nunca viaja en el payload del PDF (ese payload solo lleva sku/name/
+      // quantity/priceContado/subtotalContado/safraPct).
+      cost: extractCosto(product),
     });
     setSearch("");
     setSearchResults([]);
@@ -577,6 +582,16 @@ export function PlanSafra() {
             </button>
           </div>
         )}
+
+        {/* === CUADRO DE COSTOS (SOLO VENDEDOR - nunca sale en ningún PDF) === */}
+        <CostoInterno
+          items={productos.map((p) => ({
+            key: p.id,
+            name: p.name,
+            quantity: p.quantity,
+            cost: p.cost,
+          }))}
+        />
       </Section>
 
       {/* === D-bis. DESCUENTO POR CASCO (AUTOMÁTICO - solo si hay casco en el carrito) === */}

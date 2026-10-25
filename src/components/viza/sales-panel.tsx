@@ -33,6 +33,7 @@ import { formatPYG } from "@/lib/format";
 import { PlanSafra } from "./plan-safra";
 import { PlanCheque } from "./plan-cheque";
 import { PlanMayorista } from "./plan-mayorista";
+import { CostoInterno, extractCosto } from "./costo-interno";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 
 // === VIZA home brand palette ===
@@ -341,6 +342,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       marginC28: product.marginC28 ?? 0,
       marginC29: product.marginC29 ?? 0,
       marginC30: product.marginC30 ?? 0,
+      // Costo UNITARIO de la BASE: SOLO para el cuadrito interno del vendedor.
+      // Nunca viaja en el payload de ningún PDF ni se guarda en la BD.
+      cost: extractCosto(product),
       quantity: 1,
     };
     addItem(item);
@@ -1003,6 +1007,16 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
               </button>
             </div>
           )}
+
+          {/* === CUADRO DE COSTOS (SOLO VENDEDOR - nunca sale en ningún PDF) === */}
+          <CostoInterno
+            items={items.map((it) => ({
+              key: it.productId,
+              name: it.name,
+              quantity: it.quantity,
+              cost: it.cost,
+            }))}
+          />
         </Section>
 
         {/* 2.5. DESCUENTO POR CASCO (AUTOMÁTICO - solo se muestra si hay casco en el carrito) */}

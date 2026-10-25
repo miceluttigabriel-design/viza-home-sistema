@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import { useChequeStore, parseSafra, addDays } from "@/store/cheque";
 import { formatPYG } from "@/lib/format";
+import { CostoInterno, extractCosto } from "./costo-interno";
 
 const AZUL = "#155789";
 const AZUL_OSCURO = "#0d3d5e";
@@ -64,6 +65,10 @@ export function PlanCheque() {
     addProducto({
       id: product.id, sku: product.sku, name: product.name,
       priceContado: product.priceContado ?? 0, safraPct: parseSafra(product.safra), quantity: 1,
+      // Costo UNITARIO de la BASE: SOLO para el cuadrito interno del vendedor.
+      // Nunca viaja en el payload del PDF (ese payload solo lleva sku/name/
+      // quantity/priceContado/subtotalContado/safraPct).
+      cost: extractCosto(product),
     });
     setSearch(""); setSearchResults([]); setShowResults(false);
     toast.success(`${product.name} agregado`);
@@ -207,6 +212,16 @@ export function PlanCheque() {
             </table>
           </div>
         )}
+
+        {/* === CUADRO DE COSTOS (SOLO VENDEDOR - nunca sale en ningún PDF) === */}
+        <CostoInterno
+          items={productos.map((p) => ({
+            key: p.id,
+            name: p.name,
+            quantity: p.quantity,
+            cost: p.cost,
+          }))}
+        />
       </Section>
 
       {/* CASCO (auto) */}

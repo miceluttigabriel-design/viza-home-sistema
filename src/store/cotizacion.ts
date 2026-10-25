@@ -75,6 +75,13 @@ export interface CotizacionItem {
   marginC29: number;
   marginC30: number;
   quantity: number;
+  // === COSTO (INTERNO - SOLO VENDEDOR) ===
+  // Costo UNITARIO de la BASE (campo cost = costProd). Se usa SOLO para el
+  // cuadrito "Costo de productos" de la pantalla. NUNCA se envía en ningún
+  // payload de PDF ni se guarda en la BD (los PDFs solo llevan sku/name/
+  // quantity/precios). Opcional: items viejos guardados antes de esta
+  // versión no lo tienen y muestran "—" en el cuadrito.
+  cost?: number;
 }
 
 export interface PlanCuotas {

@@ -19,6 +19,11 @@ export interface MayoristaProducto {
   // PRECIO TÉCNICO (VALOR TECNICO de la BASE) - SOLO LECTURA
   priceTecnico: number;
   quantity: number;
+  // === COSTO (INTERNO - SOLO VENDEDOR) ===
+  // Costo UNITARIO de la BASE (cost = costProd). Solo para el cuadrito
+  // "Costo de productos" de la pantalla; NUNCA se envía a ningún PDF
+  // (el payload del PDF solo lleva sku/name/quantity/priceTecnico/subtotal).
+  cost?: number;
 }
 
 export interface PlanMayoristaState {

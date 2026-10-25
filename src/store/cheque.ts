@@ -35,6 +35,8 @@ function detectarTipo(productos: ChequeProducto[]): { tipo: string; tasa: number
 
 export interface ChequeProducto {
   id: string; sku: string; name: string; priceContado: number; safraPct: number; quantity: number;
+  // Costo UNITARIO de la BASE (solo cuadrito interno del vendedor; NUNCA en PDFs)
+  cost?: number;
 }
 
 export interface ChequeResultado {
