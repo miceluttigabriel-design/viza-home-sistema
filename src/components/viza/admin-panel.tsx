@@ -1583,13 +1583,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       </td>
                     </tr>
                   ) : (
-                    products.map((p) => {
+                    products.map((p, ri) => {
                       const form = getDisplayValues(p);
                       const isDirty = !!dirty[p.id];
                       return (
                         <ExcelRow
                           key={p.id}
                           product={p}
+                          rowIndex={ri}
                           form={form}
                           isDirty={isDirty}
                           label={productLabels[p.id] || null}
@@ -3087,6 +3088,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
 const ExcelRow = memo(function ExcelRow({
   product,
+  rowIndex,
   form,
   isDirty,
   label,
@@ -3098,6 +3100,7 @@ const ExcelRow = memo(function ExcelRow({
   onDelete,
 }: {
   product: Product;
+  rowIndex: number;
   form: any;
   isDirty: boolean;
   label: string | null;
@@ -3200,11 +3203,13 @@ const ExcelRow = memo(function ExcelRow({
         <div style={{ fontSize: "11px" }}>{product.sku}</div>
       </td>
       {/* Todas las columnas */}
-      {COLUMNS.map((col) => (
+      {COLUMNS.map((col, ci) => (
         <Cell
           key={col.key}
           col={col}
           value={form[col.key]}
+          rowIndex={rowIndex}
+          colIndex={ci}
           onChange={(v) => onChange(col.key, v)}
         />
       ))}
@@ -3301,13 +3306,97 @@ const ExcelRow = memo(function ExcelRow({
   );
 });
 
+// ===== Navegacion tipo Excel (mover el foco entre celdas con el teclado) =====
+// Cada input lleva data-ri (indice de fila en la pagina) y data-ci (indice de
+// columna en COLUMNS). Enter o ↓ baja una fila, ↑ sube; → / ← pasan a la celda
+// siguiente/anterior (saltando columnas calculadas sin input) cuando el cursor
+// de texto esta en el borde (o la celda esta vacia), para no pelear con la
+// edicion normal del texto.
+function focusCellInput(ri: number, ci: number): boolean {
+  if (ri < 0 || ci < 0 || ci >= COLUMNS.length) return false;
+  const el = document.querySelector<HTMLInputElement>(
+    `input[data-ri="${ri}"][data-ci="${ci}"]`
+  );
+  if (!el) return false;
+  el.focus();
+  if (el.dataset.text === "1") {
+    // Texto: dejar el cursor al final (nunca borra lo escrito)
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+  } else {
+    // Numeros/porcentajes: seleccionar todo (escribir reemplaza, como Excel)
+    el.select();
+  }
+  return true;
+}
+
+function moveCellHorizontal(ri: number, ci: number, dir: 1 | -1) {
+  let next = ci + dir;
+  while (next >= 0 && next < COLUMNS.length) {
+    if (focusCellInput(ri, next)) return;
+    next += dir;
+  }
+}
+
+function handleCellKeyDown(
+  e: { key: string; currentTarget: HTMLInputElement; preventDefault: () => void },
+  ri: number,
+  ci: number
+) {
+  const key = e.key;
+  const input = e.currentTarget;
+  const esTexto = input.dataset.text === "1";
+  const vacio = input.value.length === 0;
+
+  // Enter o flecha para abajo: fila siguiente (misma columna)
+  if (key === "Enter" || key === "ArrowDown") {
+    e.preventDefault();
+    focusCellInput(ri + 1, ci);
+    return;
+  }
+  // Flecha para arriba: fila anterior (misma columna)
+  if (key === "ArrowUp") {
+    e.preventDefault();
+    focusCellInput(ri - 1, ci);
+    return;
+  }
+  // Flechas laterales: solo si el cursor de texto esta en el borde
+  // (o la celda esta vacia); en inputs de numero solo con la celda vacia,
+  // para no estorbar la correccion del numero.
+  if (key === "ArrowRight") {
+    const alFinal = esTexto
+      ? (input.selectionStart ?? input.value.length) === input.value.length &&
+        (input.selectionEnd ?? input.value.length) === input.value.length
+      : vacio;
+    if (alFinal) {
+      e.preventDefault();
+      moveCellHorizontal(ri, ci, 1);
+    }
+    return;
+  }
+  if (key === "ArrowLeft") {
+    const alInicio = esTexto
+      ? (input.selectionStart ?? 0) === 0 && (input.selectionEnd ?? 0) === 0
+      : vacio;
+    if (alInicio) {
+      e.preventDefault();
+      moveCellHorizontal(ri, ci, -1);
+    }
+    return;
+  }
+}
+
 const Cell = memo(function Cell({
   col,
   value,
+  rowIndex,
+  colIndex,
   onChange,
 }: {
   col: ColDef;
   value: any;
+  rowIndex: number;
+  colIndex: number;
   onChange: (v: string) => void;
 }) {
   // DESCRIPCION (col "name"): celda expandible. La flechita alterna entre el
@@ -3363,7 +3452,11 @@ const Cell = memo(function Cell({
           onChange(e.target.value);
         }
       }}
-      className={`w-full ${isDesc ? "min-w-[220px]" : "min-w-[80px]"} h-6 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
+      onKeyDown={(e) => handleCellKeyDown(e, rowIndex, colIndex)}
+      data-ri={rowIndex}
+      data-ci={colIndex}
+      data-text={isText ? "1" : "0"}
+      className={`w-full ${isDesc ? "min-w-[400px]" : "min-w-[80px]"} h-6 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
         isText ? "text-left" : "text-right"
       }`}
       placeholder="—"
@@ -3390,7 +3483,7 @@ const Cell = memo(function Cell({
             onChange={(e) => onChange(e.target.value)}
             rows={2}
             placeholder="—"
-            className="w-full min-w-[220px] px-2 py-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs text-left leading-4 resize-none bg-white"
+            className="w-full min-w-[400px] px-2 py-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs text-left leading-4 resize-none bg-white"
           />
         ) : (
           inputNode
