@@ -26,6 +26,7 @@ import {
   Pencil,
   KeyRound,
   Percent,
+  Coins,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -367,6 +368,45 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const fabFileInputRef = useRef<HTMLInputElement | null>(null);
   // Guarda las filas {cod, fabricante} parseadas entre la vista previa y el apply
   const fabRowsRef = useRef<Array<{ cod: string; fabricante: string }> | null>(null);
+
+  // ─── IMPORTAR VALOR ADD (planilla LISTA VIZA HOME, hoja "base") ───
+  // Mismo mecanismo que IMPORTAR MÁRGENES / FABRICANTES: el Excel se procesa EN
+  // EL NAVEGADOR (SheetJS) y solo se envía un JSON compacto { cod, valorAdd }.
+  // VALOR ADD es input de la cadena de costos (col S del Excel): al aplicarlo,
+  // la API recalcula Costo Prod., márgenes y precios EXACTAMENTE igual que
+  // cuando el admin edita VALOR ADD a mano en la tabla (PUT /api/products/[id]).
+  const [vaImportOpen, setVaImportOpen] = useState(false);
+  const [vaImportLoading, setVaImportLoading] = useState(false);
+  const [vaImportPreview, setVaImportPreview] = useState<{
+    totalCodigos: number;
+    coinciden: number;
+    aActualizar: number;
+    yaIgual: number;
+    noEncontrados: number;
+    noEncontradosMuestra: string[];
+    sinValorAdd: number;
+    cambios: Array<{
+      sku: string;
+      name: string;
+      valorAddActual: number | null;
+      valorAddNuevo: number;
+      costProdActual: number | null;
+      costProdNuevo: number | null;
+      precioActual: number | null;
+      precioNuevo: number | null;
+    }>;
+  } | null>(null);
+  const [vaImportApplying, setVaImportApplying] = useState(false);
+  const [vaImportResult, setVaImportResult] = useState<{
+    actualizados: number;
+    yaIgual: number;
+    noEncontrados: number;
+    fallidos: number;
+    errores: string[];
+  } | null>(null);
+  const vaFileInputRef = useRef<HTMLInputElement | null>(null);
+  // Guarda las filas {cod, valorAdd} parseadas entre la vista previa y el apply
+  const vaRowsRef = useRef<Array<{ cod: string; valorAdd: number | null }> | null>(null);
 
   // ─── DELETE ALL (borrar TODOS los productos) ───
   // Botón rojo solo para supremo_admin. Borra toda la tabla de productos.
@@ -710,6 +750,120 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     }
   };
 
+  // ─── IMPORTAR VALOR ADD: procesar el Excel EN EL NAVEGADOR ───
+  // Lee la hoja "base" de la planilla LISTA VIZA HOME (headers en fila 2),
+  // extrae COD VIZA + "Valor Add" (col S) y envía un JSON compacto a
+  // /api/products/import-valoradd/preview. Mismo flujo que márgenes/fabricantes:
+  // primero vista previa (solo lectura) y después el apply explícito.
+  const handleValorAddFile = async (file: File) => {
+    setVaImportOpen(true);
+    setVaImportLoading(true);
+    setVaImportPreview(null);
+    setVaImportResult(null);
+    try {
+      // Import dinámico: solo carga la librería cuando se usa (~peso del bundle)
+      const XLSX = await import("xlsx");
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array", cellDates: false });
+      const sheetName =
+        wb.SheetNames.find((n) => n.trim().toLowerCase() === "base") || wb.SheetNames[0];
+      if (!sheetName) throw new Error("El Excel no tiene hojas");
+      const ws = wb.Sheets[sheetName];
+      const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+
+      const norm = (s: any) => String(s ?? "").trim().toUpperCase().replace(/\s+/g, " ");
+      // Celdas ricas / fórmulas / números → texto plano estable
+      const toStr = (v: any): string => {
+        if (v === null || v === undefined) return "";
+        if (typeof v === "object") {
+          const rich = (v as any).richText;
+          if (Array.isArray(rich)) return rich.map((rt: any) => String(rt?.text ?? "")).join("");
+          if ((v as any).w !== undefined) return String((v as any).w);
+          if ((v as any).v !== undefined) return String((v as any).v);
+          return "";
+        }
+        return String(v).trim();
+      };
+      const num = (v: any): number | null => {
+        if (v === null || v === undefined || v === "") return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      };
+      // Buscar la fila de headers que contiene "COD VIZA"
+      let headerIdx = -1;
+      let colMap: Record<string, number> = {};
+      for (let r = 0; r < Math.min(aoa.length, 10); r++) {
+        const row = aoa[r] || [];
+        const mapped: Record<string, number> = {};
+        row.forEach((cell, c) => {
+          const h = norm(toStr(cell));
+          if (h && mapped[h] === undefined) mapped[h] = c;
+        });
+        if (mapped["COD VIZA"] !== undefined) {
+          headerIdx = r;
+          colMap = mapped;
+          break;
+        }
+      }
+      if (headerIdx < 0 || colMap["VALOR ADD"] === undefined) {
+        throw new Error("No se encontró la hoja 'base' con columnas COD VIZA y VALOR ADD");
+      }
+
+      const rows: Array<{ cod: string; valorAdd: number | null }> = [];
+      for (let r = headerIdx + 1; r < aoa.length; r++) {
+        const row = aoa[r] || [];
+        const cod = toStr(row[colMap["COD VIZA"]]).replace(/\.0$/, "");
+        if (!cod) continue;
+        // Se envían TODAS las filas con código, incluso sin VALOR ADD:
+        // la API las cuenta (sinValorAdd) y NUNCA borra el valor existente.
+        rows.push({ cod, valorAdd: num(row[colMap["VALOR ADD"]]) });
+      }
+      if (rows.length === 0) throw new Error("El Excel no contiene filas con COD VIZA");
+      vaRowsRef.current = rows;
+
+      const res = await fetch("/api/products/import-valoradd/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `Error HTTP ${res.status}`);
+      setVaImportPreview(data);
+    } catch (error) {
+      console.error("Error import valorAdd:", error);
+      toast.error(`Error: ${(error as Error).message}`);
+      setVaImportOpen(false);
+    } finally {
+      setVaImportLoading(false);
+      if (vaFileInputRef.current) vaFileInputRef.current.value = "";
+    }
+  };
+
+  const handleValorAddApply = async () => {
+    const rows = vaRowsRef.current;
+    if (!rows || rows.length === 0) {
+      toast.error("No hay datos para aplicar");
+      return;
+    }
+    setVaImportApplying(true);
+    try {
+      const res = await fetch("/api/products/import-valoradd/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `Error HTTP ${res.status}`);
+      setVaImportResult(data);
+      fetchProducts(); // Recargar la tabla con los VALOR ADD nuevos
+    } catch (error) {
+      console.error("Error apply valorAdd:", error);
+      toast.error(`Error: ${(error as Error).message}`);
+    } finally {
+      setVaImportApplying(false);
+    }
+  };
+
   // Construir valores display para un producto: si está dirty, usa el valor editado; sino el del producto
   // Y si es calculado, lo recalculamos en vivo
   const getDisplayValues = (product: Product) => {
@@ -1037,6 +1191,39 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     >
                       <Tag className="h-3.5 w-3.5" />
                       IMPORTAR FABRICANTES
+                    </button>
+                  </>
+                )}
+
+                {/* Boton IMPORTAR VALOR ADD (planilla LISTA VIZA HOME) — solo supremo_admin */}
+                {isSupremo && (
+                  <>
+                    <input
+                      ref={vaFileInputRef}
+                      type="file"
+                      accept=".xlsm,.xlsx,.xls"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleValorAddFile(file);
+                      }}
+                    />
+                    <button
+                      id="btn-import-valoradd"
+                      onClick={() => {
+                        setVaImportOpen(true);
+                        setVaImportPreview(null);
+                        setVaImportResult(null);
+                        setVaImportLoading(false);
+                        setVaImportApplying(false);
+                        vaFileInputRef.current?.click();
+                      }}
+                      className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                      style={{ background: "linear-gradient(135deg, #b45309 0%, #d97706 100%)" }}
+                      title="Importar VALOR ADD desde la planilla LISTA VIZA HOME (hoja base). Recalcula Costo Prod. y precios igual que la edición manual; nada más se toca."
+                    >
+                      <Coins className="h-3.5 w-3.5" />
+                      IMPORTAR VALOR ADD
                     </button>
                   </>
                 )}
@@ -2338,6 +2525,246 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   onClick={() => setFabImportOpen(false)}
                   className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
                   style={{ background: "linear-gradient(135deg, #155789 0%, #3a8fd4 100%)" }}
+                >
+                  Cerrar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* ════════════════════════════════════════════════════════════════
+          MODAL: IMPORTAR VALOR ADD (planilla LISTA VIZA HOME, hoja "base")
+          - Mismo flujo de márgenes/fabricantes: vista previa + apply
+          - VALOR ADD es input de la cadena de costos: al aplicarlo el sistema
+            recalcula Costo Prod., márgenes y precios igual que la edición manual
+          - NUNCA borra un VALOR ADD existente; filas sin valor intocadas
+          ════════════════════════════════════════════════════════════════ */}
+      {vaImportOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => {
+            if (!vaImportLoading && !vaImportApplying) setVaImportOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del modal */}
+            <div
+              className="px-6 py-4 flex items-center justify-between border-b"
+              style={{ borderColor: "#e7e5e4", background: "linear-gradient(135deg, #b45309 0%, #d97706 100%)" }}
+            >
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Coins className="h-5 w-5" />
+                Importar VALOR ADD (planilla VIZA HOME)
+              </h3>
+              <button
+                onClick={() => {
+                  if (!vaImportLoading && !vaImportApplying) setVaImportOpen(false);
+                }}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                disabled={vaImportLoading || vaImportApplying}
+                title="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body del modal */}
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              {vaImportLoading && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="h-10 w-10 rounded-full border-4 border-stone-200 border-t-[#b45309] animate-spin"></div>
+                  <p className="text-sm text-stone-600 font-medium">Procesando planilla…</p>
+                </div>
+              )}
+
+              {!vaImportLoading && vaImportResult && (
+                <div className="space-y-4">
+                  <div
+                    className="rounded-xl p-4 border"
+                    style={{ background: "#f0fdf4", borderColor: "#86efac" }}
+                  >
+                    <p className="text-base font-bold text-emerald-800 mb-2">
+                      ✓ VALOR ADD aplicado
+                    </p>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                      <div className="bg-white rounded-lg p-3 border border-emerald-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Productos actualizados</p>
+                        <p className="text-2xl font-black text-emerald-700">{vaImportResult.actualizados}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-stone-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Ya tenían ese valor</p>
+                        <p className="text-2xl font-black text-stone-600">{vaImportResult.yaIgual}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-blue-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Códigos sin producto</p>
+                        <p className="text-2xl font-black text-blue-700">{vaImportResult.noEncontrados}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-amber-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Costos y precios recalculados</p>
+                        <p className="text-2xl font-black text-amber-600">{vaImportResult.actualizados}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {vaImportResult.errores.length > 0 && (
+                    <div className="rounded-xl p-4 border border-amber-200 bg-amber-50">
+                      <p className="text-sm font-bold text-amber-800 mb-2">
+                        ⚠ Errores ({vaImportResult.fallidos})
+                      </p>
+                      <ul className="text-xs text-amber-700 space-y-1 max-h-40 overflow-auto">
+                        {vaImportResult.errores.slice(0, 50).map((e, i) => (
+                          <li key={i}>• {e}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="text-xs text-stone-500 italic">
+                    La tabla se recargó con los VALOR ADD nuevos. Para cada producto actualizado se
+                    recalculó Costo Prod. y los precios con las mismas fórmulas del sistema (igual que
+                    editar VALOR ADD a mano). Costos de entrada, % DESC, % ADD, GASTOS ADM, VALOR DESC.,
+                    stock y fabricantes quedaron intactos.
+                  </div>
+                </div>
+              )}
+
+              {!vaImportLoading && !vaImportResult && vaImportPreview && (
+                <div className="space-y-4">
+                  {/* Resumen */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
+                      <p className="text-3xl font-black text-emerald-700">{vaImportPreview.aActualizar}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben VALOR ADD</p>
+                    </div>
+                    <div className="rounded-lg p-3 border border-stone-200 bg-stone-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Ya correctos</p>
+                      <p className="text-3xl font-black text-stone-600">{vaImportPreview.yaIgual}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Ya tenían exactamente ese valor</p>
+                    </div>
+                    <div className="rounded-lg p-3 border border-blue-200 bg-blue-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin producto</p>
+                      <p className="text-3xl font-black text-blue-700">{vaImportPreview.noEncontrados}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Códigos del Excel que no existen en el sistema</p>
+                    </div>
+                    <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin valor en fila</p>
+                      <p className="text-3xl font-black text-amber-600">{vaImportPreview.sinValorAdd}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Filas sin VALOR ADD en el Excel (quedan intocadas)</p>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-stone-600 bg-amber-50 rounded-lg p-3 border border-amber-200">
+                    <strong>{vaImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base".
+                    Se actualiza <strong>SOLO la columna VALOR ADD</strong> de los productos que coinciden
+                    por COD. Como VALOR ADD es parte de la cadena de costos, a cada producto actualizado se
+                    le <strong>recalcula Costo Prod. y los precios</strong> con las mismas fórmulas del
+                    sistema (exactamente igual que editar VALOR ADD a mano en la tabla).
+                    <span className="block mt-1">
+                      No se crean productos y no se tocan costos de entrada, % DESC, % ADD, GASTOS ADM,
+                      VALOR DESC., bases de porcentajes, % Contado, stock, etiquetas ni fabricantes.
+                    </span>
+                  </div>
+
+                  {/* Muestra de cambios */}
+                  {vaImportPreview.cambios.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-stone-800 mb-2">
+                        Vista previa de cambios (primeros {vaImportPreview.cambios.length} de {vaImportPreview.aActualizar})
+                      </p>
+                      <div className="border border-stone-200 rounded-lg overflow-auto max-h-72">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0" style={{ background: "#f5f5f4" }}>
+                            <tr>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">COD</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">VALOR ADD</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Costo Prod. actual → nuevo</th>
+                              <th className="text-right px-2 py-1.5 font-semibold text-stone-600">Precio Contado actual → nuevo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {vaImportPreview.cambios.map((c, i) => (
+                              <tr key={i} className="border-t border-stone-100">
+                                <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{c.sku}</td>
+                                <td className="px-2 py-1.5 text-stone-700 max-w-[220px] truncate" title={c.name}>{c.name || "—"}</td>
+                                <td className="px-2 py-1.5 text-right font-bold text-amber-700 whitespace-nowrap">
+                                  {c.valorAddActual !== null ? formatPYG(c.valorAddActual) : "— (vacío)"} → {formatPYG(c.valorAddNuevo)}
+                                </td>
+                                <td className="px-2 py-1.5 text-right text-stone-600 whitespace-nowrap">
+                                  {c.costProdActual !== null ? formatPYG(c.costProdActual) : "—"}
+                                  <span className="mx-1">→</span>
+                                  <span className="font-bold text-emerald-700">{c.costProdNuevo !== null ? formatPYG(c.costProdNuevo) : "—"}</span>
+                                </td>
+                                <td className="px-2 py-1.5 text-right text-stone-600 whitespace-nowrap">
+                                  {c.precioActual !== null ? formatPYG(c.precioActual) : "—"}
+                                  <span className="mx-1">→</span>
+                                  <span className="font-bold text-emerald-700">{c.precioNuevo !== null ? formatPYG(c.precioNuevo) : "—"}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Códigos sin producto (muestra) */}
+                  {vaImportPreview.noEncontradosMuestra.length > 0 && (
+                    <div className="text-xs text-stone-500">
+                      <span className="font-semibold text-stone-600">Sin producto en el sistema (muestra): </span>
+                      {vaImportPreview.noEncontradosMuestra.slice(0, 20).join(", ")}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer del modal */}
+            <div className="px-6 py-4 border-t border-stone-200 flex items-center justify-end gap-3 bg-stone-50">
+              {!vaImportResult && (
+                <>
+                  <button
+                    onClick={() => setVaImportOpen(false)}
+                    className="h-9 px-4 rounded-lg text-stone-600 text-sm font-bold hover:bg-stone-200 transition-colors disabled:opacity-50"
+                    disabled={vaImportLoading || vaImportApplying}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleValorAddApply}
+                    className="h-9 px-4 rounded-lg text-white text-sm font-bold flex items-center gap-1.5 hover:brightness-110 transition-colors disabled:opacity-50"
+                    style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 100%)" }}
+                    disabled={
+                      vaImportLoading ||
+                      vaImportApplying ||
+                      !vaImportPreview ||
+                      vaImportPreview.aActualizar === 0
+                    }
+                  >
+                    {vaImportApplying ? (
+                      <>
+                        <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                        Aplicando VALOR ADD…
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4" />
+                        APLICAR VALOR ADD
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+              {vaImportResult && (
+                <button
+                  onClick={() => setVaImportOpen(false)}
+                  className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
+                  style={{ background: "linear-gradient(135deg, #b45309 0%, #d97706 100%)" }}
                 >
                   Cerrar
                 </button>
