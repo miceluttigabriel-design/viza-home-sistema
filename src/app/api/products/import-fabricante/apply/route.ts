@@ -1,15 +1,19 @@
 // POST /api/products/import-fabricante/apply
-// Aplica el FABRICANTE del Excel (planilla LISTA VIZA HOME, hoja "base")
-// a los productos que coinciden por COD (sku o codViza).
+// Aplica el FABRICANTE y la MARCA del Excel (planilla LISTA VIZA HOME, hoja
+// "base") a los productos que coinciden por COD (sku o codViza).
 // REGLAS DE SEGURIDAD (nada más se toca):
-//   - SOLO se actualiza el campo fabricante.
-//   - brand (espejo del fabricante que muestra el catálogo de vendedores) SOLO
-//     se completa si está vacío; si ya tiene valor, no se toca.
+//   - SOLO se actualizan los campos fabricante y brand (MARCA).
+//   - La MARCA explícita del Excel SIEMPRE gana: se escribe en brand aunque
+//     ya tuviera el espejo del fabricante de una importación anterior.
+//   - Si la fila NO trae MARCA, brand se completa con el fabricante SOLO si
+//     está vacío (espejo del catálogo de vendedores, convención del sistema).
 //   - NUNCA se crean productos.
 //   - NUNCA se tocan costos, márgenes, precios, stock, etiquetas, ni ningún
 //     otro campo.
-//   - NUNCA se borra un fabricante existente (filas sin fabricante se ignoran).
-//   - Productos que ya tienen exactamente ese fabricante quedan intocados.
+//   - NUNCA se borra un valor existente (las filas sin FABRICANTE ni MARCA
+//     se ignoran por completo).
+//   - Productos que ya tienen exactamente esos valores quedan intocados
+//     (idempotente: se puede reaplicar la misma planilla sin efecto).
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { parseBody, requireSupremo, fetchMatchedProducts } from "../shared";
@@ -31,15 +35,20 @@ export async function POST(req: NextRequest) {
     const { rows } = parsed;
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE (hoja 'base')" },
+        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA (hoja 'base')" },
         { status: 400 }
       );
     }
 
     const { byCod } = await fetchMatchedProducts(rows);
 
-    // Construir updates: solo fabricante (+ brand si estaba vacío)
-    const updates: Array<{ id: string; sku: string; data: Record<string, string> }> = [];
+    // Construir updates: solo fabricante y/o brand (MARCA)
+    const updates: Array<{
+      id: string;
+      sku: string;
+      data: Record<string, string>;
+      traeMarca: boolean;
+    }> = [];
     const noEncontrados: string[] = [];
     let yaIgual = 0;
 
@@ -49,22 +58,39 @@ export async function POST(req: NextRequest) {
         noEncontrados.push(row.cod);
         continue;
       }
-      const actual = (product.fabricante ?? "").trim();
-      if (actual === row.fabricante) {
+      const brandActual = (product.brand ?? "").trim();
+      const fabCambia =
+        row.fabricante !== null &&
+        (product.fabricante ?? "").trim() !== row.fabricante;
+      const marcaCambia = row.marca !== null && brandActual !== row.marca;
+      if (!fabCambia && !marcaCambia) {
         yaIgual++;
         continue;
       }
-      const data: Record<string, string> = { fabricante: row.fabricante };
-      if (!(product.brand ?? "").trim()) {
+      const data: Record<string, string> = {};
+      if (fabCambia && row.fabricante !== null) {
+        data.fabricante = row.fabricante;
+      }
+      if (marcaCambia && row.marca !== null) {
+        // MARCA explícita del Excel: siempre gana sobre el espejo anterior
+        data.brand = row.marca;
+      } else if (!brandActual && fabCambia && row.fabricante !== null) {
+        // La fila no trae MARCA: espejo del catálogo de vendedores, SOLO si
+        // brand está vacío (misma convención de la versión anterior)
         data.brand = row.fabricante;
       }
-      updates.push({ id: product.id, sku: product.sku, data });
+      if (Object.keys(data).length === 0) {
+        yaIgual++;
+        continue;
+      }
+      updates.push({ id: product.id, sku: product.sku, data, traeMarca: row.marca !== null });
     }
 
     // Ejecutar updates en lotes paralelos (rápido incluso con ~3.500 productos,
-    // mismo mecanismo que import-margins/apply)
+    // mismo mecanismo que import-margins/import-valoradd/apply)
     let actualizados = 0;
-    let conBrandNuevo = 0;
+    let conMarcaNueva = 0;
+    let conBrandEspejo = 0;
     const errores: string[] = [];
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
       const batch = updates.slice(i, i + BATCH_SIZE);
@@ -74,7 +100,10 @@ export async function POST(req: NextRequest) {
       results.forEach((r, idx) => {
         if (r.status === "fulfilled") {
           actualizados++;
-          if (batch[idx].data.brand !== undefined) conBrandNuevo++;
+          if (batch[idx].data.brand !== undefined) {
+            if (batch[idx].traeMarca) conMarcaNueva++;
+            else conBrandEspejo++;
+          }
         } else {
           const sku = batch[idx].sku;
           errores.push(
@@ -88,7 +117,8 @@ export async function POST(req: NextRequest) {
       ok: true,
       totalCodigos: rows.length,
       actualizados,
-      conBrandNuevo,
+      conMarcaNueva,
+      conBrandEspejo,
       yaIgual,
       noEncontrados: noEncontrados.length,
       fallidos: errores.length,
@@ -96,6 +126,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error apply import-fabricante:", error);
-    return NextResponse.json({ error: "Error al aplicar fabricantes" }, { status: 500 });
+    return NextResponse.json({ error: "Error al aplicar fabricantes y marcas" }, { status: 500 });
   }
 }

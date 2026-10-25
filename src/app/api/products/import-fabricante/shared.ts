@@ -1,8 +1,19 @@
-// Lógica compartida para importar FABRICANTES desde la planilla LISTA VIZA HOME
-// (hoja "base": headers en fila 2, columnas COD VIZA + FABRICANTE).
-// Ruta hermana de import-margins: mismo mecanismo de navegadores (SheetJS en el
-// cliente) + JSON compacto. RUTA NUEVA Y AISLADA: no toca ninguna importación
-// existente (productos, márgenes, stock).
+// Lógica compartida para importar FABRICANTES y MARCAS desde la planilla
+// LISTA VIZA HOME (hoja "base": headers en fila 2, columnas COD VIZA +
+// FABRICANTE col CO + MARCA col CT). Ruta hermana de import-margins /
+// import-valoradd: mismo mecanismo (SheetJS en el navegador + JSON compacto).
+// RUTA NUEVA Y AISLADA: no toca ninguna importación existente (productos,
+// márgenes, valor add, stock).
+//
+// Cada fila del Excel puede traer FABRICANTE, MARCA, ambos o ninguno:
+//   - Un campo null significa "esta fila no trae ese valor": el campo del
+//     producto queda INTACTO (el importador NUNCA borra un valor existente).
+//   - En la columna MARCA de la planilla, las celdas SIN marca vienen con 0
+//     o "-" → se tratan como vacías (null).
+//   - MARCA escribe el campo "brand" de la base (el que muestra el catálogo
+//     de vendedores como MARCA). La MARCA explícita del Excel SIEMPRE gana
+//     sobre el espejo del fabricante que pudo quedar de importaciones previas.
+
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -10,7 +21,8 @@ import { authOptions } from "@/lib/auth";
 
 export interface FabricanteRow {
   cod: string;
-  fabricante: string;
+  fabricante: string | null;
+  marca: string | null;
 }
 
 export function normalizeCod(s: string): string {
@@ -20,34 +32,63 @@ export function normalizeCod(s: string): string {
     .toUpperCase();
 }
 
+// Limpia un valor de texto del Excel: NBSP → espacio, espacios múltiples →
+// uno, trim extremos. Devuelve null si queda vacío, es "-" o es numéricamente
+// cero (la columna MARCA usa 0 para "sin marca"; el "-" también significa
+// celda sin dato). Cualquier otro texto (incluidos números != 0) se acepta.
+export function limpiarTextoExcel(v: any): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v)
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!s || s === "-") return null;
+  // Solo los ceros exactos ("0", "00", "0.0", "0,0") cuentan como vacíos;
+  // cualquier otro número o texto se conserva tal cual.
+  if (/^-?0+(?:[.,]0+)?$/.test(s)) return null;
+  return s.slice(0, 200);
+}
+
 // Valida y normaliza el body recibido desde el navegador (ya parseado con SheetJS)
 // REGLAS:
 //   - Filas sin COD se descartan.
-//   - Filas SIN FABRICANTE se cuentan aparte (sinFabricante) y NO se aplican:
-//     el importador NUNCA borra el fabricante que ya tiene el producto.
-//   - Duplicados en el Excel: gana la última aparición (igual que import-margins).
-export function parseBody(raw: any): { rows: FabricanteRow[]; sinFabricante: number } | null {
+//   - Filas SIN FABRICANTE y SIN MARCA se cuentan aparte (sinValores) y NO se
+//     aplican: el importador NUNCA borra los valores que ya tiene el producto.
+//   - Duplicados en el Excel: gana la última aparición (igual que las otras
+//     importaciones).
+export function parseBody(raw: any): {
+  rows: FabricanteRow[];
+  sinValores: number;
+  conFabricante: number;
+  conMarca: number;
+} | null {
   if (!raw || !Array.isArray(raw.rows)) return null;
   const rows: FabricanteRow[] = [];
-  let sinFabricante = 0;
+  let sinValores = 0;
+  let conFabricante = 0;
+  let conMarca = 0;
   for (const r of raw.rows) {
     if (!r || typeof r !== "object") continue;
     const cod = normalizeCod(String(r.cod ?? ""));
     if (!cod || cod.length > 50) continue;
-    const fabricante = String(r.fabricante ?? "").trim().slice(0, 200);
-    if (!fabricante) {
-      sinFabricante++;
+    const fabricante = limpiarTextoExcel(r.fabricante);
+    const marca = limpiarTextoExcel(r.marca);
+    if (fabricante === null && marca === null) {
+      // Fila sin ninguno de los dos: no se aplica nada a esta fila
+      sinValores++;
       continue;
     }
+    if (fabricante !== null) conFabricante++;
+    if (marca !== null) conMarca++;
     const idx = rows.findIndex((x) => x.cod === cod);
-    if (idx >= 0) rows[idx] = { cod, fabricante };
-    else rows.push({ cod, fabricante });
+    if (idx >= 0) rows[idx] = { cod, fabricante, marca };
+    else rows.push({ cod, fabricante, marca });
   }
-  return { rows, sinFabricante };
+  return { rows, sinValores, conFabricante, conMarca };
 }
 
 // Solo el SUPREMO_ADMIN puede ejecutar esta importación (misma regla que
-// importar márgenes, importar la planilla de stock y borrar todo).
+// importar márgenes, valor add, la planilla de stock y borrar todo).
 export async function requireSupremo(): Promise<NextResponse | null> {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -64,8 +105,8 @@ export async function requireSupremo(): Promise<NextResponse | null> {
 }
 
 // Busca en la BD los productos que coinciden con los códigos del Excel
-// (match por sku o por codViza, normalizados) — misma lógica que import-margins.
-// SOLO LECTURA: este fetch no modifica nada.
+// (match por sku o por codViza, normalizados) — misma lógica que las rutas
+// hermanas. SOLO LECTURA: este fetch no modifica nada.
 export async function fetchMatchedProducts(rows: FabricanteRow[]) {
   const codes = Array.from(new Set(rows.map((r) => r.cod)));
   const products = await db.product.findMany({

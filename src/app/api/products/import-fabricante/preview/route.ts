@@ -1,7 +1,7 @@
 // POST /api/products/import-fabricante/preview
-// Vista previa de la importación de FABRICANTES desde la planilla LISTA VIZA HOME.
-// SOLO LEE la base (findMany con select) — nunca modifica nada.
-// El hermano apply es quien ejecuta los updates.
+// Vista previa de la importación de FABRICANTES y MARCAS desde la planilla
+// LISTA VIZA HOME. SOLO LEE la base (findMany con select) — nunca modifica
+// nada. El hermano apply es quien ejecuta los updates.
 import { NextRequest, NextResponse } from "next/server";
 import { parseBody, requireSupremo, fetchMatchedProducts } from "../shared";
 
@@ -15,10 +15,10 @@ export async function POST(req: NextRequest) {
     if (!parsed) {
       return NextResponse.json({ error: "Formato de datos inválido" }, { status: 400 });
     }
-    const { rows, sinFabricante } = parsed;
+    const { rows, sinValores, conFabricante, conMarca } = parsed;
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE (hoja 'base')" },
+        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA (hoja 'base')" },
         { status: 400 }
       );
     }
@@ -29,7 +29,9 @@ export async function POST(req: NextRequest) {
       sku: string;
       name: string;
       fabricanteActual: string | null;
-      fabricanteNuevo: string;
+      fabricanteNuevo: string | null;
+      marcaActual: string | null;
+      marcaNuevo: string | null;
     }> = [];
     const noEncontrados: string[] = [];
     let aActualizar = 0;
@@ -41,9 +43,13 @@ export async function POST(req: NextRequest) {
         noEncontrados.push(row.cod);
         continue;
       }
-      const actual = (product.fabricante ?? "").trim();
-      if (actual === row.fabricante) {
-        // Ya tiene exactamente ese fabricante: queda intocado
+      const fabCambia =
+        row.fabricante !== null &&
+        (product.fabricante ?? "").trim() !== row.fabricante;
+      const marcaCambia =
+        row.marca !== null && (product.brand ?? "").trim() !== row.marca;
+      if (!fabCambia && !marcaCambia) {
+        // Ya tiene exactamente esos valores: queda intocado
         yaIgual++;
         continue;
       }
@@ -53,7 +59,9 @@ export async function POST(req: NextRequest) {
           sku: product.sku,
           name: product.name,
           fabricanteActual: product.fabricante,
-          fabricanteNuevo: row.fabricante,
+          fabricanteNuevo: fabCambia ? row.fabricante : null,
+          marcaActual: product.brand,
+          marcaNuevo: marcaCambia ? row.marca : null,
         });
       }
     }
@@ -66,7 +74,9 @@ export async function POST(req: NextRequest) {
       yaIgual,
       noEncontrados: noEncontrados.length,
       noEncontradosMuestra: noEncontrados.slice(0, 50),
-      sinFabricante,
+      sinValores,
+      conFabricante,
+      conMarca,
       cambios,
     });
   } catch (error) {

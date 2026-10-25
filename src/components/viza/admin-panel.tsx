@@ -349,10 +349,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // vt/mt = Valor Para Técnico + Margen P/Técnico (solo algunos productos los traen)
   const marginsRowsRef = useRef<Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null; vt: number | null; mt: number | null }> | null>(null);
 
-  // ─── IMPORTAR FABRICANTES (planilla LISTA VIZA HOME, hoja "base") ───
+  // ─── IMPORTAR FABRICANTES Y MARCAS (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES: el Excel se procesa EN EL NAVEGADOR
-  // (SheetJS) y solo se envía un JSON compacto { cod, fabricante }. La API solo
-  // actualiza el campo fabricante (y brand SOLO si está vacío); nada más se toca.
+  // (SheetJS) y solo se envía un JSON compacto { cod, fabricante, marca }. La API
+  // solo actualiza FABRICANTE y MARCA (brand, el catálogo de vendedores); nada
+  // más se toca. La MARCA explícita del Excel siempre gana; si la fila no trae
+  // MARCA, brand se completa con el fabricante SOLO si está vacío (espejo).
   const [fabImportOpen, setFabImportOpen] = useState(false);
   const [fabImportLoading, setFabImportLoading] = useState(false);
   const [fabImportPreview, setFabImportPreview] = useState<{
@@ -362,21 +364,24 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     yaIgual: number;
     noEncontrados: number;
     noEncontradosMuestra: string[];
-    sinFabricante: number;
-    cambios: Array<{ sku: string; name: string; fabricanteActual: string | null; fabricanteNuevo: string }>;
+    sinValores: number;
+    conFabricante: number;
+    conMarca: number;
+    cambios: Array<{ sku: string; name: string; fabricanteActual: string | null; fabricanteNuevo: string | null; marcaActual: string | null; marcaNuevo: string | null }>;
   } | null>(null);
   const [fabImportApplying, setFabImportApplying] = useState(false);
   const [fabImportResult, setFabImportResult] = useState<{
     actualizados: number;
-    conBrandNuevo: number;
+    conMarcaNueva: number;
+    conBrandEspejo: number;
     yaIgual: number;
     noEncontrados: number;
     fallidos: number;
     errores: string[];
   } | null>(null);
   const fabFileInputRef = useRef<HTMLInputElement | null>(null);
-  // Guarda las filas {cod, fabricante} parseadas entre la vista previa y el apply
-  const fabRowsRef = useRef<Array<{ cod: string; fabricante: string }> | null>(null);
+  // Guarda las filas {cod, fabricante, marca} parseadas entre la vista previa y el apply
+  const fabRowsRef = useRef<Array<{ cod: string; fabricante: string | null; marca: string | null }> | null>(null);
 
   // ─── IMPORTAR VALOR + % ADD (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES / FABRICANTES: el Excel se procesa EN
@@ -656,11 +661,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     }
   };
 
-  // ─── IMPORTAR FABRICANTES: procesar el Excel EN EL NAVEGADOR ───
+  // ─── IMPORTAR FABRICANTES Y MARCAS: procesar el Excel EN EL NAVEGADOR ───
   // Lee la hoja "base" de la planilla LISTA VIZA HOME (headers en fila 2),
-  // extrae COD VIZA + FABRICANTE y envía un JSON compacto a
-  // /api/products/import-fabricante/preview. Mismo flujo que márgenes:
-  // primero vista previa (solo lectura) y después el apply explícito.
+  // extrae COD VIZA + FABRICANTE (col CO) + MARCA (col CT) y envía un JSON
+  // compacto a /api/products/import-fabricante/preview. Mismo flujo que
+  // márgenes/valor add: primero vista previa (solo lectura) y después el
+  // apply explícito. En la columna MARCA, 0 y "-" significan "sin marca".
   const handleFabricanteFile = async (file: File) => {
     setFabImportOpen(true);
     setFabImportLoading(true);
@@ -709,15 +715,25 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       if (headerIdx < 0 || colMap["FABRICANTE"] === undefined) {
         throw new Error("No se encontró la hoja 'base' con columnas COD VIZA y FABRICANTE");
       }
+      // Columna MARCA (opcional en planillas viejas): celdas 0 / "-" = sin marca
+      const colMarca = colMap["MARCA"] ?? -1;
+      if (colMarca < 0) {
+        toast.info("La planilla no tiene columna MARCA: solo se importarán FABRICANTES.");
+      }
 
-      const rows: Array<{ cod: string; fabricante: string }> = [];
+      const rows: Array<{ cod: string; fabricante: string | null; marca: string | null }> = [];
       for (let r = headerIdx + 1; r < aoa.length; r++) {
         const row = aoa[r] || [];
         const cod = toStr(row[colMap["COD VIZA"]]).replace(/\.0$/, "");
         if (!cod) continue;
-        // Se envían TODAS las filas con código, incluso sin fabricante:
-        // la API las cuenta (sinFabricante) y NUNCA borra el valor existente.
-        rows.push({ cod, fabricante: toStr(row[colMap["FABRICANTE"]]) });
+        // Se envían TODAS las filas con código, incluso sin fabricante/marca:
+        // la API las cuenta (sinValores) y NUNCA borra los valores existentes.
+        // La limpieza fina (0/"-"/espacios) la hace la API (limpiarTextoExcel).
+        rows.push({
+          cod,
+          fabricante: toStr(row[colMap["FABRICANTE"]]),
+          marca: colMarca >= 0 ? toStr(row[colMarca]) : "",
+        });
       }
       if (rows.length === 0) throw new Error("El Excel no contiene filas con COD VIZA");
       fabRowsRef.current = rows;
@@ -1185,7 +1201,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   </>
                 )}
 
-                {/* Boton IMPORTAR FABRICANTES (planilla LISTA VIZA HOME) — solo supremo_admin */}
+                {/* Boton IMPORTAR FABRICANTES Y MARCAS (planilla LISTA VIZA HOME) — solo supremo_admin */}
                 {isSupremo && (
                   <>
                     <input
@@ -1210,10 +1226,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       }}
                       className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
                       style={{ background: "linear-gradient(135deg, #155789 0%, #3a8fd4 100%)" }}
-                      title="Importar FABRICANTE desde la planilla LISTA VIZA HOME (hoja base). Solo actualiza la columna FABRICANTE; nada más se toca."
+                      title="Importar FABRICANTE y MARCA desde la planilla LISTA VIZA HOME (hoja base). Solo actualiza esas dos columnas; nada más se toca."
                     >
                       <Tag className="h-3.5 w-3.5" />
-                      IMPORTAR FABRICANTES
+                      IMPORTAR FABRICANTES Y MARCAS
                     </button>
                   </>
                 )}
@@ -2330,10 +2346,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
 
       {/* ════════════════════════════════════════════════════════════════
-          MODAL: IMPORTAR FABRICANTES (planilla LISTA VIZA HOME, hoja "base")
-          - Mismo flujo de márgenes: vista previa (solo lectura) + apply
-          - SOLO actualiza el campo fabricante (y brand si está vacío)
-          - NUNCA borra un fabricante existente; filas sin fabricante intocadas
+          MODAL: IMPORTAR FABRICANTES Y MARCAS (planilla LISTA VIZA HOME, hoja "base")
+          - Mismo flujo de márgenes/valor add: vista previa (solo lectura) + apply
+          - SOLO actualiza FABRICANTE y MARCA (brand, catálogo de vendedores)
+          - La MARCA explícita del Excel siempre gana; si la fila no trae MARCA,
+            brand se completa con el fabricante SOLO si está vacío (espejo)
+          - NUNCA borra valores existentes; filas sin fabricante ni marca intocadas
           ════════════════════════════════════════════════════════════════ */}
       {fabImportOpen && (
         <div
@@ -2353,7 +2371,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
             >
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Tag className="h-5 w-5" />
-                Importar fabricantes (planilla VIZA HOME)
+                Importar fabricantes y marcas (planilla VIZA HOME)
               </h3>
               <button
                 onClick={() => {
@@ -2383,15 +2401,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     style={{ background: "#f0fdf4", borderColor: "#86efac" }}
                   >
                     <p className="text-base font-bold text-emerald-800 mb-2">
-                      ✓ Fabricantes aplicados
+                      ✓ Fabricantes y marcas aplicados
                     </p>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Productos actualizados</p>
                         <p className="text-2xl font-black text-emerald-700">{fabImportResult.actualizados}</p>
                       </div>
                       <div className="bg-white rounded-lg p-3 border border-stone-200">
-                        <p className="text-stone-500 text-xs font-semibold uppercase">Ya tenían ese fabricante</p>
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Ya correctos</p>
                         <p className="text-2xl font-black text-stone-600">{fabImportResult.yaIgual}</p>
                       </div>
                       <div className="bg-white rounded-lg p-3 border border-blue-200">
@@ -2399,8 +2417,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         <p className="text-2xl font-black text-blue-700">{fabImportResult.noEncontrados}</p>
                       </div>
                       <div className="bg-white rounded-lg p-3 border border-violet-200">
-                        <p className="text-stone-500 text-xs font-semibold uppercase">Catálogo completado</p>
-                        <p className="text-2xl font-black text-violet-700">{fabImportResult.conBrandNuevo}</p>
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Marcas del Excel aplicadas</p>
+                        <p className="text-2xl font-black text-violet-700">{fabImportResult.conMarcaNueva}</p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-amber-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Catálogo por espejo</p>
+                        <p className="text-2xl font-black text-amber-700">{fabImportResult.conBrandEspejo}</p>
                       </div>
                     </div>
                   </div>
@@ -2417,8 +2439,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </div>
                   )}
                   <div className="text-xs text-stone-500 italic">
-                    La tabla se recargó con los fabricantes nuevos. Solo se actualizó la columna
-                    FABRICANTE (y el catálogo de vendedores de los productos que no tenían marca).
+                    La tabla se recargó con los fabricantes y marcas nuevos. Solo se actualizaron las
+                    columnas FABRICANTE y MARCA (el catálogo de vendedores de los productos que no
+                    traían marca en la fila quedó completado con el fabricante).
                     Costos, márgenes, precios y stock quedaron intactos.
                   </div>
                 </div>
@@ -2427,16 +2450,16 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               {!fabImportLoading && !fabImportResult && fabImportPreview && (
                 <div className="space-y-4">
                   {/* Resumen */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
                       <p className="text-3xl font-black text-emerald-700">{fabImportPreview.aActualizar}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben fabricante nuevo</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben fabricante y/o marca nueva</p>
                     </div>
                     <div className="rounded-lg p-3 border border-stone-200 bg-stone-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Ya correctos</p>
                       <p className="text-3xl font-black text-stone-600">{fabImportPreview.yaIgual}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Ya tenían exactamente ese fabricante</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Ya tenían exactamente esos valores</p>
                     </div>
                     <div className="rounded-lg p-3 border border-blue-200 bg-blue-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Sin producto</p>
@@ -2444,20 +2467,26 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <p className="text-[10px] text-stone-500 mt-1">Códigos del Excel que no existen en el sistema</p>
                     </div>
                     <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
-                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin fabricante en fila</p>
-                      <p className="text-3xl font-black text-amber-600">{fabImportPreview.sinFabricante}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Filas sin FABRICANTE en el Excel (quedan intocadas)</p>
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin marca ni fabricante en fila</p>
+                      <p className="text-3xl font-black text-amber-600">{fabImportPreview.sinValores}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Filas con 0/- en MARCA y sin FABRICANTE (quedan intocadas)</p>
+                    </div>
+                    <div className="rounded-lg p-3 border border-violet-200 bg-violet-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Filas con MARCA</p>
+                      <p className="text-3xl font-black text-violet-700">{fabImportPreview.conMarca}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">De {fabImportPreview.conFabricante} filas con FABRICANTE en el Excel</p>
                     </div>
                   </div>
 
                   <div className="text-xs text-stone-600 bg-blue-50 rounded-lg p-3 border border-blue-200">
                     <strong>{fabImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base".
-                    Se actualiza <strong>SOLO la columna FABRICANTE</strong> de los productos que coinciden
-                    por COD. <strong>No se crean productos y no se tocan</strong> costos, márgenes, precios,
-                    stock, etiquetas ni ningún otro dato.
+                    Se actualizan <strong>SOLO las columnas FABRICANTE y MARCA</strong> de los productos
+                    que coinciden por COD; la MARCA va al catálogo de vendedores. Si una fila no trae
+                    MARCA (0 o "-"), el catálogo de ese producto se completa con el fabricante solo si
+                    estaba vacío (convención del sistema).
                     <span className="block mt-1">
-                      Además, a los productos que no tienen marca en el catálogo de vendedores se les
-                      completa con el fabricante (el sistema usa "brand" como espejo del fabricante).
+                      <strong>No se crean productos y no se tocan</strong> costos, márgenes, precios,
+                      stock, etiquetas ni ningún otro dato.
                     </span>
                   </div>
 
@@ -2475,18 +2504,26 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Descripción</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Fabricante actual</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Fabricante nuevo</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Marca actual</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Marca nueva</th>
                             </tr>
                           </thead>
                           <tbody>
                             {fabImportPreview.cambios.map((c, i) => (
                               <tr key={i} className="border-t border-stone-100">
                                 <td className="px-2 py-1.5 font-mono font-semibold text-stone-800">{c.sku}</td>
-                                <td className="px-2 py-1.5 text-stone-700 max-w-[260px] truncate" title={c.name}>{c.name || "—"}</td>
-                                <td className="px-2 py-1.5 text-stone-500 max-w-[180px] truncate" title={c.fabricanteActual ?? ""}>
+                                <td className="px-2 py-1.5 text-stone-700 max-w-[200px] truncate" title={c.name}>{c.name || "—"}</td>
+                                <td className="px-2 py-1.5 text-stone-500 max-w-[150px] truncate" title={c.fabricanteActual ?? ""}>
                                   {c.fabricanteActual || "— (vacío)"}
                                 </td>
-                                <td className="px-2 py-1.5 font-bold text-emerald-700 max-w-[180px] truncate" title={c.fabricanteNuevo}>
-                                  {c.fabricanteNuevo}
+                                <td className="px-2 py-1.5 font-bold text-emerald-700 max-w-[150px] truncate" title={c.fabricanteNuevo ?? ""}>
+                                  {c.fabricanteNuevo ?? "—"}
+                                </td>
+                                <td className="px-2 py-1.5 text-stone-500 max-w-[150px] truncate" title={c.marcaActual ?? ""}>
+                                  {c.marcaActual || "— (vacío)"}
+                                </td>
+                                <td className="px-2 py-1.5 font-bold text-violet-700 max-w-[150px] truncate" title={c.marcaNuevo ?? ""}>
+                                  {c.marcaNuevo ?? "—"}
                                 </td>
                               </tr>
                             ))}
@@ -2532,12 +2569,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     {fabImportApplying ? (
                       <>
                         <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
-                        Aplicando fabricantes…
+                        Aplicando fabricantes y marcas…
                       </>
                     ) : (
                       <>
                         <Check className="h-4 w-4" />
-                        APLICAR FABRICANTES
+                        APLICAR FABRICANTES Y MARCAS
                       </>
                     )}
                   </button>
