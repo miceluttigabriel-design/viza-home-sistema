@@ -17,6 +17,7 @@ import {
   Save,
   Filter,
   ChevronDown,
+  ChevronUp,
   Plus,
   Download,
   Upload,
@@ -214,7 +215,9 @@ const COLUMNS: ColDef[] = [
   { key: "costUS", label: "Costo US$", type: "num", group: "COSTOS" },
   { key: "usToGs", label: "US$ A GS", type: "calc", group: "COSTOS" },
   { key: "costGs", label: "Costo Gs", type: "num", group: "COSTOS" },
-  { key: "rsNoUS", label: "R$ NO US$", type: "calc", group: "COSTOS" },
+  // R$ NO US$ eliminada de esta tabla a pedido del usuario. El campo sigue
+  // existiendo en la base de datos (H = IF D>0, D, F), en el export Excel y
+  // alimenta el cálculo de US$ NO GS / Sub-Costo; solo deja de mostrarse.
   { key: "usNoGs", label: "US$ NO GS", type: "calc", group: "COSTOS" },
   { key: "subCost", label: "Sub-Costo", type: "calc", group: "COSTOS" },
   { key: "discountPct", label: "% DESC", type: "pct", group: "COSTOS" },
@@ -3307,6 +3310,19 @@ const Cell = memo(function Cell({
   value: any;
   onChange: (v: string) => void;
 }) {
+  // DESCRIPCION (col "name"): celda expandible. La flechita alterna entre el
+  // input de una línea y un textarea que muestra TODO el texto con salto de
+  // línea (sigue siendo editable, como el resto de la tabla).
+  const isDesc = col.key === "name";
+  const [descExpanded, setDescExpanded] = useState(false);
+  const descRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    if (isDesc && descExpanded && descRef.current) {
+      descRef.current.style.height = "auto";
+      descRef.current.style.height = `${descRef.current.scrollHeight}px`;
+    }
+  }, [isDesc, descExpanded, value]);
+
   // Celdas calculadas (read-only, fondo verde claro)
   if (col.type === "calc") {
     // Solo las columnas marginC1..30 son porcentajes; el resto son Gs
@@ -3334,25 +3350,64 @@ const Cell = memo(function Cell({
       ? Number(value) * 100
       : value ?? "";
 
+  const inputNode = (
+    <input
+      type={isNum || isPct ? "number" : "text"}
+      step={isPct ? "0.01" : isNum ? "1" : undefined}
+      value={displayValue}
+      onChange={(e) => {
+        if (isPct) {
+          const numVal = e.target.value === "" ? "" : String(Number(e.target.value) / 100);
+          onChange(numVal);
+        } else {
+          onChange(e.target.value);
+        }
+      }}
+      className={`w-full ${isDesc ? "min-w-[220px]" : "min-w-[80px]"} h-6 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
+        isText ? "text-left" : "text-right"
+      }`}
+      placeholder="—"
+    />
+  );
+
+  // Columnas normales: input simple de una línea, como siempre
+  if (!isDesc) {
+    return (
+      <td className="px-1 py-0 border-r border-stone-50 bg-white">
+        {inputNode}
+      </td>
+    );
+  }
+
+  // DESCRIPCION: input + flechita para expandir/contraer el texto completo
   return (
     <td className="px-1 py-0 border-r border-stone-50 bg-white">
-      <input
-        type={isNum || isPct ? "number" : "text"}
-        step={isPct ? "0.01" : isNum ? "1" : undefined}
-        value={displayValue}
-        onChange={(e) => {
-          if (isPct) {
-            const numVal = e.target.value === "" ? "" : String(Number(e.target.value) / 100);
-            onChange(numVal);
-          } else {
-            onChange(e.target.value);
-          }
-        }}
-        className={`w-full min-w-[80px] h-6 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
-          isText ? "text-left" : "text-right"
-        }`}
-        placeholder="—"
-      />
+      <div className="flex items-start gap-0.5">
+        {descExpanded ? (
+          <textarea
+            ref={descRef}
+            value={displayValue}
+            onChange={(e) => onChange(e.target.value)}
+            rows={2}
+            placeholder="—"
+            className="w-full min-w-[220px] px-2 py-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-100 outline-none text-xs text-left leading-4 resize-none bg-white"
+          />
+        ) : (
+          inputNode
+        )}
+        <button
+          type="button"
+          onClick={() => setDescExpanded((v) => !v)}
+          title={descExpanded ? "Contraer DESCRIPCION" : "Ver todo el texto de la DESCRIPCION"}
+          className="shrink-0 mt-0.5 h-5 w-5 rounded inline-flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors"
+        >
+          {descExpanded ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
     </td>
   );
 });
