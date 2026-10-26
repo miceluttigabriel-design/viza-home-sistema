@@ -1,7 +1,4 @@
 // POST /api/products/import-fabricante/apply
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
 // Aplica el FABRICANTE, la MARCA y el GRUPO del Excel (planilla LISTA VIZA
 // HOME, hoja "base") a los productos que coinciden por COD (sku o codViza).
 // REGLAS DE SEGURIDAD (nada más se toca):
@@ -15,37 +12,14 @@
 //     tabla, donde se muestra como GRUPO). Misma regla que FABRICANTE/MARCA:
 //     el valor explícito del Excel gana; fila sin GRUPO deja el campo como
 //     está (nunca borra).
-=======
->>>>>>> Stashed changes
-// Aplica el FABRICANTE y la MARCA del Excel (planilla LISTA VIZA HOME, hoja
-// "base") a los productos que coinciden por COD (sku o codViza).
-// REGLAS DE SEGURIDAD (nada más se toca):
-//   - SOLO se actualizan los campos fabricante, marca y (espejo) brand.
-//   - La MARCA del Excel (col CT) se escribe en el campo "marca": el mismo
-//     campo que usan la importación de productos y el export, y el que muestra
-//     la columna MARCA de la tabla admin. SIEMPRE gana sobre el valor previo.
-<<<<<<< Updated upstream
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
 //   - brand (catálogo de vendedores) queda como espejo del FABRICANTE, igual
 //     que en la importación de productos (brand = FABRICANTE): se completa
 //     SOLO si está vacío, nunca sobrescribe un brand existente.
 //   - NUNCA se crean productos.
 //   - NUNCA se tocan costos, márgenes, precios, stock, etiquetas, ni ningún
 //     otro campo.
-<<<<<<< Updated upstream
-//   - NUNCA se borra un valor existente (las filas sin FABRICANTE ni MARCA
-//     se ignoran por completo).
-=======
-<<<<<<< HEAD
 //   - NUNCA se borra un valor existente (las filas sin FABRICANTE, MARCA ni
 //     GRUPO se ignoran por completo).
-=======
-//   - NUNCA se borra un valor existente (las filas sin FABRICANTE ni MARCA
-//     se ignoran por completo).
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
 //   - Productos que ya tienen exactamente esos valores quedan intocados
 //     (idempotente: se puede reaplicar la misma planilla sin efecto).
 import { NextRequest, NextResponse } from "next/server";
@@ -69,31 +43,15 @@ export async function POST(req: NextRequest) {
     const { rows } = parsed;
     if (rows.length === 0) {
       return NextResponse.json(
-<<<<<<< Updated upstream
-        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA (hoja 'base')" },
-=======
-<<<<<<< HEAD
         { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA/GRUPO (hoja 'base')" },
-=======
-        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA (hoja 'base')" },
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
         { status: 400 }
       );
     }
 
     const { byCod } = await fetchMatchedProducts(rows);
 
-<<<<<<< Updated upstream
-    // Construir updates: solo fabricante, marca y/o brand (espejo del fabricante)
-=======
-<<<<<<< HEAD
     // Construir updates: solo fabricante, marca, grupo (categoria) y/o brand
     // (espejo del fabricante)
-=======
-    // Construir updates: solo fabricante, marca y/o brand (espejo del fabricante)
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
     const updates: Array<{
       id: string;
       sku: string;
@@ -114,17 +72,9 @@ export async function POST(req: NextRequest) {
         row.fabricante !== null &&
         (product.fabricante ?? "").trim() !== row.fabricante;
       const marcaCambia = row.marca !== null && marcaActual !== row.marca;
-<<<<<<< Updated upstream
-      if (!fabCambia && !marcaCambia) {
-=======
-<<<<<<< HEAD
       const grupoCambia =
         row.grupo !== null && (product.categoria ?? "").trim() !== row.grupo;
       if (!fabCambia && !marcaCambia && !grupoCambia) {
-=======
-      if (!fabCambia && !marcaCambia) {
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
         yaIgual++;
         continue;
       }
@@ -137,17 +87,11 @@ export async function POST(req: NextRequest) {
         // campo que usan la importación de productos y el export. Siempre gana.
         data.marca = row.marca;
       }
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
       if (grupoCambia && row.grupo !== null) {
         // GRUPO del Excel (col CQ "CATEGORIA"): va al campo "categoria" de la
         // base, el mismo que usan el export y la edición manual. Siempre gana.
         data.categoria = row.grupo;
       }
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
       if (!brandActual && fabCambia && row.fabricante !== null) {
         // Espejo del catálogo de vendedores (igual que la importación de
         // productos: brand = FABRICANTE), SOLO si brand está vacío; nunca
@@ -165,13 +109,7 @@ export async function POST(req: NextRequest) {
     // mismo mecanismo que import-margins/import-valoradd/apply)
     let actualizados = 0;
     let conMarcaNueva = 0;
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
     let conGrupoNuevo = 0;
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
     let conBrandEspejo = 0;
     const errores: string[] = [];
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
@@ -183,13 +121,7 @@ export async function POST(req: NextRequest) {
         if (r.status === "fulfilled") {
           actualizados++;
           if (batch[idx].data.marca !== undefined) conMarcaNueva++;
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
           if (batch[idx].data.categoria !== undefined) conGrupoNuevo++;
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
           if (batch[idx].data.brand !== undefined) conBrandEspejo++;
         } else {
           const sku = batch[idx].sku;
@@ -205,13 +137,7 @@ export async function POST(req: NextRequest) {
       totalCodigos: rows.length,
       actualizados,
       conMarcaNueva,
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
       conGrupoNuevo,
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
       conBrandEspejo,
       yaIgual,
       noEncontrados: noEncontrados.length,
@@ -220,14 +146,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error apply import-fabricante:", error);
-<<<<<<< Updated upstream
-    return NextResponse.json({ error: "Error al aplicar fabricantes y marcas" }, { status: 500 });
-=======
-<<<<<<< HEAD
     return NextResponse.json({ error: "Error al aplicar fabricantes, marcas y grupos" }, { status: 500 });
-=======
-    return NextResponse.json({ error: "Error al aplicar fabricantes y marcas" }, { status: 500 });
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
   }
 }

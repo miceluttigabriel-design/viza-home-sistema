@@ -195,12 +195,6 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   // Datos principales (pegados al SKU)
   { key: "referencia", label: "REFERENCIA", type: "text", group: "DATOS" },
-<<<<<<< Updated upstream
-  // Columnas CATEGORIA, DIVISION, TIPO, MODELO y PRODUCTO ocultas de esta
-  // tabla a pedido del usuario (los datos siguen en la base).
-  { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
-=======
-<<<<<<< HEAD
   // Columnas DIVISION, TIPO, MODELO y PRODUCTO ocultas de esta tabla a pedido
   // del usuario (los datos siguen en la base).
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
@@ -210,12 +204,6 @@ const COLUMNS: ColDef[] = [
   // se muestra (como GRUPO) y es editable en esta tabla; el botón IMPORTAR
   // FABRICANTES Y MARCAS + GRUPO la llena desde la planilla.
   { key: "categoria", label: "GRUPO", type: "text", group: "DATOS FINALES" },
-=======
-  // Columnas CATEGORIA, DIVISION, TIPO, MODELO y PRODUCTO ocultas de esta
-  // tabla a pedido del usuario (los datos siguen en la base).
-  { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
   // FABRICANTE y MARCA restauradas a pedido del usuario: los campos ya
   // existían en la base de datos y en import/export Excel; ahora también se
   // muestran y son editables en esta tabla (filtro por columna y búsqueda
@@ -373,9 +361,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // vt/mt = Valor Para Técnico + Margen P/Técnico (solo algunos productos los traen)
   const marginsRowsRef = useRef<Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null; vt: number | null; mt: number | null }> | null>(null);
 
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
   // ─── IMPORTAR FABRICANTES Y MARCAS + GRUPO (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES: el Excel se procesa EN EL NAVEGADOR
   // (SheetJS) y solo se envía un JSON compacto { cod, fabricante, marca, grupo }.
@@ -385,20 +370,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // siempre ganan; un campo ausente (0/"-"/VAZIO) deja el campo del producto
   // intacto (nunca borra). El catálogo (brand) queda como espejo del FABRICANTE
   // SOLO donde estaba vacío (convención del sistema).
-=======
->>>>>>> Stashed changes
-  // ─── IMPORTAR FABRICANTES Y MARCAS (planilla LISTA VIZA HOME, hoja "base") ───
-  // Mismo mecanismo que IMPORTAR MÁRGENES: el Excel se procesa EN EL NAVEGADOR
-  // (SheetJS) y solo se envía un JSON compacto { cod, fabricante, marca }. La API
-  // solo actualiza FABRICANTE y MARCA (campo marca, col CT — el mismo que usan
-  // la importación de productos y el export, y el que muestra la columna MARCA
-  // de esta tabla); nada más se toca. La MARCA explícita del Excel siempre gana;
-  // el catálogo de vendedores (brand) queda como espejo del FABRICANTE SOLO
-  // donde estaba vacío (convención del sistema).
-<<<<<<< Updated upstream
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
   const [fabImportOpen, setFabImportOpen] = useState(false);
   const [fabImportLoading, setFabImportLoading] = useState(false);
   const [fabImportPreview, setFabImportPreview] = useState<{
@@ -411,28 +382,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     sinValores: number;
     conFabricante: number;
     conMarca: number;
-<<<<<<< Updated upstream
-    cambios: Array<{ sku: string; name: string; fabricanteActual: string | null; fabricanteNuevo: string | null; marcaActual: string | null; marcaNuevo: string | null }>;
-=======
-<<<<<<< HEAD
     conGrupo: number;
     cambios: Array<{ sku: string; name: string; fabricanteActual: string | null; fabricanteNuevo: string | null; marcaActual: string | null; marcaNuevo: string | null; grupoActual: string | null; grupoNuevo: string | null }>;
-=======
-    cambios: Array<{ sku: string; name: string; fabricanteActual: string | null; fabricanteNuevo: string | null; marcaActual: string | null; marcaNuevo: string | null }>;
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
   } | null>(null);
   const [fabImportApplying, setFabImportApplying] = useState(false);
   const [fabImportResult, setFabImportResult] = useState<{
     actualizados: number;
     conMarcaNueva: number;
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
     conGrupoNuevo: number;
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
     conBrandEspejo: number;
     yaIgual: number;
     noEncontrados: number;
@@ -440,18 +397,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     errores: string[];
   } | null>(null);
   const fabFileInputRef = useRef<HTMLInputElement | null>(null);
-<<<<<<< Updated upstream
-  // Guarda las filas {cod, fabricante, marca} parseadas entre la vista previa y el apply
-  const fabRowsRef = useRef<Array<{ cod: string; fabricante: string | null; marca: string | null }> | null>(null);
-=======
-<<<<<<< HEAD
   // Guarda las filas {cod, fabricante, marca, grupo} parseadas entre la vista previa y el apply
   const fabRowsRef = useRef<Array<{ cod: string; fabricante: string | null; marca: string | null; grupo: string | null }> | null>(null);
-=======
-  // Guarda las filas {cod, fabricante, marca} parseadas entre la vista previa y el apply
-  const fabRowsRef = useRef<Array<{ cod: string; fabricante: string | null; marca: string | null }> | null>(null);
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
 
   // ─── IMPORTAR VALOR + % ADD + SAFRA (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES / FABRICANTES: el Excel se procesa EN
@@ -743,9 +690,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     }
   };
 
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
   // ─── IMPORTAR FABRICANTES Y MARCAS + GRUPO: procesar el Excel EN EL NAVEGADOR ───
   // Lee la hoja "base" de la planilla LISTA VIZA HOME (headers en fila 2),
   // extrae COD VIZA + FABRICANTE (col CO) + MARCA (col CT) + GRUPO (col CQ,
@@ -753,18 +697,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // /api/products/import-fabricante/preview. Mismo flujo que márgenes/valor
   // add: primero vista previa (solo lectura) y después el apply explícito.
   // En la columna MARCA, 0 y "-" significan "sin marca".
-=======
->>>>>>> Stashed changes
-  // ─── IMPORTAR FABRICANTES Y MARCAS: procesar el Excel EN EL NAVEGADOR ───
-  // Lee la hoja "base" de la planilla LISTA VIZA HOME (headers en fila 2),
-  // extrae COD VIZA + FABRICANTE (col CO) + MARCA (col CT) y envía un JSON
-  // compacto a /api/products/import-fabricante/preview. Mismo flujo que
-  // márgenes/valor add: primero vista previa (solo lectura) y después el
-  // apply explícito. En la columna MARCA, 0 y "-" significan "sin marca".
-<<<<<<< Updated upstream
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
   const handleFabricanteFile = async (file: File) => {
     setFabImportOpen(true);
     setFabImportLoading(true);
@@ -819,11 +751,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       if (colMarca < 0) {
         toast.info("La planilla no tiene columna MARCA: solo se importarán FABRICANTES.");
       }
-<<<<<<< Updated upstream
-
-      const rows: Array<{ cod: string; fabricante: string | null; marca: string | null }> = [];
-=======
-<<<<<<< HEAD
       // Columna GRUPO (opcional en planillas viejas): en la planilla se llama
       // "CATEGORIA" (col CQ, detrás de SUB-GRUPO); se acepta "GRUPO" o "CATEGORIA"
       const colGrupo = colMap["GRUPO"] ?? colMap["CATEGORIA"] ?? -1;
@@ -832,37 +759,18 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       }
 
       const rows: Array<{ cod: string; fabricante: string | null; marca: string | null; grupo: string | null }> = [];
-=======
-
-      const rows: Array<{ cod: string; fabricante: string | null; marca: string | null }> = [];
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
       for (let r = headerIdx + 1; r < aoa.length; r++) {
         const row = aoa[r] || [];
         const cod = toStr(row[colMap["COD VIZA"]]).replace(/\.0$/, "");
         if (!cod) continue;
-<<<<<<< Updated upstream
-        // Se envían TODAS las filas con código, incluso sin fabricante/marca:
-=======
-<<<<<<< HEAD
         // Se envían TODAS las filas con código, incluso sin fabricante/marca/grupo:
-=======
-        // Se envían TODAS las filas con código, incluso sin fabricante/marca:
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
         // la API las cuenta (sinValores) y NUNCA borra los valores existentes.
         // La limpieza fina (0/"-"/espacios) la hace la API (limpiarTextoExcel).
         rows.push({
           cod,
           fabricante: toStr(row[colMap["FABRICANTE"]]),
           marca: colMarca >= 0 ? toStr(row[colMarca]) : "",
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
           grupo: colGrupo >= 0 ? toStr(row[colGrupo]) : "",
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
         });
       }
       if (rows.length === 0) throw new Error("El Excel no contiene filas con COD VIZA");
@@ -1343,15 +1251,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   </>
                 )}
 
-<<<<<<< Updated upstream
-                {/* Boton IMPORTAR FABRICANTES Y MARCAS (planilla LISTA VIZA HOME) — solo supremo_admin */}
-=======
-<<<<<<< HEAD
                 {/* Boton IMPORTAR FABRICANTES Y MARCAS + GRUPO (planilla LISTA VIZA HOME) — solo supremo_admin */}
-=======
-                {/* Boton IMPORTAR FABRICANTES Y MARCAS (planilla LISTA VIZA HOME) — solo supremo_admin */}
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                 {isSupremo && (
                   <>
                     <input
@@ -1376,23 +1276,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       }}
                       className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
                       style={{ background: "linear-gradient(135deg, #155789 0%, #3a8fd4 100%)" }}
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                       title="Importar FABRICANTE, MARCA y GRUPO desde la planilla LISTA VIZA HOME (hoja base). Solo actualiza esas tres columnas; nada más se toca."
                     >
                       <Tag className="h-3.5 w-3.5" />
                       IMPORTAR FABRICANTES Y MARCAS + GRUPO
-=======
->>>>>>> Stashed changes
-                      title="Importar FABRICANTE y MARCA desde la planilla LISTA VIZA HOME (hoja base). Solo actualiza esas dos columnas; nada más se toca."
-                    >
-                      <Tag className="h-3.5 w-3.5" />
-                      IMPORTAR FABRICANTES Y MARCAS
-<<<<<<< Updated upstream
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                     </button>
                   </>
                 )}
@@ -2533,9 +2420,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
 
       {/* ════════════════════════════════════════════════════════════════
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
           MODAL: IMPORTAR FABRICANTES Y MARCAS + GRUPO (planilla LISTA VIZA HOME, hoja "base")
           - Mismo flujo de márgenes/valor add: vista previa (solo lectura) + apply
           - SOLO actualiza FABRICANTE, MARCA, GRUPO (categoria) y brand (espejo)
@@ -2543,18 +2427,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
             MARCA, brand se completa con el fabricante SOLO si está vacío (espejo)
           - GRUPO = col CQ "CATEGORIA" de la planilla, campo "categoria" de la base
           - NUNCA borra valores existentes; filas sin los tres valores intocadas
-=======
->>>>>>> Stashed changes
-          MODAL: IMPORTAR FABRICANTES Y MARCAS (planilla LISTA VIZA HOME, hoja "base")
-          - Mismo flujo de márgenes/valor add: vista previa (solo lectura) + apply
-          - SOLO actualiza FABRICANTE y MARCA (brand, catálogo de vendedores)
-          - La MARCA explícita del Excel siempre gana; si la fila no trae MARCA,
-            brand se completa con el fabricante SOLO si está vacío (espejo)
-          - NUNCA borra valores existentes; filas sin fabricante ni marca intocadas
-<<<<<<< Updated upstream
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
           ════════════════════════════════════════════════════════════════ */}
       {fabImportOpen && (
         <div
@@ -2574,15 +2446,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
             >
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Tag className="h-5 w-5" />
-<<<<<<< Updated upstream
-                Importar fabricantes y marcas (planilla VIZA HOME)
-=======
-<<<<<<< HEAD
                 Importar fabricantes, marcas y grupo (planilla VIZA HOME)
-=======
-                Importar fabricantes y marcas (planilla VIZA HOME)
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
               </h3>
               <button
                 onClick={() => {
@@ -2612,21 +2476,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     style={{ background: "#f0fdf4", borderColor: "#86efac" }}
                   >
                     <p className="text-base font-bold text-emerald-800 mb-2">
-<<<<<<< Updated upstream
-                      ✓ Fabricantes y marcas aplicados
-                    </p>
-                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
-=======
-<<<<<<< HEAD
                       ✓ Fabricantes, marcas y grupos aplicados
                     </p>
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-=======
-                      ✓ Fabricantes y marcas aplicados
-                    </p>
-                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Productos actualizados</p>
                         <p className="text-2xl font-black text-emerald-700">{fabImportResult.actualizados}</p>
@@ -2643,16 +2495,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         <p className="text-stone-500 text-xs font-semibold uppercase">Marcas del Excel aplicadas</p>
                         <p className="text-2xl font-black text-violet-700">{fabImportResult.conMarcaNueva}</p>
                       </div>
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                       <div className="bg-white rounded-lg p-3 border border-teal-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Grupos del Excel aplicados</p>
                         <p className="text-2xl font-black text-teal-700">{fabImportResult.conGrupoNuevo}</p>
                       </div>
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                       <div className="bg-white rounded-lg p-3 border border-amber-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Catálogo por espejo</p>
                         <p className="text-2xl font-black text-amber-700">{fabImportResult.conBrandEspejo}</p>
@@ -2672,18 +2518,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </div>
                   )}
                   <div className="text-xs text-stone-500 italic">
-<<<<<<< Updated upstream
-                    La tabla se recargó con los fabricantes y marcas nuevos. Solo se actualizaron las
-                    columnas FABRICANTE y MARCA (el catálogo de vendedores quedó como espejo del
-=======
-<<<<<<< HEAD
                     La tabla se recargó con los fabricantes, marcas y grupos nuevos. Solo se actualizaron las
                     columnas FABRICANTE, MARCA y GRUPO (el catálogo de vendedores quedó como espejo del
-=======
-                    La tabla se recargó con los fabricantes y marcas nuevos. Solo se actualizaron las
-                    columnas FABRICANTE y MARCA (el catálogo de vendedores quedó como espejo del
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                     fabricante solo donde estaba vacío).
                     Costos, márgenes, precios y stock quedaron intactos.
                   </div>
@@ -2693,25 +2529,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               {!fabImportLoading && !fabImportResult && fabImportPreview && (
                 <div className="space-y-4">
                   {/* Resumen */}
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
                       <p className="text-3xl font-black text-emerald-700">{fabImportPreview.aActualizar}</p>
                       <p className="text-[10px] text-stone-500 mt-1">Productos que reciben fabricante, marca y/o grupo nuevo</p>
-=======
->>>>>>> Stashed changes
-                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                    <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
-                      <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
-                      <p className="text-3xl font-black text-emerald-700">{fabImportPreview.aActualizar}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben fabricante y/o marca nueva</p>
-<<<<<<< Updated upstream
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                     </div>
                     <div className="rounded-lg p-3 border border-stone-200 bg-stone-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Ya correctos</p>
@@ -2724,45 +2546,24 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <p className="text-[10px] text-stone-500 mt-1">Códigos del Excel que no existen en el sistema</p>
                     </div>
                     <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
-<<<<<<< Updated upstream
-                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin marca ni fabricante en fila</p>
-                      <p className="text-3xl font-black text-amber-600">{fabImportPreview.sinValores}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Filas con 0/- en MARCA y sin FABRICANTE (quedan intocadas)</p>
-=======
-<<<<<<< HEAD
                       <p className="text-stone-500 text-xs font-semibold uppercase">Filas sin ningún valor</p>
                       <p className="text-3xl font-black text-amber-600">{fabImportPreview.sinValores}</p>
                       <p className="text-[10px] text-stone-500 mt-1">Filas sin FABRICANTE, MARCA ni GRUPO (quedan intocadas)</p>
-=======
-                      <p className="text-stone-500 text-xs font-semibold uppercase">Sin marca ni fabricante en fila</p>
-                      <p className="text-3xl font-black text-amber-600">{fabImportPreview.sinValores}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Filas con 0/- en MARCA y sin FABRICANTE (quedan intocadas)</p>
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                     </div>
                     <div className="rounded-lg p-3 border border-violet-200 bg-violet-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Filas con MARCA</p>
                       <p className="text-3xl font-black text-violet-700">{fabImportPreview.conMarca}</p>
                       <p className="text-[10px] text-stone-500 mt-1">De {fabImportPreview.conFabricante} filas con FABRICANTE en el Excel</p>
                     </div>
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                     <div className="rounded-lg p-3 border border-teal-200 bg-teal-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Filas con GRUPO</p>
                       <p className="text-3xl font-black text-teal-700">{fabImportPreview.conGrupo}</p>
                       <p className="text-[10px] text-stone-500 mt-1">Filas con CATEGORIA/GRUPO en el Excel (col detrás de SUB-GRUPO)</p>
                     </div>
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                   </div>
 
                   <div className="text-xs text-stone-600 bg-blue-50 rounded-lg p-3 border border-blue-200">
                     <strong>{fabImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base".
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                     Se actualizan <strong>SOLO las columnas FABRICANTE, MARCA y GRUPO</strong> de los
                     productos que coinciden por COD; la MARCA va al campo MARCA de la base (col CT, el mismo
                     que usa la importación de productos) y el GRUPO va al campo GRUPO de la tabla (col
@@ -2772,19 +2573,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <strong>No se crean productos y no se tocan</strong> costos, márgenes, precios,
                       stock, etiquetas ni ningún otro dato. Las filas con VAZIO/- en GRUPO dejan el
                       grupo del producto como está (nunca se borra).
-=======
->>>>>>> Stashed changes
-                    Se actualizan <strong>SOLO las columnas FABRICANTE y MARCA</strong> de los productos
-                    que coinciden por COD; la MARCA va al campo MARCA de la base (col CT, el mismo
-                    que usa la importación de productos). El catálogo de vendedores se completa con
-                    el fabricante solo donde estaba vacío (convención del sistema).
-                    <span className="block mt-1">
-                      <strong>No se crean productos y no se tocan</strong> costos, márgenes, precios,
-                      stock, etiquetas ni ningún otro dato.
-<<<<<<< Updated upstream
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                     </span>
                   </div>
 
@@ -2794,15 +2582,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <p className="text-sm font-bold text-stone-800 mb-2">
                         Vista previa de cambios (primeros {fabImportPreview.cambios.length} de {fabImportPreview.aActualizar})
                       </p>
-<<<<<<< Updated upstream
-                      <div className="border border-stone-200 rounded-lg overflow-hidden">
-=======
-<<<<<<< HEAD
                       <div className="border border-stone-200 rounded-lg overflow-auto">
-=======
-                      <div className="border border-stone-200 rounded-lg overflow-hidden">
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                         <table className="w-full text-xs">
                           <thead style={{ background: "#f5f5f4" }}>
                             <tr>
@@ -2812,14 +2592,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Fabricante nuevo</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Marca actual</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Marca nueva</th>
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Grupo actual</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Grupo nuevo</th>
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                             </tr>
                           </thead>
                           <tbody>
@@ -2839,18 +2613,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                 <td className="px-2 py-1.5 font-bold text-violet-700 max-w-[150px] truncate" title={c.marcaNuevo ?? ""}>
                                   {c.marcaNuevo ?? "—"}
                                 </td>
-<<<<<<< Updated upstream
-=======
-<<<<<<< HEAD
                                 <td className="px-2 py-1.5 text-stone-500 max-w-[130px] truncate" title={c.grupoActual ?? ""}>
                                   {c.grupoActual || "— (vacío)"}
                                 </td>
                                 <td className="px-2 py-1.5 font-bold text-teal-700 max-w-[130px] truncate" title={c.grupoNuevo ?? ""}>
                                   {c.grupoNuevo ?? "—"}
                                 </td>
-=======
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                               </tr>
                             ))}
                           </tbody>
@@ -2895,28 +2663,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     {fabImportApplying ? (
                       <>
                         <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
-<<<<<<< Updated upstream
-                        Aplicando fabricantes y marcas…
-=======
-<<<<<<< HEAD
                         Aplicando fabricantes, marcas y grupos…
-=======
-                        Aplicando fabricantes y marcas…
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                       </>
                     ) : (
                       <>
                         <Check className="h-4 w-4" />
-<<<<<<< Updated upstream
-                        APLICAR FABRICANTES Y MARCAS
-=======
-<<<<<<< HEAD
                         APLICAR FABRICANTES, MARCAS Y GRUPO
-=======
-                        APLICAR FABRICANTES Y MARCAS
->>>>>>> b9e2a6d65abbbd0d00133cfce8058756dfe156d7
->>>>>>> Stashed changes
                       </>
                     )}
                   </button>
