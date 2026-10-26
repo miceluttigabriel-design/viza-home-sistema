@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { usePlanMayoristaStore } from "@/store/mayorista";
 import { formatPYG } from "@/lib/format";
-import { CostoInterno, extractCosto } from "./costo-interno";
+import { CostoInterno, extractCostoMayorista } from "./costo-interno";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
 // momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
@@ -130,7 +130,11 @@ export function PlanMayorista() {
       // Costo UNITARIO de la BASE: SOLO para el cuadrito interno del vendedor.
       // Nunca viaja en el payload del PDF (ese payload solo lleva sku/name/
       // quantity/priceTecnico/subtotal).
-      cost: extractCosto(product),
+      // REGLA MAYORISTA (a pedido del usuario): productos AIRES (AIRE/AIRES en
+      // DESCRIPCION, GRUPO o SUB-GRUPO) SIEMPRE usan el COSTO GS (costGs) y
+      // NUNCA el COSTO PROD; las demas lineas usan el costo de siempre
+      // (cost/costProd).
+      cost: extractCostoMayorista(product),
     });
     setSearch("");
     setSearchResults([]);

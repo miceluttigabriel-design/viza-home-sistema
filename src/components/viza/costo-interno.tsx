@@ -46,6 +46,47 @@ export function extractCosto(product: unknown): number {
   return 0;
 }
 
+// === Deteccion de productos "AIRES" (aire acondicionado) ===
+// Un producto es AIRE si su DESCRIPCION (name), GRUPO (categoria) o
+// SUB-GRUPO (subGrupo) contiene la palabra completa "AIRE" o "AIRES".
+// Se normaliza mayusculas/minusculas y acentos, y se exige palabra completa:
+// "AIRE ACONDICIONADO SPLIT ..." da true; "AIREADOR ..." da false.
+function normalizarTexto(s: string): string {
+  return s
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+export function esProductoAire(product: unknown): boolean {
+  const p = (product ?? {}) as {
+    name?: unknown;
+    categoria?: unknown;
+    subGrupo?: unknown;
+  };
+  const rex = /\bAIRES?\b/;
+  const textos = [p.name, p.categoria, p.subGrupo];
+  for (const t of textos) {
+    if (typeof t === "string" && rex.test(normalizarTexto(t))) return true;
+  }
+  return false;
+}
+
+// Costo para la opcion MAYORISTA del panel de ventas (a pedido del usuario):
+// - Productos AIRES: SIEMPRE el COSTO GS (costGs, col G de la BASE) y NUNCA
+//   el COSTO PROD. Si el aire no tiene COSTO GS cargado, la fila muestra
+//   "—" (no se cae al costo prod de ningun modo).
+// - Resto de las lineas de productos: mismo criterio de siempre
+//   (extractCosto: cost/costoProd).
+export function extractCostoMayorista(product: unknown): number {
+  if (esProductoAire(product)) {
+    const p = (product ?? {}) as { costGs?: unknown };
+    const g = Number(p.costGs);
+    return Number.isFinite(g) && g > 0 ? g : 0;
+  }
+  return extractCosto(product);
+}
+
 // Cuadrito compacto que se muestra al final de la sección PRODUCTOS de cada
 // opción de cotización (CUOTA / SAFRA / CHEQUE / MAYORISTA).
 // Devuelve null si no hay productos, para no ocupar espacio.
