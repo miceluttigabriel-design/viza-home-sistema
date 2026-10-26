@@ -268,6 +268,34 @@ const COLUMNS: ColDef[] = [
   // Siguen existiendo en la base de datos y en import/export Excel; solo dejan de mostrarse.
 ];
 
+// ─── Columnas FIJAS (congeladas) con fondo dorado — experimento a pedido del usuario ───
+// Se congelan igual que ACCIONES y COD (position sticky al scrollear hacia los
+// costados) y llevan el mismo dorado del encabezado (#D9B86B). Los anchos son
+// fijos para poder calcular la posicion left de cada una (arranque: ACCIONES
+// 120px + COD 110px = 230px). Para revertir el experimento: dejar el array VACIO ([]).
+const FROZEN_COLUMNS: { key: string; width: number }[] = [
+  { key: "categoria", width: 100 },  // GRUPO
+  { key: "subGrupo", width: 120 },   // SUB-GRUPO
+  { key: "fabricante", width: 130 }, // PROVEDOR
+  { key: "marca", width: 100 },      // MARCA
+  { key: "referencia", width: 130 }, // REF.FABRICA
+  { key: "name", width: 400 },       // DESCRIPCION
+];
+const FROZEN_START_LEFT = 230; // ACCIONES (120px) + COD (110px)
+const FROZEN_BG = "#D9B86B";   // mismo dorado del encabezado / ACCIONES / COD
+const frozenLeftByKey: Record<string, number> = (() => {
+  const m: Record<string, number> = {};
+  let acc = FROZEN_START_LEFT;
+  for (const c of FROZEN_COLUMNS) {
+    m[c.key] = acc;
+    acc += c.width;
+  }
+  return m;
+})();
+const frozenWidthByKey: Record<string, number> = Object.fromEntries(
+  FROZEN_COLUMNS.map((c) => [c.key, c.width])
+);
+
 export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPanelProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
@@ -1548,18 +1576,29 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       ACCIONES
                     </th>
                     {/* SKU */}
-                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[80px]" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
+                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[110px] w-[110px]" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
                       COD
                     </th>
                     {COLUMNS.map((col) => {
                       const hasFilter =
                         !!columnFilters[col.key] && columnFilters[col.key].length > 0;
                       const isOpen = openFilterColumn === col.key;
+                      // Columnas fijas (congeladas) con fondo dorado: mismo mecanismo
+                      // sticky que ACCIONES y COD; sin entrada en FROZEN_COLUMNS queda
+                      // exactamente como siempre.
+                      const frozenLeft = frozenLeftByKey[col.key];
+                      const frozenWidth = frozenWidthByKey[col.key];
+                      const esFija = frozenLeft !== undefined;
                       return (
                         <th
                           key={col.key}
-                          className="relative px-2 py-0.5 text-center font-bold border-r border-stone-100 whitespace-nowrap"
-                          style={{ backgroundColor: "#D9B86B" }}
+                          className={`${esFija ? "sticky z-20" : "relative"} px-2 py-0.5 text-center font-bold border-r border-stone-100 whitespace-nowrap`}
+                          style={{
+                            backgroundColor: "#D9B86B",
+                            ...(esFija
+                              ? { left: frozenLeft, width: frozenWidth, minWidth: frozenWidth }
+                              : {}),
+                          }}
                         >
                           <div className="flex flex-col items-center">
                             {col.group && (
@@ -3290,7 +3329,7 @@ const ExcelRow = memo(function ExcelRow({
         </div>
       </td>
       {/* SKU - sticky - con badge de última edición encima */}
-      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-[#1c1917] font-semibold border-r border-stone-100 bg-[#D9B86B] align-top">
+      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-[#1c1917] font-semibold border-r border-stone-100 bg-[#D9B86B] align-top w-[110px]">
         {/* Badge de última edición manual del admin */}
         {product.ultimaEdicionAt && (() => {
           const d = new Date(product.ultimaEdicionAt);
@@ -3323,7 +3362,7 @@ const ExcelRow = memo(function ExcelRow({
             </div>
           );
         })()}
-        <div style={{ fontSize: "11px" }}>{product.sku}</div>
+        <div style={{ fontSize: "11px" }} className="truncate max-w-[94px]">{product.sku}</div>
       </td>
       {/* Todas las columnas */}
       {COLUMNS.map((col, ci) => (
@@ -3586,10 +3625,19 @@ const Cell = memo(function Cell({
     />
   );
 
+  // Columnas fijas (congeladas) con fondo dorado: mismo mecanismo sticky que
+  // ACCIONES y COD. Sin entrada en FROZEN_COLUMNS queda como siempre (bg-white).
+  const frozenLeft = frozenLeftByKey[col.key];
+  const frozenWidth = frozenWidthByKey[col.key];
+  const esFija = frozenLeft !== undefined;
+
   // Columnas normales: input simple de una línea, como siempre
   if (!isDesc) {
     return (
-      <td className="px-1 py-0 border-r border-stone-50 bg-white">
+      <td
+        className={`px-1 py-0 border-r border-stone-50 ${esFija ? "sticky z-10" : "bg-white"}`}
+        style={esFija ? { left: frozenLeft, width: frozenWidth, backgroundColor: FROZEN_BG } : undefined}
+      >
         {inputNode}
       </td>
     );
@@ -3597,7 +3645,10 @@ const Cell = memo(function Cell({
 
   // DESCRIPCION: input + flechita para expandir/contraer el texto completo
   return (
-    <td className="px-1 py-0 border-r border-stone-50 bg-white">
+    <td
+      className={`px-1 py-0 border-r border-stone-50 ${esFija ? "sticky z-10" : "bg-white"}`}
+      style={esFija ? { left: frozenLeft, width: frozenWidth, backgroundColor: FROZEN_BG } : undefined}
+    >
       <div className="flex items-start gap-0.5">
         {descExpanded ? (
           <textarea
@@ -3606,7 +3657,7 @@ const Cell = memo(function Cell({
             onChange={(e) => onChange(e.target.value)}
             rows={2}
             placeholder="—"
-            className="w-full min-w-[400px] px-2 py-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs text-left leading-4 resize-none bg-white"
+            className="w-full min-w-[400px] px-2 py-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs text-left leading-4 resize-none"
           />
         ) : (
           inputNode
