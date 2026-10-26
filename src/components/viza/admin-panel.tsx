@@ -194,7 +194,9 @@ interface ColDef {
 
 const COLUMNS: ColDef[] = [
   // Datos principales (pegados al SKU)
-  { key: "referencia", label: "REFERENCIA", type: "text", group: "DATOS" },
+  // Renombre visual (pedido del usuario): se muestra REF.FABRICA; el campo/key
+  // "referencia" queda intacto (datos, filtro, import y export sin cambios).
+  { key: "referencia", label: "REF.FABRICA", type: "text", group: "DATOS" },
   // Columnas DIVISION, TIPO, MODELO y PRODUCTO ocultas de esta tabla a pedido
   // del usuario (los datos siguen en la base).
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
@@ -209,7 +211,9 @@ const COLUMNS: ColDef[] = [
   // muestran y son editables en esta tabla (filtro por columna y búsqueda
   // global ya lo soportaban). MARCA es la col CT del Excel: el botón IMPORTAR
   // FABRICANTES Y MARCAS escribe aquí las marcas de la planilla.
-  { key: "fabricante", label: "FABRICANTE", type: "text", group: "DATOS FINALES" },
+  // Renombre visual (pedido del usuario): se muestra PROVEDOR; el campo/key
+  // "fabricante" queda intacto (datos, filtro, API, import y export sin cambios).
+  { key: "fabricante", label: "PROVEDOR", type: "text", group: "DATOS FINALES" },
   { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion (despues de DATOS FINALES)
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
