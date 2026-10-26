@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../lib/pdf/vizaLogo";
 
 interface PdfItem {
@@ -119,16 +120,6 @@ function parseFechaEmision(fecha?: string, hora?: string): Date | null {
   }
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hh, mm, ss);
   return isNaN(d.getTime()) ? null : d;
-}
-
-function generateQuoteNumber(): string {
-  const now = new Date();
-  const ymd =
-    now.getFullYear().toString() +
-    (now.getMonth() + 1).toString().padStart(2, "0") +
-    now.getDate().toString().padStart(2, "0");
-  const rnd = Math.floor(1000 + Math.random() * 9000);
-  return `VZH-${ymd}-${rnd}`;
 }
 
 // ============================================================================
@@ -366,7 +357,17 @@ export async function POST(req: NextRequest) {
 
     // ===== ENCABEZADO (solo página 1) =====
     const now = parseFechaEmision(body.cliente?.fecha, body.cliente?.hora) ?? new Date();
-    const headerBottom = drawHeader(doc, pageW, margin, contentW, generateQuoteNumber(), now, formatDateTimeEs, formatDateEs);
+    // N° SECUENCIAL por (plan PRESUPUESTO, usuario): PRESUPUESTO-01, 02 ...
+    const headerBottom = drawHeader(
+      doc,
+      pageW,
+      margin,
+      contentW,
+      await nextSequentialQuoteNumber("PRESUPUESTO", (session.user as any)?.id),
+      now,
+      formatDateTimeEs,
+      formatDateEs
+    );
 
     let y = headerBottom + 26;
 

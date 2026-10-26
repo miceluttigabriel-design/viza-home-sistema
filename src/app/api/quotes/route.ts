@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { nextSequentialQuoteNumber } from "@/lib/quote-number";
 
 // POST /api/quotes/save - guarda el presupuesto en la BD
 export async function POST(req: NextRequest) {
@@ -41,13 +42,8 @@ export async function POST(req: NextRequest) {
     const taxAmt = (taxable * (Number(taxRate) || 0)) / 100;
     const total = taxable + taxAmt;
 
-    // Generar número de presupuesto: VZH-AAAAMMDD-XXX
-    const now = new Date();
-    const ymd =
-      now.getFullYear().toString() +
-      (now.getMonth() + 1).toString().padStart(2, "0") +
-      now.getDate().toString().padStart(2, "0");
-    const quoteNumber = `VZH-${ymd}-${Math.floor(1000 + Math.random() * 9000)}`;
+    // Número de presupuesto SECUENCIAL por usuario: PRESUPUESTO-01, 02 ...
+    const quoteNumber = await nextSequentialQuoteNumber("PRESUPUESTO", userId);
 
     const quote = await db.quote.create({
       data: {

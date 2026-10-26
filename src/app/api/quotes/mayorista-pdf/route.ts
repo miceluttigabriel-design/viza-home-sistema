@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { drawHeader, drawFooter, formatPYG, formatDateEs, formatDateTimeEs, BLUE, GOLD, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 
 // === Tipos del payload del Presupuesto MAYORISTA ===
@@ -44,16 +45,6 @@ function parseFechaEmision(fecha?: string, hora?: string): Date | null {
   }
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hh, mm, ss);
   return isNaN(d.getTime()) ? null : d;
-}
-
-function generateQuoteNumber(): string {
-  const now = new Date();
-  const ymd =
-    now.getFullYear().toString() +
-    (now.getMonth() + 1).toString().padStart(2, "0") +
-    now.getDate().toString().padStart(2, "0");
-  const rnd = Math.floor(1000 + Math.random() * 9000);
-  return `VZH-MAYOR-${ymd}-${rnd}`;
 }
 
 // POST /api/quotes/mayorista-pdf - genera PDF del presupuesto MAYORISTA
@@ -99,7 +90,18 @@ export async function POST(req: NextRequest) {
     const now = parseFechaEmision(body.cliente?.fecha, body.cliente?.hora) ?? new Date();
     // drawHeader devuelve el borde inferior de las 3 cajas (N°/FECHA/VÁLIDO):
     // todo el contenido arranca DEBAJO de esa línea para no pisar el encabezado
-    const headerBottom = drawHeader(doc, pageW, margin, contentW, generateQuoteNumber(), "MAYORISTA", now, formatDateTimeEs, formatDateEs);
+    // N° SECUENCIAL por (plan MAYOR, usuario): MAYOR-01, MAYOR-02 ...
+    const headerBottom = drawHeader(
+      doc,
+      pageW,
+      margin,
+      contentW,
+      await nextSequentialQuoteNumber("MAYOR", (session.user as any)?.id),
+      "MAYORISTA",
+      now,
+      formatDateTimeEs,
+      formatDateEs
+    );
 
     // ===== DATOS DEL CLIENTE (si hay) =====
     let y = headerBottom + 26;

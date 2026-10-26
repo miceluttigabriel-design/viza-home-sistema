@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 
 // === Tipos del payload del Plan Safra ===
@@ -88,15 +89,6 @@ function parseFechaEmision(fecha?: string, hora?: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function generateQuoteNumber(): string {
-  const now = new Date();
-  const ymd =
-    now.getFullYear().toString() +
-    (now.getMonth() + 1).toString().padStart(2, "0") +
-    now.getDate().toString().padStart(2, "0");
-  const rnd = Math.floor(1000 + Math.random() * 9000);
-  return `VZH-SAFRA-${ymd}-${rnd}`;
-}
 
 // POST /api/quotes/safra-pdf - genera PDF del presupuesto SAFRA
 export async function POST(req: NextRequest) {
@@ -152,7 +144,18 @@ export async function POST(req: NextRequest) {
 
     // ===== ENCABEZADO (nuevo diseño con logo + wave + 3 cajas) =====
     const now = parseFechaEmision(body.cliente?.fecha, body.cliente?.hora) ?? new Date();
-    const headerBottom = drawHeader(doc, pageW, margin, contentW, generateQuoteNumber(), "SAFRA", now, formatDateTimeEs, formatDateEs);
+    // N° SECUENCIAL por (plan SAFRA, usuario): SAFRA-01, SAFRA-02 ...
+    const headerBottom = drawHeader(
+      doc,
+      pageW,
+      margin,
+      contentW,
+      await nextSequentialQuoteNumber("SAFRA", (session.user as any)?.id),
+      "SAFRA",
+      now,
+      formatDateTimeEs,
+      formatDateEs
+    );
 
     // ===== DATOS DEL CLIENTE (si hay) =====
     // drawHeader devuelve el borde inferior de las 3 cajas (N°/FECHA/VÁLIDO):

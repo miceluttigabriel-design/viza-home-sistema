@@ -242,3 +242,22 @@ model QuoteItem {
 
   @@index([quoteId])
 }
+
+// ============================================================
+// Contador SECUENCIAL de presupuestos por (plan, usuario).
+// Ej: MAYOR-01, MAYOR-02, MAYOR-03 ... SAFRA-01 ... CHEQUE-01 ...
+// Cada usuario lleva SU PROPIA cuenta para cada tipo de plan:
+// el numero 01 de MAYOR del vendedor A es independiente del 01
+// de MAYOR del vendedor B.
+// userId es un string simple (sin relacion) para conservar la
+// cuenta historica aunque el usuario sea eliminado.
+// ============================================================
+model QuoteSequence {
+  id         String   @id @default(cuid())
+  plan       String   // "PRESUPUESTO" | "MAYOR" | "SAFRA" | "CHEQUE"
+  userId     String   // id del usuario vendedor (o "SIN-USUARIO")
+  lastNumber Int      @default(0) // ultimo numero entregado
+  updatedAt  DateTime @updatedAt
+
+  @@unique([plan, userId])
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 const GREEN: [number, number, number] = [40, 167, 69];
 const RED: [number, number, number] = [220, 53, 69];
@@ -81,12 +82,6 @@ function parseFechaEmision(fecha?: string, hora?: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function generarNumeroPresupuesto(): string {
-  const now = new Date();
-  const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
-  const rnd = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `VZH-CHEQUE-${ymd}-${rnd}`;
-}
 
 // POST /api/quotes/cheque-pdf - genera PDF del presupuesto CON CHEQUE
 // REGLA: NO mostrar columna SUBTOTAL ni bloque "Subtotal productos".
@@ -136,7 +131,18 @@ export async function POST(req: NextRequest) {
 
     // ===== ENCABEZADO (nuevo diseño con logo + wave + 3 cajas) =====
     const now = parseFechaEmision(body.cliente?.fecha, body.cliente?.hora) ?? new Date();
-    const headerBottom = drawHeader(doc, pageW, margin, contentW, generarNumeroPresupuesto(), "CON CHEQUE", now, formatDateTimeEs, formatDateEs);
+    // N° SECUENCIAL por (plan CHEQUE, usuario): CHEQUE-01, CHEQUE-02 ...
+    const headerBottom = drawHeader(
+      doc,
+      pageW,
+      margin,
+      contentW,
+      await nextSequentialQuoteNumber("CHEQUE", (session.user as any)?.id),
+      "CON CHEQUE",
+      now,
+      formatDateTimeEs,
+      formatDateEs
+    );
     y = headerBottom + 26;
 
     // ===== DATOS DEL CLIENTE =====

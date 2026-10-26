@@ -268,12 +268,12 @@ const COLUMNS: ColDef[] = [
   // Siguen existiendo en la base de datos y en import/export Excel; solo dejan de mostrarse.
 ];
 
-// ─── Columnas FIJAS (congeladas) con fondo dorado — experimento a pedido del usuario ───
+// ─── Columnas FIJAS (congeladas) — experimento a pedido del usuario ───
 // Se congelan igual que ACCIONES y COD (position sticky al scrollear hacia los
-// costados) y llevan el mismo dorado del encabezado (#D9B86B), EXCEPTO las que
-// aparecen en FROZEN_BLANCO (ver abajo), que siguen fijas pero con fondo blanco.
-// Los anchos son fijos para poder calcular la posicion left de cada una
-// (arranque: ACCIONES 120px + COD 110px = 230px).
+// costados). TODOS los encabezados llevan el dorado del padrón (#D9B86B);
+// las CELDAS de las columnas que aparecen en FROZEN_BLANCO (ver abajo) llevan
+// fondo blanco en vez de dorado. Los anchos son fijos para poder calcular la
+// posicion left de cada una (arranque: ACCIONES 120px + COD 110px = 230px).
 // Para revertir el experimento: dejar el array VACIO ([]).
 const FROZEN_COLUMNS: { key: string; width: number }[] = [
   { key: "categoria", width: 100 },  // GRUPO
@@ -285,8 +285,9 @@ const FROZEN_COLUMNS: { key: string; width: number }[] = [
 ];
 const FROZEN_START_LEFT = 230; // ACCIONES (120px) + COD (110px)
 const FROZEN_BG = "#D9B86B";   // mismo dorado del encabezado / ACCIONES / COD
-// Columnas que siguen FIJAS (sticky) pero con fondo BLANCO en vez de dorado
-// (a pedido del usuario: DESCRIPCION se queda fija sin el dorado).
+// Columnas fijas cuyas CELDAS llevan fondo BLANCO en vez de dorado (a pedido
+// del usuario: DESCRIPCION fija y blanca). El ENCABEZADO sigue dorado,
+// respetando el padrón de encabezados dorados.
 const FROZEN_BLANCO = new Set<string>(["name"]); // "name" = DESCRIPCION
 const frozenLeftByKey: Record<string, number> = (() => {
   const m: Record<string, number> = {};
@@ -1590,19 +1591,18 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       const isOpen = openFilterColumn === col.key;
                       // Columnas fijas (congeladas): mismo mecanismo sticky que
                       // ACCIONES y COD; sin entrada en FROZEN_COLUMNS queda
-                      // exactamente como siempre. Las de FROZEN_BLANCO van con
-                      // encabezado blanco en vez de dorado.
+                      // exactamente como siempre. El encabezado SIEMPRE dorado
+                      // (padrón); el fondo blanco de FROZEN_BLANCO aplica solo a
+                      // las celdas del cuerpo de la tabla.
                       const frozenLeft = frozenLeftByKey[col.key];
                       const frozenWidth = frozenWidthByKey[col.key];
                       const esFija = frozenLeft !== undefined;
-                      // Fijas sin dorado (FROZEN_BLANCO): encabezado blanco en vez de dorado
-                      const sinDorado = esFija && FROZEN_BLANCO.has(col.key);
                       return (
                         <th
                           key={col.key}
                           className={`${esFija ? "sticky z-20" : "relative"} px-2 py-0.5 text-center font-bold border-r border-stone-100 whitespace-nowrap`}
                           style={{
-                            backgroundColor: sinDorado ? "#ffffff" : "#D9B86B",
+                            backgroundColor: "#D9B86B",
                             ...(esFija
                               ? { left: frozenLeft, width: frozenWidth, minWidth: frozenWidth }
                               : {}),
@@ -3634,9 +3634,9 @@ const Cell = memo(function Cell({
   );
 
   // Columnas fijas (congeladas): mismo mecanismo sticky que ACCIONES y COD.
-  // Llevan fondo dorado, excepto las de FROZEN_BLANCO (DESCRIPCION), que siguen
-  // fijas pero con fondo blanco (a pedido del usuario). Sin entrada en
-  // FROZEN_COLUMNS queda como siempre (bg-white).
+  // Las CELDAS de FROZEN_BLANCO (DESCRIPCION) llevan fondo blanco; el resto de
+  // las fijas lleva dorado. El encabezado siempre es dorado (padrón). Sin
+  // entrada en FROZEN_COLUMNS queda como siempre (bg-white).
   const frozenLeft = frozenLeftByKey[col.key];
   const frozenWidth = frozenWidthByKey[col.key];
   const esFija = frozenLeft !== undefined;
