@@ -165,6 +165,33 @@ export async function PUT(
       });
     }
 
+    // ─── COSTO EDITADO Y GUARDADO (regla del usuario) ───
+    // El cliente solo envía los campos que el admin tocó (objeto "dirty"),
+    // así que si el body trae un campo de COSTO de entrada es porque el admin
+    // lo editó en esta edición. Se registra en `costosEditados` del producto:
+    //   1) La celda editada se pinta de DORADO VIBRANTE en la tabla (discernir).
+    //   2) La importación de stock NUNCA pisa esos costos: para esos productos
+    //      solo actualiza el STOCK.
+    // El registro es acumulativo (nunca se borra automáticamente).
+    const COSTO_EDIT_KEYS = [
+      "costBR", "costUS", "costGs",
+      "discountPct", "addPct", "admPct",
+      "valorDesc", "valorAdd",
+    ];
+    const costosTocados = COSTO_EDIT_KEYS.filter((k) => body[k] !== undefined);
+    if (costosTocados.length > 0) {
+      const actual = await db.product.findUnique({
+        where: { id },
+        select: { costosEditados: true },
+      });
+      if (!actual) {
+        return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+      }
+      const conjunto = new Set<string>(actual.costosEditados ?? []);
+      for (const k of costosTocados) conjunto.add(k);
+      data.costosEditados = Array.from(conjunto);
+    }
+
     // Registrar trazabilidad de la edición manual del admin
     // Esto se hace DESPUÉS de construir `data` con los campos editados, así
     // no se incluye en el `shouldRecalc` ni en ninguna otra lógica previa.

@@ -99,6 +99,10 @@ interface Product {
   etiquetaColor?: string | null;
   ultimaEdicionAt?: string | null;  // ISO string from API
   ultimaEdicionPor?: string | null; // admin name or email
+  // Costos editados a mano y guardados por el admin (keys de columna,
+  // ej: "costGs"): la celda correspondiente se pinta de DORADO VIBRANTE y
+  // la importación de stock nunca pisa esos costos (solo actualiza stock).
+  costosEditados?: string[] | null;
 }
 
 interface AppUser {
@@ -306,6 +310,9 @@ const FROZEN_COLUMNS: { key: string; width: number }[] = [
 ];
 const FROZEN_START_LEFT = 230; // ACCIONES (120px) + COD (110px)
 const FROZEN_BG = "#D9B86B";   // mismo dorado del encabezado / ACCIONES / COD
+// DORADO SUPER VIVO VIBRANTE para las celdas de COSTO que el admin editó a
+// mano y guardó (se ve al instante y se distingue del dorado del padrón).
+const COSTO_EDITADO_BG = "#FFD700";
 // Columnas fijas cuyas CELDAS llevan fondo BLANCO en vez de dorado (a pedido
 // del usuario: DESCRIPCION fija y blanca). El ENCABEZADO sigue dorado,
 // respetando el padrón de encabezados dorados.
@@ -362,7 +369,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     nuevosCount: number;
     actualizadosCount: number;
     nuevos: Array<{ sku: string; name: string | null; referencia: string | null; subGrupo: string | null; stock: number; costProd: number | null; margenAuto: number | null; margenFuente: string | null; safraAuto: string | null }>;
-    actualizados: Array<{ sku: string; nameActual: string | null; stockActual: number; stockNuevo: number; costoActual: number | null; costoNuevo: number | null }>;
+    actualizados: Array<{ sku: string; nameActual: string | null; stockActual: number; stockNuevo: number; costoActual: number | null; costoNuevo: number | null; costoProtegido?: boolean }>;
     errores: string[];
   } | null>(null);
   const [importApplying, setImportApplying] = useState(false);
@@ -2034,8 +2041,20 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                   <td className="px-2 py-1.5 text-right tabular-nums text-stone-600">
                                     {p.costoActual != null ? p.costoActual.toLocaleString("es-PY") : "—"}
                                   </td>
-                                  <td className={`px-2 py-1.5 text-right tabular-nums font-semibold ${costoCambia ? "text-sky-700" : "text-stone-500"}`}>
-                                    {p.costoNuevo != null ? p.costoNuevo.toLocaleString("es-PY") : "sin costo nuevo"}
+                                  <td className="px-2 py-1.5 text-right tabular-nums font-semibold">
+                                    {p.costoProtegido ? (
+                                      <span
+                                        className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold text-amber-900"
+                                        style={{ backgroundColor: "#FFD700", border: "1px solid #b45309" }}
+                                        title="Costo editado a mano y guardado: la importación NO lo pisa (solo actualiza el stock)"
+                                      >
+                                        PROTEGIDO
+                                      </span>
+                                    ) : (
+                                      <span className={costoCambia ? "text-sky-700" : "text-stone-500"}>
+                                        {p.costoNuevo != null ? p.costoNuevo.toLocaleString("es-PY") : "sin costo nuevo"}
+                                      </span>
+                                    )}
                                   </td>
                                 </tr>
                               );
@@ -3358,6 +3377,13 @@ const ExcelRow = memo(function ExcelRow({
   ];
   const currentStyle = label ? labelStyles[label] : null;
 
+  // ─── COSTOS EDITADOS POR EL ADMIN ───
+  // Las celdas de costo que el admin editó a mano y guardó se pintan de
+  // DORADO VIBRANTE. product.costosEditados trae las keys guardadas en la BD.
+  const costosEditadosSet = new Set<string>(
+    Array.isArray(product.costosEditados) ? product.costosEditados : []
+  );
+
   return (
     <>
     <tr
@@ -3445,6 +3471,7 @@ const ExcelRow = memo(function ExcelRow({
           value={form[col.key]}
           rowIndex={rowIndex}
           colIndex={ci}
+          costoEditado={costosEditadosSet.has(col.key)}
           onChange={(v) => onChange(col.key, v)}
         />
       ))}
@@ -3626,12 +3653,14 @@ const Cell = memo(function Cell({
   value,
   rowIndex,
   colIndex,
+  costoEditado,
   onChange,
 }: {
   col: ColDef;
   value: any;
   rowIndex: number;
   colIndex: number;
+  costoEditado?: boolean;
   onChange: (v: string) => void;
 }) {
   // DESCRIPCION (col "name"): celda expandible. La flechita alterna entre el
@@ -3714,7 +3743,17 @@ const Cell = memo(function Cell({
     return (
       <td
         className={`px-1 py-0 border-r border-stone-50 ${esFija ? "sticky z-10" : "bg-white"}`}
-        style={esFija ? { left: frozenLeft, width: frozenWidth, backgroundColor: fondoFija } : undefined}
+        style={
+          esFija
+            ? { left: frozenLeft, width: frozenWidth, backgroundColor: fondoFija }
+            : // Celda de COSTO editada a mano y guardada por el admin:
+              // fondo DORADO SUPER VIVO VIBRANTE para discernirla de un costo
+              // traído por importación. (Las columnas de costo nunca son
+              // fijas; se deja esFija primero por seguridad.)
+              costoEditado
+            ? { backgroundColor: COSTO_EDITADO_BG }
+            : undefined
+        }
       >
         {inputNode}
       </td>

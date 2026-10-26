@@ -28,6 +28,11 @@ import {
 //     (sub-costo, Costo Prod., cuotas y precios), que se recalculan con las
 //     mismas márgenes que el producto ya tenía — idéntico a cuando el admin
 //     edita la celda COSTO GS a mano en la tabla.
+//   - REGLA NUEVA (costos editados por el admin): los productos que tienen
+//     `costosEditados` (algún costo editado a mano y guardado por el admin)
+//     NUNCA reciben costo de la planilla: solo se les actualiza el STOCK.
+//     Así el costo que el admin fijó queda siempre igual aunque el Excel
+//     traiga otro — esas celdas se pintan de DORADO VIBRANTE en la tabla.
 //
 // ─── OPTIMIZACIÓN CRÍTICA (anti-timeout de Vercel Hobby 10s) ───
 // En vez de hacer 1 operación de DB por producto (2000+ ops = timeout),
@@ -347,6 +352,7 @@ export async function POST(req: NextRequest) {
           where: { sku: { in: allUpdates.map(u => u.sku) } },
           select: {
             sku: true,
+            costosEditados: true,
             costBR: true, costUS: true, costGs: true,
             discountPct: true, addPct: true, admPct: true,
             valorDesc: true, valorAdd: true, marginContado: true,
@@ -372,6 +378,14 @@ export async function POST(req: NextRequest) {
     for (const u of allUpdates) {
       const row = existingRowsMap.get(u.sku);
       const costoExcel = u.costoNuevo;
+      // ─── REGLA NUEVA: productos con COSTOS EDITADOS por el admin ───
+      // Si el admin editó y guardó algún costo de este producto a mano, la
+      // importación NO le cambia el costo: entra directo como "solo stock",
+      // sin importar lo que traiga el Excel (aunque sea un costo distinto).
+      if (row && Array.isArray(row.costosEditados) && row.costosEditados.length > 0) {
+        stockOnlyUpdates.push({ sku: u.sku, stock: u.stock });
+        continue;
+      }
       if (
         typeof costoExcel === "number" && costoExcel > 0 &&
         row && costoExcel !== (row.costGs ?? null)

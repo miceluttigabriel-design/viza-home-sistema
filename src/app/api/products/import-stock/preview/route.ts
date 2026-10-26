@@ -216,10 +216,13 @@ export async function POST(req: NextRequest) {
     // 6. Verificar cuáles SKUs ya existen en la base (consulta masiva)
     // costGs se lee para poder mostrar en la vista previa el CAMBIO DE COSTO
     // (COSTO GS actual → nuevo) de cada producto existente.
+    // costosEditados se lee para marcar los productos con costo editado a mano
+    // y guardado por el admin: a esos la importación NO les cambia el costo
+    // (solo stock), y la vista previa lo muestra como PROTEGIDO.
     const codigosList = Object.keys(grouped);
     const existentes = await db.product.findMany({
       where: { sku: { in: codigosList } },
-      select: { sku: true, stock: true, name: true, costGs: true },
+      select: { sku: true, stock: true, name: true, costGs: true, costosEditados: true },
     });
     const existentesMap = new Map(existentes.map((p) => [p.sku, p]));
 
@@ -251,6 +254,9 @@ export async function POST(req: NextRequest) {
       // Garantía visual: en existentes SOLO se tocan COSTO GS y STOCK
       costoActual: number | null; // COSTO GS actual en la BD
       costoNuevo: number | null; // COSTO UNIT. ULTIMA COMPRA del Excel (null = no toca costo)
+      // true = el admin editó y guardó un costo a mano → la importación NO
+      // pisa su costo (solo stock). La vista lo muestra como PROTEGIDO.
+      costoProtegido: boolean;
     }> = [];
 
     for (const codigo of codigosList) {
@@ -266,6 +272,8 @@ export async function POST(req: NextRequest) {
           stockNuevo: data.stockSumado,
           costoActual: existente.costGs ?? null,
           costoNuevo: data.costProd,
+          costoProtegido:
+            Array.isArray(existente.costosEditados) && existente.costosEditados.length > 0,
         });
       } else {
         // SKU nuevo → crear producto con márgenes + SAFRA automáticas

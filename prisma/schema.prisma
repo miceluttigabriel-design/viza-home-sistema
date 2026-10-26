@@ -192,6 +192,20 @@ model Product {
   ultimaEdicionAt  DateTime?
   ultimaEdicionPor  String?  // nombre o email del admin que editó
 
+  // ─── COSTOS EDITADOS POR EL ADMIN (guardados) ───
+  // Lista de columnas de COSTO que el admin editó a mano en la tabla y guardó.
+  // Valores posibles: "costBR", "costUS", "costGs", "discountPct", "addPct",
+  // "admPct", "valorDesc", "valorAdd".
+  // Sirve para dos cosas (pedido del usuario):
+  //   1) Pintar de DORADO VIBRANTE la celda del costo editado en la tabla
+  //      del Panel ADM (para discernirlo de un costo traído por importación).
+  //   2) Proteger esos costos al importar: los productos con costos editados
+  //      y guardados SOLO actualizan STOCK cuando se importa la planilla de
+  //      stock — el costo editado por el admin nunca se pisa.
+  // Se llena automáticamente al guardar una edición (PUT /api/products/[id]).
+  // Nunca se borra automáticamente.
+  costosEditados  String[] @default([])
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
