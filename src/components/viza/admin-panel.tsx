@@ -270,9 +270,11 @@ const COLUMNS: ColDef[] = [
 
 // ─── Columnas FIJAS (congeladas) con fondo dorado — experimento a pedido del usuario ───
 // Se congelan igual que ACCIONES y COD (position sticky al scrollear hacia los
-// costados) y llevan el mismo dorado del encabezado (#D9B86B). Los anchos son
-// fijos para poder calcular la posicion left de cada una (arranque: ACCIONES
-// 120px + COD 110px = 230px). Para revertir el experimento: dejar el array VACIO ([]).
+// costados) y llevan el mismo dorado del encabezado (#D9B86B), EXCEPTO las que
+// aparecen en FROZEN_BLANCO (ver abajo), que siguen fijas pero con fondo blanco.
+// Los anchos son fijos para poder calcular la posicion left de cada una
+// (arranque: ACCIONES 120px + COD 110px = 230px).
+// Para revertir el experimento: dejar el array VACIO ([]).
 const FROZEN_COLUMNS: { key: string; width: number }[] = [
   { key: "categoria", width: 100 },  // GRUPO
   { key: "subGrupo", width: 120 },   // SUB-GRUPO
@@ -283,6 +285,9 @@ const FROZEN_COLUMNS: { key: string; width: number }[] = [
 ];
 const FROZEN_START_LEFT = 230; // ACCIONES (120px) + COD (110px)
 const FROZEN_BG = "#D9B86B";   // mismo dorado del encabezado / ACCIONES / COD
+// Columnas que siguen FIJAS (sticky) pero con fondo BLANCO en vez de dorado
+// (a pedido del usuario: DESCRIPCION se queda fija sin el dorado).
+const FROZEN_BLANCO = new Set<string>(["name"]); // "name" = DESCRIPCION
 const frozenLeftByKey: Record<string, number> = (() => {
   const m: Record<string, number> = {};
   let acc = FROZEN_START_LEFT;
@@ -1583,18 +1588,21 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       const hasFilter =
                         !!columnFilters[col.key] && columnFilters[col.key].length > 0;
                       const isOpen = openFilterColumn === col.key;
-                      // Columnas fijas (congeladas) con fondo dorado: mismo mecanismo
-                      // sticky que ACCIONES y COD; sin entrada en FROZEN_COLUMNS queda
-                      // exactamente como siempre.
+                      // Columnas fijas (congeladas): mismo mecanismo sticky que
+                      // ACCIONES y COD; sin entrada en FROZEN_COLUMNS queda
+                      // exactamente como siempre. Las de FROZEN_BLANCO van con
+                      // encabezado blanco en vez de dorado.
                       const frozenLeft = frozenLeftByKey[col.key];
                       const frozenWidth = frozenWidthByKey[col.key];
                       const esFija = frozenLeft !== undefined;
+                      // Fijas sin dorado (FROZEN_BLANCO): encabezado blanco en vez de dorado
+                      const sinDorado = esFija && FROZEN_BLANCO.has(col.key);
                       return (
                         <th
                           key={col.key}
                           className={`${esFija ? "sticky z-20" : "relative"} px-2 py-0.5 text-center font-bold border-r border-stone-100 whitespace-nowrap`}
                           style={{
-                            backgroundColor: "#D9B86B",
+                            backgroundColor: sinDorado ? "#ffffff" : "#D9B86B",
                             ...(esFija
                               ? { left: frozenLeft, width: frozenWidth, minWidth: frozenWidth }
                               : {}),
@@ -3625,18 +3633,23 @@ const Cell = memo(function Cell({
     />
   );
 
-  // Columnas fijas (congeladas) con fondo dorado: mismo mecanismo sticky que
-  // ACCIONES y COD. Sin entrada en FROZEN_COLUMNS queda como siempre (bg-white).
+  // Columnas fijas (congeladas): mismo mecanismo sticky que ACCIONES y COD.
+  // Llevan fondo dorado, excepto las de FROZEN_BLANCO (DESCRIPCION), que siguen
+  // fijas pero con fondo blanco (a pedido del usuario). Sin entrada en
+  // FROZEN_COLUMNS queda como siempre (bg-white).
   const frozenLeft = frozenLeftByKey[col.key];
   const frozenWidth = frozenWidthByKey[col.key];
   const esFija = frozenLeft !== undefined;
+  const fondoFija = esFija
+    ? (FROZEN_BLANCO.has(col.key) ? "#ffffff" : FROZEN_BG)
+    : undefined;
 
   // Columnas normales: input simple de una línea, como siempre
   if (!isDesc) {
     return (
       <td
         className={`px-1 py-0 border-r border-stone-50 ${esFija ? "sticky z-10" : "bg-white"}`}
-        style={esFija ? { left: frozenLeft, width: frozenWidth, backgroundColor: FROZEN_BG } : undefined}
+        style={esFija ? { left: frozenLeft, width: frozenWidth, backgroundColor: fondoFija } : undefined}
       >
         {inputNode}
       </td>
@@ -3647,7 +3660,7 @@ const Cell = memo(function Cell({
   return (
     <td
       className={`px-1 py-0 border-r border-stone-50 ${esFija ? "sticky z-10" : "bg-white"}`}
-      style={esFija ? { left: frozenLeft, width: frozenWidth, backgroundColor: FROZEN_BG } : undefined}
+      style={esFija ? { left: frozenLeft, width: frozenWidth, backgroundColor: fondoFija } : undefined}
     >
       <div className="flex items-start gap-0.5">
         {descExpanded ? (
