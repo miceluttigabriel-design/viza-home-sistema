@@ -1,6 +1,6 @@
 // POST /api/products/import-fabricante/preview
-// Vista previa de la importación de FABRICANTES, MARCAS y GRUPO desde la
-// planilla LISTA VIZA HOME. SOLO LEE la base (findMany con select) — nunca
+// Vista previa de la importación de FABRICANTES, MARCAS, GRUPO y MODELO desde
+// la planilla LISTA VIZA HOME. SOLO LEE la base (findMany con select) — nunca
 // modifica nada. El hermano apply es quien ejecuta los updates.
 import { NextRequest, NextResponse } from "next/server";
 import { parseBody, requireSupremo, fetchMatchedProducts } from "../shared";
@@ -15,10 +15,10 @@ export async function POST(req: NextRequest) {
     if (!parsed) {
       return NextResponse.json({ error: "Formato de datos inválido" }, { status: 400 });
     }
-    const { rows, sinValores, conFabricante, conMarca, conGrupo } = parsed;
+    const { rows, sinValores, conFabricante, conMarca, conGrupo, conModelo } = parsed;
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA/GRUPO (hoja 'base')" },
+        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA/GRUPO/MODELO (hoja 'base')" },
         { status: 400 }
       );
     }
@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
       marcaNuevo: string | null;
       grupoActual: string | null;
       grupoNuevo: string | null;
+      modeloActual: string | null;
+      modeloNuevo: string | null;
     }> = [];
     const noEncontrados: string[] = [];
     let aActualizar = 0;
@@ -52,7 +54,9 @@ export async function POST(req: NextRequest) {
         row.marca !== null && (product.marca ?? "").trim() !== row.marca;
       const grupoCambia =
         row.grupo !== null && (product.categoria ?? "").trim() !== row.grupo;
-      if (!fabCambia && !marcaCambia && !grupoCambia) {
+      const modeloCambia =
+        row.modelo !== null && (product.modelo ?? "").trim() !== row.modelo;
+      if (!fabCambia && !marcaCambia && !grupoCambia && !modeloCambia) {
         // Ya tiene exactamente esos valores: queda intocado
         yaIgual++;
         continue;
@@ -68,6 +72,8 @@ export async function POST(req: NextRequest) {
           marcaNuevo: marcaCambia ? row.marca : null,
           grupoActual: product.categoria,
           grupoNuevo: grupoCambia ? row.grupo : null,
+          modeloActual: product.modelo,
+          modeloNuevo: modeloCambia ? row.modelo : null,
         });
       }
     }
@@ -84,6 +90,7 @@ export async function POST(req: NextRequest) {
       conFabricante,
       conMarca,
       conGrupo,
+      conModelo,
       cambios,
     });
   } catch (error) {

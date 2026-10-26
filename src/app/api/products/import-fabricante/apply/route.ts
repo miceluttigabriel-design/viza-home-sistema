@@ -1,9 +1,10 @@
 // POST /api/products/import-fabricante/apply
-// Aplica el FABRICANTE, la MARCA y el GRUPO del Excel (planilla LISTA VIZA
-// HOME, hoja "base") a los productos que coinciden por COD (sku o codViza).
+// Aplica el FABRICANTE, la MARCA, el GRUPO y el MODELO del Excel (planilla
+// LISTA VIZA HOME, hoja "base") a los productos que coinciden por COD (sku o
+// codViza).
 // REGLAS DE SEGURIDAD (nada más se toca):
-//   - SOLO se actualizan los campos fabricante, marca, grupo (categoria) y
-//     (espejo) brand.
+//   - SOLO se actualizan los campos fabricante, marca, grupo (categoria),
+//     modelo y (espejo) brand.
 //   - La MARCA del Excel (col CT) se escribe en el campo "marca": el mismo
 //     campo que usan la importación de productos y el export, y el que muestra
 //     la columna MARCA de la tabla admin. SIEMPRE gana sobre el valor previo.
@@ -12,14 +13,19 @@
 //     tabla, donde se muestra como GRUPO). Misma regla que FABRICANTE/MARCA:
 //     el valor explícito del Excel gana; fila sin GRUPO deja el campo como
 //     está (nunca borra).
+//   - MODELO del Excel (encabezado "MODELO", columna justo detrás de MARCA)
+//     se escribe en el campo "modelo" de la base (el mismo que usan la
+//     importación de productos, el export y la edición manual de la tabla).
+//     Misma regla: el valor explícito del Excel gana; fila sin MODELO deja
+//     el campo como está (nunca borra).
 //   - brand (catálogo de vendedores) queda como espejo del FABRICANTE, igual
 //     que en la importación de productos (brand = FABRICANTE): se completa
 //     SOLO si está vacío, nunca sobrescribe un brand existente.
 //   - NUNCA se crean productos.
 //   - NUNCA se tocan costos, márgenes, precios, stock, etiquetas, ni ningún
 //     otro campo.
-//   - NUNCA se borra un valor existente (las filas sin FABRICANTE, MARCA ni
-//     GRUPO se ignoran por completo).
+//   - NUNCA se borra un valor existente (las filas sin FABRICANTE, MARCA,
+//     GRUPO ni MODELO se ignoran por completo).
 //   - Productos que ya tienen exactamente esos valores quedan intocados
 //     (idempotente: se puede reaplicar la misma planilla sin efecto).
 import { NextRequest, NextResponse } from "next/server";
@@ -43,15 +49,15 @@ export async function POST(req: NextRequest) {
     const { rows } = parsed;
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA/GRUPO (hoja 'base')" },
+        { error: "El Excel no contiene filas con COD VIZA + FABRICANTE/MARCA/GRUPO/MODELO (hoja 'base')" },
         { status: 400 }
       );
     }
 
     const { byCod } = await fetchMatchedProducts(rows);
 
-    // Construir updates: solo fabricante, marca, grupo (categoria) y/o brand
-    // (espejo del fabricante)
+    // Construir updates: solo fabricante, marca, grupo (categoria), modelo
+    // y/o brand (espejo del fabricante)
     const updates: Array<{
       id: string;
       sku: string;
@@ -74,7 +80,9 @@ export async function POST(req: NextRequest) {
       const marcaCambia = row.marca !== null && marcaActual !== row.marca;
       const grupoCambia =
         row.grupo !== null && (product.categoria ?? "").trim() !== row.grupo;
-      if (!fabCambia && !marcaCambia && !grupoCambia) {
+      const modeloCambia =
+        row.modelo !== null && (product.modelo ?? "").trim() !== row.modelo;
+      if (!fabCambia && !marcaCambia && !grupoCambia && !modeloCambia) {
         yaIgual++;
         continue;
       }
@@ -91,6 +99,12 @@ export async function POST(req: NextRequest) {
         // GRUPO del Excel (col CQ "CATEGORIA"): va al campo "categoria" de la
         // base, el mismo que usan el export y la edición manual. Siempre gana.
         data.categoria = row.grupo;
+      }
+      if (modeloCambia && row.modelo !== null) {
+        // MODELO del Excel (encabezado "MODELO", columna detrás de MARCA): va
+        // al campo "modelo" de la base, el mismo que usan la importación de
+        // productos, el export y la edición manual. Siempre gana.
+        data.modelo = row.modelo;
       }
       if (!brandActual && fabCambia && row.fabricante !== null) {
         // Espejo del catálogo de vendedores (igual que la importación de
@@ -110,6 +124,7 @@ export async function POST(req: NextRequest) {
     let actualizados = 0;
     let conMarcaNueva = 0;
     let conGrupoNuevo = 0;
+    let conModeloNuevo = 0;
     let conBrandEspejo = 0;
     const errores: string[] = [];
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
@@ -122,6 +137,7 @@ export async function POST(req: NextRequest) {
           actualizados++;
           if (batch[idx].data.marca !== undefined) conMarcaNueva++;
           if (batch[idx].data.categoria !== undefined) conGrupoNuevo++;
+          if (batch[idx].data.modelo !== undefined) conModeloNuevo++;
           if (batch[idx].data.brand !== undefined) conBrandEspejo++;
         } else {
           const sku = batch[idx].sku;
@@ -138,6 +154,7 @@ export async function POST(req: NextRequest) {
       actualizados,
       conMarcaNueva,
       conGrupoNuevo,
+      conModeloNuevo,
       conBrandEspejo,
       yaIgual,
       noEncontrados: noEncontrados.length,
@@ -146,6 +163,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error apply import-fabricante:", error);
-    return NextResponse.json({ error: "Error al aplicar fabricantes, marcas y grupos" }, { status: 500 });
+    return NextResponse.json({ error: "Error al aplicar fabricantes, marcas, grupos y modelos" }, { status: 500 });
   }
 }

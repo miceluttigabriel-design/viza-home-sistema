@@ -194,25 +194,34 @@ interface ColDef {
 
 const COLUMNS: ColDef[] = [
   // Orden de columnas a pedido del usuario (despues del COD fijo):
-  // GRUPO > SUB-GRUPO > PROVEDOR > MARCA > REF.FABRICA > DESCRIPCION.
+  // GRUPO > SUB-GRUPO > PROVEDOR > MARCA > MODELO > REF.FABRICA > DESCRIPCION.
   // Solo cambia la POSICION visual; keys/campos/datos/Excel intactos.
   // GRUPO: en la base es el campo "categoria" (col CQ "CATEGORIA" de la
   // planilla), el mismo que ya usan el export Excel y la importación de
   // productos. Se muestra (como GRUPO) y es editable en esta tabla; el botón
-  // IMPORTAR FABRICANTES Y MARCAS + GRUPO la llena desde la planilla.
+  // IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO la llena desde la planilla.
   { key: "categoria", label: "GRUPO", type: "text", group: "DATOS FINALES" },
-  // Columnas DIVISION, TIPO, MODELO y PRODUCTO ocultas de esta tabla a pedido
-  // del usuario (los datos siguen en la base).
+  // Columnas DIVISION, TIPO y PRODUCTO ocultas de esta tabla a pedido del
+  // usuario (los datos siguen en la base). MODELO fue restaurada a pedido
+  // del usuario (se ve detrás de MARCA, ver abajo).
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
   // FABRICANTE y MARCA restauradas a pedido del usuario: los campos ya
   // existían en la base de datos y en import/export Excel; ahora también se
   // muestran y son editables en esta tabla (filtro por columna y búsqueda
-  // global ya lo soportaban). MARCA es la col CT del Excel: el botón IMPORTAR
-  // FABRICANTES Y MARCAS escribe aquí las marcas de la planilla.
+  // global ya lo soportaban). MARCA es la columna MARCA del Excel: el botón
+  // IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO escribe aquí las marcas de
+  // la planilla.
   // Renombre visual (pedido del usuario): se muestra PROVEDOR; el campo/key
   // "fabricante" queda intacto (datos, filtro, API, import y export sin cambios).
   { key: "fabricante", label: "PROVEDOR", type: "text", group: "DATOS FINALES" },
   { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
+  // MODELO restaurada a pedido del usuario: el campo ya existía en la base
+  // (encabezado "MODELO" de la planilla, columna justo detrás de MARCA), en
+  // la importación de productos y en el export Excel; ahora también se
+  // muestra y es editable en esta tabla. Va justo detrás de MARCA, como en
+  // la planilla. Como está dentro del bloque de columnas fijas, se congela
+  // junto a ellas (ver FROZEN_COLUMNS).
+  { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
   // Renombre visual (pedido del usuario): se muestra REF.FABRICA; el campo/key
   // "referencia" queda intacto (datos, filtro, import y export sin cambios).
   { key: "referencia", label: "REF.FABRICA", type: "text", group: "DATOS" },
@@ -285,6 +294,7 @@ const FROZEN_COLUMNS: { key: string; width: number }[] = [
   { key: "subGrupo", width: 120 },   // SUB-GRUPO
   { key: "fabricante", width: 130 }, // PROVEDOR
   { key: "marca", width: 100 },      // MARCA
+  { key: "modelo", width: 130 },     // MODELO (restaurada a pedido del usuario)
   { key: "referencia", width: 130 }, // REF.FABRICA
   { key: "name", width: 400 },       // DESCRIPCION
 ];
@@ -411,12 +421,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   // vt/mt = Valor Para Técnico + Margen P/Técnico (solo algunos productos los traen)
   const marginsRowsRef = useRef<Array<{ cod: string; m: number | null; y: number | null; z: number | null; aa: number | null; vt: number | null; mt: number | null }> | null>(null);
 
-  // ─── IMPORTAR FABRICANTES Y MARCAS + GRUPO (planilla LISTA VIZA HOME, hoja "base") ───
+  // ─── IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES: el Excel se procesa EN EL NAVEGADOR
-  // (SheetJS) y solo se envía un JSON compacto { cod, fabricante, marca, grupo }.
-  // La API solo actualiza FABRICANTE, MARCA (campo marca, col CT), GRUPO
-  // (campo categoria, col CQ "CATEGORIA" de la planilla) y el espejo brand del
-  // catálogo de vendedores; nada más se toca. Los valores explícitos del Excel
+  // (SheetJS) y solo se envía un JSON compacto { cod, fabricante, marca, grupo, modelo }.
+  // La API solo actualiza FABRICANTE, MARCA (campo marca), GRUPO (campo
+  // categoria), MODELO (campo modelo, columna detrás de MARCA de la planilla)
+  // y el espejo brand del catálogo de vendedores; nada más se toca. Los
+  // valores explícitos del Excel
   // siempre ganan; un campo ausente (0/"-"/VAZIO) deja el campo del producto
   // intacto (nunca borra). El catálogo (brand) queda como espejo del FABRICANTE
   // SOLO donde estaba vacío (convención del sistema).
@@ -433,13 +444,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     conFabricante: number;
     conMarca: number;
     conGrupo: number;
-    cambios: Array<{ sku: string; name: string; fabricanteActual: string | null; fabricanteNuevo: string | null; marcaActual: string | null; marcaNuevo: string | null; grupoActual: string | null; grupoNuevo: string | null }>;
+    conModelo: number;
+    cambios: Array<{ sku: string; name: string; fabricanteActual: string | null; fabricanteNuevo: string | null; marcaActual: string | null; marcaNuevo: string | null; grupoActual: string | null; grupoNuevo: string | null; modeloActual: string | null; modeloNuevo: string | null }>;
   } | null>(null);
   const [fabImportApplying, setFabImportApplying] = useState(false);
   const [fabImportResult, setFabImportResult] = useState<{
     actualizados: number;
     conMarcaNueva: number;
     conGrupoNuevo: number;
+    conModeloNuevo: number;
     conBrandEspejo: number;
     yaIgual: number;
     noEncontrados: number;
@@ -447,8 +460,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     errores: string[];
   } | null>(null);
   const fabFileInputRef = useRef<HTMLInputElement | null>(null);
-  // Guarda las filas {cod, fabricante, marca, grupo} parseadas entre la vista previa y el apply
-  const fabRowsRef = useRef<Array<{ cod: string; fabricante: string | null; marca: string | null; grupo: string | null }> | null>(null);
+  // Guarda las filas {cod, fabricante, marca, grupo, modelo} parseadas entre la vista previa y el apply
+  const fabRowsRef = useRef<Array<{ cod: string; fabricante: string | null; marca: string | null; grupo: string | null; modelo: string | null }> | null>(null);
 
   // ─── IMPORTAR VALOR + % ADD + SAFRA (planilla LISTA VIZA HOME, hoja "base") ───
   // Mismo mecanismo que IMPORTAR MÁRGENES / FABRICANTES: el Excel se procesa EN
@@ -740,10 +753,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     }
   };
 
-  // ─── IMPORTAR FABRICANTES Y MARCAS + GRUPO: procesar el Excel EN EL NAVEGADOR ───
+  // ─── IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO: procesar el Excel EN EL NAVEGADOR ───
   // Lee la hoja "base" de la planilla LISTA VIZA HOME (headers en fila 2),
-  // extrae COD VIZA + FABRICANTE (col CO) + MARCA (col CT) + GRUPO (col CQ,
-  // encabezado "CATEGORIA" o "GRUPO") y envía un JSON compacto a
+  // extrae COD VIZA + FABRICANTE + MARCA + GRUPO (encabezado "CATEGORIA" o
+  // "GRUPO") + MODELO (encabezado "MODELO", columna detrás de MARCA) y envía
+  // un JSON compacto a
   // /api/products/import-fabricante/preview. Mismo flujo que márgenes/valor
   // add: primero vista previa (solo lectura) y después el apply explícito.
   // En la columna MARCA, 0 y "-" significan "sin marca".
@@ -807,20 +821,28 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       if (colGrupo < 0) {
         toast.info("La planilla no tiene columna GRUPO/CATEGORIA: no se importarán grupos.");
       }
+      // Columna MODELO (opcional en planillas viejas): se busca por encabezado
+      // "MODELO" (columna justo detrás de MARCA en la planilla actual).
+      const colModelo = colMap["MODELO"] ?? -1;
+      if (colModelo < 0) {
+        toast.info("La planilla no tiene columna MODELO: no se importarán modelos.");
+      }
 
-      const rows: Array<{ cod: string; fabricante: string | null; marca: string | null; grupo: string | null }> = [];
+      const rows: Array<{ cod: string; fabricante: string | null; marca: string | null; grupo: string | null; modelo: string | null }> = [];
       for (let r = headerIdx + 1; r < aoa.length; r++) {
         const row = aoa[r] || [];
         const cod = toStr(row[colMap["COD VIZA"]]).replace(/\.0$/, "");
         if (!cod) continue;
-        // Se envían TODAS las filas con código, incluso sin fabricante/marca/grupo:
-        // la API las cuenta (sinValores) y NUNCA borra los valores existentes.
-        // La limpieza fina (0/"-"/espacios) la hace la API (limpiarTextoExcel).
+        // Se envían TODAS las filas con código, incluso sin fabricante/marca/
+        // grupo/modelo: la API las cuenta (sinValores) y NUNCA borra los
+        // valores existentes. La limpieza fina (0/"-"/espacios) la hace la API
+        // (limpiarTextoExcel).
         rows.push({
           cod,
           fabricante: toStr(row[colMap["FABRICANTE"]]),
           marca: colMarca >= 0 ? toStr(row[colMarca]) : "",
           grupo: colGrupo >= 0 ? toStr(row[colGrupo]) : "",
+          modelo: colModelo >= 0 ? toStr(row[colModelo]) : "",
         });
       }
       if (rows.length === 0) throw new Error("El Excel no contiene filas con COD VIZA");
@@ -1301,7 +1323,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   </>
                 )}
 
-                {/* Boton IMPORTAR FABRICANTES Y MARCAS + GRUPO (planilla LISTA VIZA HOME) — solo supremo_admin */}
+                {/* Boton IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO (planilla LISTA VIZA HOME) — solo supremo_admin */}
                 {isSupremo && (
                   <>
                     <input
@@ -1326,10 +1348,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       }}
                       className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
                       style={{ background: "linear-gradient(135deg, #155789 0%, #3a8fd4 100%)" }}
-                      title="Importar FABRICANTE, MARCA y GRUPO desde la planilla LISTA VIZA HOME (hoja base). Solo actualiza esas tres columnas; nada más se toca."
+                      title="Importar FABRICANTE, MARCA, GRUPO y MODELO desde la planilla LISTA VIZA HOME (hoja base). Solo actualiza esas cuatro columnas; nada más se toca."
                     >
                       <Tag className="h-3.5 w-3.5" />
-                      IMPORTAR FABRICANTES Y MARCAS + GRUPO
+                      IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO
                     </button>
                   </>
                 )}
@@ -2485,9 +2507,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
 
 
       {/* ════════════════════════════════════════════════════════════════
-          MODAL: IMPORTAR FABRICANTES Y MARCAS + GRUPO (planilla LISTA VIZA HOME, hoja "base")
+          MODAL: IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO (planilla LISTA VIZA HOME, hoja "base")
           - Mismo flujo de márgenes/valor add: vista previa (solo lectura) + apply
-          - SOLO actualiza FABRICANTE, MARCA, GRUPO (categoria) y brand (espejo)
+          - SOLO actualiza FABRICANTE, MARCA, GRUPO (categoria), MODELO y brand (espejo)
           - Los valores explícitos del Excel siempre ganan; si la fila no trae
             MARCA, brand se completa con el fabricante SOLO si está vacío (espejo)
           - GRUPO = col CQ "CATEGORIA" de la planilla, campo "categoria" de la base
@@ -2511,7 +2533,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
             >
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <Tag className="h-5 w-5" />
-                Importar fabricantes, marcas y grupo (planilla VIZA HOME)
+                Importar fabricantes, marcas, grupo y modelo (planilla VIZA HOME)
               </h3>
               <button
                 onClick={() => {
@@ -2541,7 +2563,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     style={{ background: "#f0fdf4", borderColor: "#86efac" }}
                   >
                     <p className="text-base font-bold text-emerald-800 mb-2">
-                      ✓ Fabricantes, marcas y grupos aplicados
+                      ✓ Fabricantes, marcas, grupos y modelos aplicados
                     </p>
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
                       <div className="bg-white rounded-lg p-3 border border-emerald-200">
@@ -2564,6 +2586,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                         <p className="text-stone-500 text-xs font-semibold uppercase">Grupos del Excel aplicados</p>
                         <p className="text-2xl font-black text-teal-700">{fabImportResult.conGrupoNuevo}</p>
                       </div>
+                      <div className="bg-white rounded-lg p-3 border border-cyan-200">
+                        <p className="text-stone-500 text-xs font-semibold uppercase">Modelos del Excel aplicados</p>
+                        <p className="text-2xl font-black text-cyan-700">{fabImportResult.conModeloNuevo}</p>
+                      </div>
                       <div className="bg-white rounded-lg p-3 border border-amber-200">
                         <p className="text-stone-500 text-xs font-semibold uppercase">Catálogo por espejo</p>
                         <p className="text-2xl font-black text-amber-700">{fabImportResult.conBrandEspejo}</p>
@@ -2583,9 +2609,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </div>
                   )}
                   <div className="text-xs text-stone-500 italic">
-                    La tabla se recargó con los fabricantes, marcas y grupos nuevos. Solo se actualizaron las
-                    columnas FABRICANTE, MARCA y GRUPO (el catálogo de vendedores quedó como espejo del
-                    fabricante solo donde estaba vacío).
+                    La tabla se recargó con los fabricantes, marcas, grupos y modelos nuevos. Solo se
+                    actualizaron las columnas FABRICANTE, MARCA, GRUPO y MODELO (el catálogo de vendedores
+                    quedó como espejo del fabricante solo donde estaba vacío).
                     Costos, márgenes, precios y stock quedaron intactos.
                   </div>
                 </div>
@@ -2598,7 +2624,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <div className="rounded-lg p-3 border border-emerald-200 bg-emerald-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">A actualizar</p>
                       <p className="text-3xl font-black text-emerald-700">{fabImportPreview.aActualizar}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben fabricante, marca y/o grupo nuevo</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Productos que reciben fabricante, marca, grupo y/o modelo nuevo</p>
                     </div>
                     <div className="rounded-lg p-3 border border-stone-200 bg-stone-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Ya correctos</p>
@@ -2613,7 +2639,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Filas sin ningún valor</p>
                       <p className="text-3xl font-black text-amber-600">{fabImportPreview.sinValores}</p>
-                      <p className="text-[10px] text-stone-500 mt-1">Filas sin FABRICANTE, MARCA ni GRUPO (quedan intocadas)</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Filas sin FABRICANTE, MARCA, GRUPO ni MODELO (quedan intocadas)</p>
                     </div>
                     <div className="rounded-lg p-3 border border-violet-200 bg-violet-50">
                       <p className="text-stone-500 text-xs font-semibold uppercase">Filas con MARCA</p>
@@ -2625,19 +2651,25 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       <p className="text-3xl font-black text-teal-700">{fabImportPreview.conGrupo}</p>
                       <p className="text-[10px] text-stone-500 mt-1">Filas con CATEGORIA/GRUPO en el Excel (col detrás de SUB-GRUPO)</p>
                     </div>
+                    <div className="rounded-lg p-3 border border-cyan-200 bg-cyan-50">
+                      <p className="text-stone-500 text-xs font-semibold uppercase">Filas con MODELO</p>
+                      <p className="text-3xl font-black text-cyan-700">{fabImportPreview.conModelo}</p>
+                      <p className="text-[10px] text-stone-500 mt-1">Filas con MODELO en el Excel (columna detrás de MARCA)</p>
+                    </div>
                   </div>
 
                   <div className="text-xs text-stone-600 bg-blue-50 rounded-lg p-3 border border-blue-200">
                     <strong>{fabImportPreview.totalCodigos}</strong> códigos leídos de la hoja "base".
-                    Se actualizan <strong>SOLO las columnas FABRICANTE, MARCA y GRUPO</strong> de los
-                    productos que coinciden por COD; la MARCA va al campo MARCA de la base (col CT, el mismo
-                    que usa la importación de productos) y el GRUPO va al campo GRUPO de la tabla (col
-                    CATEGORIA del Excel, justo detrás de SUB-GRUPO). El catálogo de vendedores se completa
+                    Se actualizan <strong>SOLO las columnas FABRICANTE, MARCA, GRUPO y MODELO</strong> de los
+                    productos que coinciden por COD; la MARCA va al campo MARCA de la base (el mismo
+                    que usa la importación de productos), el GRUPO va al campo GRUPO de la tabla (col
+                    CATEGORIA del Excel, justo detrás de SUB-GRUPO) y el MODELO va al campo MODELO de la
+                    base (columna detrás de MARCA en el Excel). El catálogo de vendedores se completa
                     con el fabricante solo donde estaba vacío (convención del sistema).
                     <span className="block mt-1">
                       <strong>No se crean productos y no se tocan</strong> costos, márgenes, precios,
-                      stock, etiquetas ni ningún otro dato. Las filas con VAZIO/- en GRUPO dejan el
-                      grupo del producto como está (nunca se borra).
+                      stock, etiquetas ni ningún otro dato. Las filas con VAZIO/- en GRUPO o MODELO dejan
+                      el grupo/modelo del producto como está (nunca se borra).
                     </span>
                   </div>
 
@@ -2659,6 +2691,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Marca nueva</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Grupo actual</th>
                               <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Grupo nuevo</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Modelo actual</th>
+                              <th className="text-left px-2 py-1.5 font-semibold text-stone-600">Modelo nuevo</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2683,6 +2717,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                 </td>
                                 <td className="px-2 py-1.5 font-bold text-teal-700 max-w-[130px] truncate" title={c.grupoNuevo ?? ""}>
                                   {c.grupoNuevo ?? "—"}
+                                </td>
+                                <td className="px-2 py-1.5 text-stone-500 max-w-[130px] truncate" title={c.modeloActual ?? ""}>
+                                  {c.modeloActual || "— (vacío)"}
+                                </td>
+                                <td className="px-2 py-1.5 font-bold text-cyan-700 max-w-[130px] truncate" title={c.modeloNuevo ?? ""}>
+                                  {c.modeloNuevo ?? "—"}
                                 </td>
                               </tr>
                             ))}
@@ -2728,12 +2768,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     {fabImportApplying ? (
                       <>
                         <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
-                        Aplicando fabricantes, marcas y grupos…
+                        Aplicando fabricantes, marcas, grupos y modelos…
                       </>
                     ) : (
                       <>
                         <Check className="h-4 w-4" />
-                        APLICAR FABRICANTES, MARCAS Y GRUPO
+                        APLICAR FABRICANTES, MARCAS, GRUPO Y MODELO
                       </>
                     )}
                   </button>

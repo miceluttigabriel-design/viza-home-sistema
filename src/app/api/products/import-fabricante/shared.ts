@@ -1,9 +1,10 @@
-// Lógica compartida para importar FABRICANTES, MARCAS y GRUPO desde la
-// planilla LISTA VIZA HOME (hoja "base": headers en fila 2, columnas COD VIZA
-// + FABRICANTE col CO + CATEGORIA/GRUPO col CQ + MARCA col CT). Ruta hermana
-// de import-margins / import-valoradd: mismo mecanismo (SheetJS en el
-// navegador + JSON compacto). RUTA AISLADA: no toca ninguna importación
-// existente (productos, márgenes, valor add, stock).
+// Lógica compartida para importar FABRICANTES, MARCAS, GRUPO y MODELO desde
+// la planilla LISTA VIZA HOME (hoja "base": headers en fila 2). Se busca cada
+// columna por ENCABEZADO (COD VIZA + FABRICANTE + CATEGORIA/GRUPO + MARCA +
+// MODELO), sin depender de letras de columna (las letras cambian entre
+// versiones de la planilla). Ruta hermana de import-margins / import-valoradd:
+// mismo mecanismo (SheetJS en el navegador + JSON compacto). RUTA AISLADA: no
+// toca ninguna importación existente (productos, márgenes, valor add, stock).
 //
 // GRUPO: la planilla llama "CATEGORIA" a esta columna (col CQ, justo detrás
 // de SUB-GRUPO); en el sistema se muestra como GRUPO y se guarda en el campo
@@ -22,6 +23,11 @@
 //     SIEMPRE gana sobre cualquier valor previo del producto.
 //   - GRUPO (categoria) sigue la misma regla que FABRICANTE/MARCA: el valor
 //     explícito del Excel gana; fila sin GRUPO deja el campo como está.
+//   - MODELO escribe el campo "modelo" de la base (encabezado "MODELO" del
+//     Excel, columna justo detrás de MARCA; el mismo campo que usan la
+//     importación de productos, el export y la edición manual de la tabla).
+//     Misma regla que las demás: el valor explícito del Excel gana; fila sin
+//     MODELO deja el campo como está (nunca borra).
 //   - El campo "brand" (catálogo de vendedores) queda como espejo del
 //     FABRICANTE, igual que en la importación de productos (brand = FABRICANTE):
 //     se completa SOLO si está vacío, nunca sobrescribe.
@@ -36,6 +42,7 @@ export interface FabricanteRow {
   fabricante: string | null;
   marca: string | null;
   grupo: string | null;
+  modelo: string | null;
 }
 
 export function normalizeCod(s: string): string {
@@ -65,9 +72,9 @@ export function limpiarTextoExcel(v: any): string | null {
 // Valida y normaliza el body recibido desde el navegador (ya parseado con SheetJS)
 // REGLAS:
 //   - Filas sin COD se descartan.
-//   - Filas SIN FABRICANTE, SIN MARCA y SIN GRUPO se cuentan aparte
-//     (sinValores) y NO se aplican: el importador NUNCA borra los valores
-//     que ya tiene el producto.
+//   - Filas SIN FABRICANTE, SIN MARCA, SIN GRUPO y SIN MODELO se cuentan
+//     aparte (sinValores) y NO se aplican: el importador NUNCA borra los
+//     valores que ya tiene el producto.
 //   - Duplicados en el Excel: gana la última aparición (igual que las otras
 //     importaciones).
 export function parseBody(raw: any): {
@@ -76,6 +83,7 @@ export function parseBody(raw: any): {
   conFabricante: number;
   conMarca: number;
   conGrupo: number;
+  conModelo: number;
 } | null {
   if (!raw || !Array.isArray(raw.rows)) return null;
   const rows: FabricanteRow[] = [];
@@ -83,6 +91,7 @@ export function parseBody(raw: any): {
   let conFabricante = 0;
   let conMarca = 0;
   let conGrupo = 0;
+  let conModelo = 0;
   for (const r of raw.rows) {
     if (!r || typeof r !== "object") continue;
     const cod = normalizeCod(String(r.cod ?? ""));
@@ -90,19 +99,21 @@ export function parseBody(raw: any): {
     const fabricante = limpiarTextoExcel(r.fabricante);
     const marca = limpiarTextoExcel(r.marca);
     const grupo = limpiarTextoExcel(r.grupo);
-    if (fabricante === null && marca === null && grupo === null) {
-      // Fila sin ninguno de los tres: no se aplica nada a esta fila
+    const modelo = limpiarTextoExcel(r.modelo);
+    if (fabricante === null && marca === null && grupo === null && modelo === null) {
+      // Fila sin ninguno de los cuatro: no se aplica nada a esta fila
       sinValores++;
       continue;
     }
     if (fabricante !== null) conFabricante++;
     if (marca !== null) conMarca++;
     if (grupo !== null) conGrupo++;
+    if (modelo !== null) conModelo++;
     const idx = rows.findIndex((x) => x.cod === cod);
-    if (idx >= 0) rows[idx] = { cod, fabricante, marca, grupo };
-    else rows.push({ cod, fabricante, marca, grupo });
+    if (idx >= 0) rows[idx] = { cod, fabricante, marca, grupo, modelo };
+    else rows.push({ cod, fabricante, marca, grupo, modelo });
   }
-  return { rows, sinValores, conFabricante, conMarca, conGrupo };
+  return { rows, sinValores, conFabricante, conMarca, conGrupo, conModelo };
 }
 
 // Solo el SUPREMO_ADMIN puede ejecutar esta importación (misma regla que
@@ -139,6 +150,7 @@ export async function fetchMatchedProducts(rows: FabricanteRow[]) {
       fabricante: true,
       marca: true,
       categoria: true,
+      modelo: true,
       brand: true,
     },
   });
