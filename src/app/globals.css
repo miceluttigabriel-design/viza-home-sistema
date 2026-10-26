@@ -204,7 +204,7 @@ tr.fila-etiquetada-rojo:hover td {
 /* ============================================
    FILA ACTIVA (fila tocada) - SOLO VISUAL
    Al tocar/clickear cualquier celda de un producto (o al navegar
-   con el teclado) su linea completa se pinta de un dorado suave.
+   con el teclado) su linea completa se pinta de un azul suave.
    Al tocar otra fila, esa pasa a ser la activa y la anterior
    vuelve a la normalidad.
    El !important pinta TODOS los td, incluidas las columnas fijas
@@ -215,10 +215,10 @@ tr.fila-etiquetada-rojo:hover td {
    ============================================ */
 tr.fila-activa td,
 tr.fila-activa > td {
-  background-color: #FBEBC8 !important; /* dorado suave, a juego con el encabezado */
+  background-color: #BFDBFE !important; /* azul suave, a pedido del usuario */
 }
 tr.fila-activa:hover td {
-  background-color: #F7E4B8 !important;
+  background-color: #93C5FD !important; /* azul un poco mas fuerte al pasar el mouse */
 }
 
 /* ============================================
