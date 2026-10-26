@@ -216,15 +216,25 @@ export async function POST(req: NextRequest) {
     // 6. Verificar cuáles SKUs ya existen en la base (consulta masiva)
     // costGs se lee para poder mostrar en la vista previa el CAMBIO DE COSTO
     // (COSTO GS actual → nuevo) de cada producto existente.
-    // costosEditados se lee para marcar los productos con costo editado a mano
-    // y guardado por el admin: a esos la importación NO les cambia el costo
-    // (solo stock), y la vista previa lo muestra como PROTEGIDO.
+    // Los productos con costos editados a mano y guardados por el admin se
+    // marcan como PROTEGIDO: la importación NO les cambia el costo (solo
+    // stock). Se leen de la tabla aparte CostoEditado (best-effort: si la
+    // tabla todavía no existe — falta `npx prisma db push` — nadie va
+    // protegido y todo funciona igual que antes; nunca rompe esta ruta).
     const codigosList = Object.keys(grouped);
     const existentes = await db.product.findMany({
       where: { sku: { in: codigosList } },
-      select: { sku: true, stock: true, name: true, costGs: true, costosEditados: true },
+      select: { id: true, sku: true, stock: true, name: true, costGs: true },
     });
     const existentesMap = new Map(existentes.map((p) => [p.sku, p]));
+
+    const protegidosIds = new Set<string>();
+    try {
+      const marcas = await db.costoEditado.findMany({ select: { productId: true } });
+      for (const m of marcas) protegidosIds.add(m.productId);
+    } catch {
+      // Tabla CostoEditado aún no creada → nadie protegido (como antes).
+    }
 
     // 6.b Márgenes automáticas + SAFRA automática que recibirían los NUEVOS
     // (mismas funciones que usa el apply: promedio por sub-grupo → general,
@@ -272,8 +282,7 @@ export async function POST(req: NextRequest) {
           stockNuevo: data.stockSumado,
           costoActual: existente.costGs ?? null,
           costoNuevo: data.costProd,
-          costoProtegido:
-            Array.isArray(existente.costosEditados) && existente.costosEditados.length > 0,
+          costoProtegido: protegidosIds.has(existente.id),
         });
       } else {
         // SKU nuevo → crear producto con márgenes + SAFRA automáticas

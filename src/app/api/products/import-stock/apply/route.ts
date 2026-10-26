@@ -29,10 +29,11 @@ import {
 //     mismas márgenes que el producto ya tenía — idéntico a cuando el admin
 //     edita la celda COSTO GS a mano en la tabla.
 //   - REGLA NUEVA (costos editados por el admin): los productos que tienen
-//     `costosEditados` (algún costo editado a mano y guardado por el admin)
-//     NUNCA reciben costo de la planilla: solo se les actualiza el STOCK.
-//     Así el costo que el admin fijó queda siempre igual aunque el Excel
-//     traiga otro — esas celdas se pintan de DORADO VIBRANTE en la tabla.
+//     algún costo editado a mano y guardado por el admin (registrado en la
+//     tabla aparte CostoEditado) NUNCA reciben costo de la planilla: solo se
+//     les actualiza el STOCK. Así el costo que el admin fijó queda siempre
+//     igual aunque el Excel traiga otro — esas celdas se pintan de DORADO
+//     VIBRANTE en la tabla.
 //
 // ─── OPTIMIZACIÓN CRÍTICA (anti-timeout de Vercel Hobby 10s) ───
 // En vez de hacer 1 operación de DB por producto (2000+ ops = timeout),
@@ -351,8 +352,8 @@ export async function POST(req: NextRequest) {
       ? await db.product.findMany({
           where: { sku: { in: allUpdates.map(u => u.sku) } },
           select: {
+            id: true,
             sku: true,
-            costosEditados: true,
             costBR: true, costUS: true, costGs: true,
             discountPct: true, addPct: true, admPct: true,
             valorDesc: true, valorAdd: true, marginContado: true,
@@ -366,6 +367,18 @@ export async function POST(req: NextRequest) {
         })
       : [];
     const existingRowsMap = new Map(existingRows.map(p => [p.sku, p]));
+
+    // Productos con costos editados a mano y guardados por el admin. Se leen
+    // de la tabla aparte CostoEditado (best-effort: si la tabla todavía no
+    // existe — falta `npx prisma db push` — nadie va protegido y todo
+    // funciona igual que antes; nunca rompe esta ruta).
+    const protegidosIds = new Set<string>();
+    try {
+      const marcas = await db.costoEditado.findMany({ select: { productId: true } });
+      for (const m of marcas) protegidosIds.add(m.productId);
+    } catch {
+      // Tabla CostoEditado aún no creada → nadie protegido (como antes).
+    }
 
     // Separar los updates:
     //   - costUpdates: la planilla trae un costo DISTINTO al guardado →
@@ -382,7 +395,7 @@ export async function POST(req: NextRequest) {
       // Si el admin editó y guardó algún costo de este producto a mano, la
       // importación NO le cambia el costo: entra directo como "solo stock",
       // sin importar lo que traiga el Excel (aunque sea un costo distinto).
-      if (row && Array.isArray(row.costosEditados) && row.costosEditados.length > 0) {
+      if (row && protegidosIds.has(row.id)) {
         stockOnlyUpdates.push({ sku: u.sku, stock: u.stock });
         continue;
       }

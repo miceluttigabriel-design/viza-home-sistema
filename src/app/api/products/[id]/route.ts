@@ -168,29 +168,20 @@ export async function PUT(
     // ─── COSTO EDITADO Y GUARDADO (regla del usuario) ───
     // El cliente solo envía los campos que el admin tocó (objeto "dirty"),
     // así que si el body trae un campo de COSTO de entrada es porque el admin
-    // lo editó en esta edición. Se registra en `costosEditados` del producto:
+    // lo editó en esta edición. Se registra en la tabla aparte CostoEditado:
     //   1) La celda editada se pinta de DORADO VIBRANTE en la tabla (discernir).
     //   2) La importación de stock NUNCA pisa esos costos: para esos productos
     //      solo actualiza el STOCK.
     // El registro es acumulativo (nunca se borra automáticamente).
+    // BEST-EFFORT: se hace DESPUÉS del update del producto y con try/catch —
+    // si la tabla todavía no existe (falta `npx prisma db push`), el guardado
+    // del producto NUNCA falla por esto y la app sigue igual que antes.
     const COSTO_EDIT_KEYS = [
       "costBR", "costUS", "costGs",
       "discountPct", "addPct", "admPct",
       "valorDesc", "valorAdd",
     ];
     const costosTocados = COSTO_EDIT_KEYS.filter((k) => body[k] !== undefined);
-    if (costosTocados.length > 0) {
-      const actual = await db.product.findUnique({
-        where: { id },
-        select: { costosEditados: true },
-      });
-      if (!actual) {
-        return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
-      }
-      const conjunto = new Set<string>(actual.costosEditados ?? []);
-      for (const k of costosTocados) conjunto.add(k);
-      data.costosEditados = Array.from(conjunto);
-    }
 
     // Registrar trazabilidad de la edición manual del admin
     // Esto se hace DESPUÉS de construir `data` con los campos editados, así
@@ -205,7 +196,34 @@ export async function PUT(
       data,
     });
 
-    return NextResponse.json({ product: updated });
+    // Marcar los costos editados en la tabla aparte CostoEditado (acumulativo).
+    // BEST-EFFORT: si la tabla aún no existe (falta db push), se ignora —
+    // el guardado del producto ya ocurrió bien y la app sigue funcionando.
+    try {
+      if (costosTocados.length > 0) {
+        await db.costoEditado.createMany({
+          data: costosTocados.map((colKey) => ({ productId: id, colKey })),
+          skipDuplicates: true,
+        });
+      }
+    } catch {
+      // Tabla CostoEditado aún no creada → sin marca dorada por ahora.
+    }
+
+    // Devolver costosEditados (best-effort) para que la tabla del panel pinte
+    // el dorado AL INSTANTE después de guardar (el panel hace {...p, ...res}).
+    let costosEditados: string[] = [];
+    try {
+      const marcas = await db.costoEditado.findMany({
+        where: { productId: id },
+        select: { colKey: true },
+      });
+      costosEditados = marcas.map((m) => m.colKey);
+    } catch {
+      // Tabla aún no creada → respuesta sin marcas, igual que antes.
+    }
+
+    return NextResponse.json({ product: { ...updated, costosEditados } });
   } catch (error) {
     console.error("Error actualizando producto:", error);
     return NextResponse.json(
