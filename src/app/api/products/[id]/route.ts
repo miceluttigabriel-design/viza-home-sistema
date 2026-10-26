@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import {
+  COSTO_EDIT_KEYS,
+  marcarCostosEditados,
+  leerColKeysProducto,
+} from "@/lib/costo-editado";
 
 // Recalcula los campos derivados según las fórmulas del Excel
 function recalculate(p: any): any {
@@ -173,14 +178,9 @@ export async function PUT(
     //   2) La importación de stock NUNCA pisa esos costos: para esos productos
     //      solo actualiza el STOCK.
     // El registro es acumulativo (nunca se borra automáticamente).
-    // BEST-EFFORT: se hace DESPUÉS del update del producto y con try/catch —
-    // si la tabla todavía no existe (falta `npx prisma db push`), el guardado
-    // del producto NUNCA falla por esto y la app sigue igual que antes.
-    const COSTO_EDIT_KEYS = [
-      "costBR", "costUS", "costGs",
-      "discountPct", "addPct", "admPct",
-      "valorDesc", "valorAdd",
-    ];
+    // Tabla AUTO-GESTIONADA (ver src/lib/costo-editado.ts): si aún no existe
+    // se crea sola; si no se pudiera crear, el guardado del producto NUNCA
+    // falla por esto y la app sigue igual que antes (sin dorado todavía).
     const costosTocados = COSTO_EDIT_KEYS.filter((k) => body[k] !== undefined);
 
     // Registrar trazabilidad de la edición manual del admin
@@ -196,32 +196,13 @@ export async function PUT(
       data,
     });
 
-    // Marcar los costos editados en la tabla aparte CostoEditado (acumulativo).
-    // BEST-EFFORT: si la tabla aún no existe (falta db push), se ignora —
-    // el guardado del producto ya ocurrió bien y la app sigue funcionando.
-    try {
-      if (costosTocados.length > 0) {
-        await db.costoEditado.createMany({
-          data: costosTocados.map((colKey) => ({ productId: id, colKey })),
-          skipDuplicates: true,
-        });
-      }
-    } catch {
-      // Tabla CostoEditado aún no creada → sin marca dorada por ahora.
-    }
+    // Marcar los costos editados en la tabla aparte CostoEditado (acumulativo,
+    // auto-gestionada: se crea sola si falta — ver src/lib/costo-editado.ts).
+    await marcarCostosEditados(id, costosTocados);
 
-    // Devolver costosEditados (best-effort) para que la tabla del panel pinte
-    // el dorado AL INSTANTE después de guardar (el panel hace {...p, ...res}).
-    let costosEditados: string[] = [];
-    try {
-      const marcas = await db.costoEditado.findMany({
-        where: { productId: id },
-        select: { colKey: true },
-      });
-      costosEditados = marcas.map((m) => m.colKey);
-    } catch {
-      // Tabla aún no creada → respuesta sin marcas, igual que antes.
-    }
+    // Devolver costosEditados para que la tabla del panel pinte el dorado AL
+    // INSTANTE después de guardar (el panel hace {...p, ...res}).
+    const costosEditados = await leerColKeysProducto(id);
 
     return NextResponse.json({ product: { ...updated, costosEditados } });
   } catch (error) {

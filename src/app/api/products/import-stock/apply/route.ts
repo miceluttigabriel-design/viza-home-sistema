@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { leerProductosProtegidos } from "@/lib/costo-editado";
 import { Prisma } from "@prisma/client";
 import {
   computeDbMarginStats,
@@ -368,17 +369,10 @@ export async function POST(req: NextRequest) {
       : [];
     const existingRowsMap = new Map(existingRows.map(p => [p.sku, p]));
 
-    // Productos con costos editados a mano y guardados por el admin. Se leen
-    // de la tabla aparte CostoEditado (best-effort: si la tabla todavía no
-    // existe — falta `npx prisma db push` — nadie va protegido y todo
-    // funciona igual que antes; nunca rompe esta ruta).
-    const protegidosIds = new Set<string>();
-    try {
-      const marcas = await db.costoEditado.findMany({ select: { productId: true } });
-      for (const m of marcas) protegidosIds.add(m.productId);
-    } catch {
-      // Tabla CostoEditado aún no creada → nadie protegido (como antes).
-    }
+    // Productos con costos editados a mano y guardados por el admin (tabla
+    // aparte AUTO-GESTIONADA: ver src/lib/costo-editado.ts; si aún no existe,
+    // nadie va protegido y todo funciona igual que antes — nunca rompe esto).
+    const protegidosIds = await leerProductosProtegidos();
 
     // Separar los updates:
     //   - costUpdates: la planilla trae un costo DISTINTO al guardado →

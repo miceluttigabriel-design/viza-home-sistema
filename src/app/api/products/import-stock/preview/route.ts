@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { leerProductosProtegidos } from "@/lib/costo-editado";
 import ExcelJS from "exceljs";
 import {
   computeDbMarginStats,
@@ -228,13 +229,10 @@ export async function POST(req: NextRequest) {
     });
     const existentesMap = new Map(existentes.map((p) => [p.sku, p]));
 
-    const protegidosIds = new Set<string>();
-    try {
-      const marcas = await db.costoEditado.findMany({ select: { productId: true } });
-      for (const m of marcas) protegidosIds.add(m.productId);
-    } catch {
-      // Tabla CostoEditado aún no creada → nadie protegido (como antes).
-    }
+    // Productos con costos editados a mano y guardados por el admin (tabla
+    // aparte AUTO-GESTIONADA: ver src/lib/costo-editado.ts; si aún no existe,
+    // nadie va protegido y todo funciona igual que antes — nunca rompe esto).
+    const protegidosIds = await leerProductosProtegidos();
 
     // 6.b Márgenes automáticas + SAFRA automática que recibirían los NUEVOS
     // (mismas funciones que usa el apply: promedio por sub-grupo → general,

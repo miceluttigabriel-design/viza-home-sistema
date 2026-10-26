@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { leerCostosEditados } from "@/lib/costo-editado";
 
 // GET /api/products - lista de productos con filtros opcionales y paginación
 export async function GET(req: NextRequest) {
@@ -111,26 +112,10 @@ export async function GET(req: NextRequest) {
     });
 
     // ─── COSTOS EDITADOS POR EL ADMIN (guardados) ───
-    // Se leen de la tabla aparte CostoEditado y se adjuntan a cada producto
-    // (el panel los usa para pintar la celda de DORADO VIBRANTE).
-    // BEST-EFFORT: si la tabla todavía no existe (falta `npx prisma db push`),
-    // se ignora el error y se sigue sin marcas — la lista de productos carga
-    // IGUAL (saldos, costos y todo lo demás intactos). Nunca rompe esta ruta.
-    const editadosMap = new Map<string, string[]>();
-    try {
-      const marcas = await db.costoEditado.findMany({
-        where: { productId: { in: products.map((p) => p.id) } },
-        select: { productId: true, colKey: true },
-      });
-      for (const m of marcas) {
-        const arr = editadosMap.get(m.productId) ?? [];
-        arr.push(m.colKey);
-        editadosMap.set(m.productId, arr);
-      }
-    } catch {
-      // Tabla CostoEditado aún no creada → sin dorado por ahora, la app
-      // funciona exactamente igual que antes.
-    }
+    // Tabla aparte AUTO-GESTIONADA (ver src/lib/costo-editado.ts): si aún no
+    // existe se crea sola y NUNCA rompe esta ruta (devuelve sin marcas y la
+    // lista de productos carga igual, con saldos y costos intactos).
+    const editadosMap = await leerCostosEditados(products.map((p) => p.id));
 
     return NextResponse.json({
       products: products.map((p) => ({

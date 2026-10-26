@@ -3742,7 +3742,7 @@ const Cell = memo(function Cell({
   if (!isDesc) {
     return (
       <td
-        className={`px-1 py-0 border-r border-stone-50 ${esFija ? "sticky z-10" : "bg-white"}`}
+        className={`px-1 py-0 border-r border-stone-50 ${esFija ? "sticky z-10" : "bg-white"}${costoEditado && !esFija ? " celda-costo-editado" : ""}`}
         style={
           esFija
             ? { left: frozenLeft, width: frozenWidth, backgroundColor: fondoFija }
@@ -3750,6 +3750,8 @@ const Cell = memo(function Cell({
               // fondo DORADO SUPER VIVO VIBRANTE para discernirla de un costo
               // traído por importación. (Las columnas de costo nunca son
               // fijas; se deja esFija primero por seguridad.)
+              // La clase "celda-costo-editado" (globals.css) hace que el
+              // dorado gane también a fila-activa / fila-etiquetada / hover.
               costoEditado
             ? { backgroundColor: COSTO_EDITADO_BG }
             : undefined

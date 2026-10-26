@@ -222,6 +222,19 @@ tr.fila-activa:hover td {
 }
 
 /* ============================================
+   CELDA DE COSTO EDITADA POR EL ADMIN - DORADO VIBRANTE
+   La celda de COSTO que el admin editó a mano y guardó SIEMPRE se ve
+   dorada (#FFD700): esta regla gana a fila-activa, a las fila-etiquetada-*
+   y a los hover (mismo !important, declarada después / igual o mayor
+   especificidad). El resto del estilo de la fila (borde izquierdo, color
+   de texto, etc.) no se toca — solo el fondo de ESA celda.
+   ============================================ */
+tr td.celda-costo-editado,
+tr:hover td.celda-costo-editado {
+  background-color: #FFD700 !important;
+}
+
+/* ============================================
    FILTROS DE ETIQUETA - LEYENDA CLICKEABLE
    ============================================ */
 .leyenda-item {
