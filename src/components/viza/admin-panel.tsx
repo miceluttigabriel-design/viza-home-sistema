@@ -193,19 +193,17 @@ interface ColDef {
 }
 
 const COLUMNS: ColDef[] = [
-  // Datos principales (pegados al SKU)
-  // Renombre visual (pedido del usuario): se muestra REF.FABRICA; el campo/key
-  // "referencia" queda intacto (datos, filtro, import y export sin cambios).
-  { key: "referencia", label: "REF.FABRICA", type: "text", group: "DATOS" },
+  // Orden de columnas a pedido del usuario (despues del COD fijo):
+  // GRUPO > SUB-GRUPO > PROVEDOR > MARCA > REF.FABRICA > DESCRIPCION.
+  // Solo cambia la POSICION visual; keys/campos/datos/Excel intactos.
+  // GRUPO: en la base es el campo "categoria" (col CQ "CATEGORIA" de la
+  // planilla), el mismo que ya usan el export Excel y la importación de
+  // productos. Se muestra (como GRUPO) y es editable en esta tabla; el botón
+  // IMPORTAR FABRICANTES Y MARCAS + GRUPO la llena desde la planilla.
+  { key: "categoria", label: "GRUPO", type: "text", group: "DATOS FINALES" },
   // Columnas DIVISION, TIPO, MODELO y PRODUCTO ocultas de esta tabla a pedido
   // del usuario (los datos siguen en la base).
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
-  // GRUPO restaurada a pedido del usuario: en la base es el campo "categoria"
-  // (col CQ "CATEGORIA" de la planilla, justo detrás de SUB-GRUPO), el mismo
-  // que ya usan el export Excel y la importación de productos. Ahora también
-  // se muestra (como GRUPO) y es editable en esta tabla; el botón IMPORTAR
-  // FABRICANTES Y MARCAS + GRUPO la llena desde la planilla.
-  { key: "categoria", label: "GRUPO", type: "text", group: "DATOS FINALES" },
   // FABRICANTE y MARCA restauradas a pedido del usuario: los campos ya
   // existían en la base de datos y en import/export Excel; ahora también se
   // muestran y son editables en esta tabla (filtro por columna y búsqueda
@@ -215,7 +213,10 @@ const COLUMNS: ColDef[] = [
   // "fabricante" queda intacto (datos, filtro, API, import y export sin cambios).
   { key: "fabricante", label: "PROVEDOR", type: "text", group: "DATOS FINALES" },
   { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
-  // Datos de identificacion (despues de DATOS FINALES)
+  // Renombre visual (pedido del usuario): se muestra REF.FABRICA; el campo/key
+  // "referencia" queda intacto (datos, filtro, import y export sin cambios).
+  { key: "referencia", label: "REF.FABRICA", type: "text", group: "DATOS" },
+  // Datos de identificacion
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   // STOCK movida ENTRE COD SHOW y Costo R$ (atras de Costo R$ = antes, en frente de COD SHOW = despues)
   { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
