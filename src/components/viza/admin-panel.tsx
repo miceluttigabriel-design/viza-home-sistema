@@ -256,13 +256,18 @@ const COLUMNS: ColDef[] = [
   { key: "pct14A30", label: "14 A 30", type: "pct", group: "BASES" },
   // Margenes y precios
   // Movimientos a pedido del usuario (solo POSICION visual; keys/datos intactos):
-  // - MARGEN TECNICO movida atras de % CONTADO (antes de ella, a la izquierda)
-  // - VALOR TECNICO movida atras de CONTADO (PRECIO CONTADO; antes, a la izquierda)
+  // - MARGEN MAYORISTA movida atras de % CONTADO (antes de ella, a la izquierda)
+  // - VALOR MAYORISTA movida atras de CONTADO (PRECIO CONTADO; antes, a la izquierda)
   // Mismo criterio ya validado con STOCK en esta tabla: "atras de X" = antes de X.
-  { key: "margenTecnico", label: "MARGEN TECNICO", type: "num", group: "DATOS FINALES" },
+  //
+  // Renombre visual (pedido del usuario): MARGEN TECNICO ahora se muestra como
+  // MARGEN MAYORISTA, y VALOR TECNICO ahora se muestra como VALOR MAYORISTA.
+  // Solo cambia el NOMBRE de la columna en pantalla; los keys "margenTecnico" y
+  // "valorTecnico", los datos, el import y el export Excel quedan intactos.
+  { key: "margenTecnico", label: "MARGEN MAYORISTA", type: "num", group: "DATOS FINALES" },
   { key: "marginContado", label: "% CONTADO", type: "pct", group: "MARGENES" },
   { key: "safra", label: "SAFRA", type: "num", group: "DATOS FINALES" },
-  { key: "valorTecnico", label: "VALOR TECNICO", type: "num", group: "DATOS FINALES" },
+  { key: "valorTecnico", label: "VALOR MAYORISTA", type: "num", group: "DATOS FINALES" },
   { key: "priceContado", label: "CONTADO", type: "calc", group: "PRECIOS" },
   ...Array.from({ length: 30 }, (_, i) => ({
     key: `marginC${i + 1}`,
@@ -276,8 +281,9 @@ const COLUMNS: ColDef[] = [
     type: "calc" as const,
     group: "PRECIOS",
   })),
-  // VALOR TECNICO y MARGEN TECNICO ya no van al final: quedaron atras de
-  // CONTADO (PRECIO CONTADO) y atras de % CONTADO respectivamente (ver arriba).
+  // VALOR MAYORISTA (antes VALOR TECNICO) y MARGEN MAYORISTA (antes MARGEN
+  // TECNICO) ya no van al final: quedaron atras de CONTADO (PRECIO CONTADO) y
+  // atras de % CONTADO respectivamente (ver arriba).
   // COLUNA1, COLUNA2 y COSTO SISTEMA: eliminadas del Panel ADM a pedido del usuario.
   // Siguen existiendo en la base de datos y en import/export Excel; solo dejan de mostrarse.
 ];
