@@ -233,6 +233,30 @@ model CostoEditado {
   @@unique([productId, colKey])
 }
 
+// ─── SUCURSAL ASIGNADA A CADA USUARIO (CRM · ranking) ───
+// Una fila por usuario (clave = email) con la sucursal que le asigna el
+// admin. La usa el CRM: ranking de presupuestos emitidos por usuario,
+// general y por sucursal.
+// Se siembra AUTOMÁTICAMENTE desde la planilla oficial de funcionarios
+// (FUN.VIZA: email → sucursal) y el admin puede cambiarla a mano con el
+// select del panel CRM.
+// TABLA APARTE A PROPÓSITO (misma lección de CostoEditado): el modelo User
+// queda EXACTAMENTE igual que siempre, así que NINGUNA consulta existente
+// puede romperse. Si esta tabla todavía no existe en la base, el código
+// que la usa falla en silencio (try/catch) y la app funciona igual que
+// antes; se crea SOLA en el primer uso (SQL idempotente en
+// src/lib/sucursal-usuario.ts) o al correr `npx prisma db push`.
+// La clave es el EMAIL (estable y único en User) y no hay relación Prisma
+// a propósito, por el mismo motivo que CostoEditado: tocar User (columna
+// nueva) era lo que podía romper la app si el db push no se había corrido.
+model UsuarioSucursal {
+  id        String   @id @default(cuid())
+  userEmail String   @unique
+  sucursal  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Quote {
   id            String      @id @default(cuid())
   quoteNumber   String      @unique

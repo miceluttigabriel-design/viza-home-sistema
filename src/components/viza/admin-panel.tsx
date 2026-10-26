@@ -28,6 +28,7 @@ import {
   KeyRound,
   Percent,
   Coins,
+  BarChart3,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -41,6 +42,29 @@ const fmtPctVal = (v: number | null | undefined): string => {
   const n = v * 100;
   const s = Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
   return `${s}%`;
+};
+
+// ─── CRM (ranking de presupuestos emitidos por usuario) ───
+// Una fila del ranking que devuelve GET /api/crm/ranking.
+interface CrmFila {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  sucursal: string; // "SIN SUCURSAL" si todavía no tiene asignación
+  total: number; // presupuestos emitidos
+  aprobadas: number; // de esos, cuántas quedaron en estado "aprobada"
+  ultimo: string | null; // fecha ISO del último presupuesto
+}
+
+// Fecha corta DD/MM/AA para la columna "último" del CRM
+const fmtFechaCortaCrm = (iso: string | null): string => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
 };
 
 interface Product {
@@ -545,6 +569,56 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const [deleteAllResult, setDeleteAllResult] = useState<{ borrados: number; conservados?: number } | null>(null);
   // Checkbox de doble confirmación (debe tildar "SI, BORRAR TODO" para habilitar)
   const [deleteAllConfirmCheck, setDeleteAllConfirmCheck] = useState(false);
+
+  // ─── CRM: ranking de presupuestos emitidos por usuario (general y por sucursal) ───
+  const [crmOpen, setCrmOpen] = useState(false);
+  const [crmLoading, setCrmLoading] = useState(false);
+  const [crmRanking, setCrmRanking] = useState<CrmFila[]>([]);
+  const [crmSucursales, setCrmSucursales] = useState<string[]>([]);
+  const [crmTotalGeneral, setCrmTotalGeneral] = useState(0);
+  const [crmFiltro, setCrmFiltro] = useState<string>("GENERAL");
+  const [crmGuardandoSuc, setCrmGuardandoSuc] = useState<string | null>(null); // email en guardado
+
+  // Abre el modal CRM y trae el ranking completo (una sola llamada).
+  const abrirCrm = useCallback(async () => {
+    setCrmOpen(true);
+    setCrmLoading(true);
+    try {
+      const res = await fetch("/api/crm/ranking");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Error HTTP ${res.status}`);
+      setCrmRanking(Array.isArray(data.ranking) ? data.ranking : []);
+      setCrmSucursales(Array.isArray(data.sucursales) ? data.sucursales : []);
+      setCrmTotalGeneral(Number(data.totalGeneral) || 0);
+    } catch (error) {
+      console.error("Error CRM:", error);
+      toast.error(`CRM: ${(error as Error).message}`);
+    } finally {
+      setCrmLoading(false);
+    }
+  }, []);
+
+  // Guarda la sucursal asignada a un usuario (select del CRM). "" = sin sucursal.
+  const guardarSucursalCrm = useCallback(async (email: string, sucursal: string) => {
+    setCrmGuardandoSuc(email);
+    try {
+      const res = await fetch("/api/crm/sucursal", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userEmail: email, sucursal }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Error HTTP ${res.status}`);
+      setCrmRanking((prev) =>
+        prev.map((f) => (f.email === email ? { ...f, sucursal: sucursal || "SIN SUCURSAL" } : f))
+      );
+      toast.success(sucursal ? `Sucursal asignada: ${sucursal}` : "Asignación de sucursal quitada");
+    } catch (error) {
+      toast.error(`CRM: ${(error as Error).message}`);
+    } finally {
+      setCrmGuardandoSuc(null);
+    }
+  }, []);
 
   const fetchProducts = useCallback(async () => {
     setLoadingProducts(true);
@@ -1113,6 +1187,17 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               aria-label="Ir a Ventas"
             >
               <ShoppingCart className="h-4 w-4" />
+            </button>
+
+            {/* 2.5 CRM (ranking de presupuestos por usuario, general y por sucursal) */}
+            <button
+              onClick={abrirCrm}
+              className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title="CRM · Ranking de presupuestos por usuario"
+              aria-label="CRM · Ranking de presupuestos por usuario"
+            >
+              CRM
             </button>
 
             {/* 3. GDA (solo texto, sin emoji) */}
@@ -3329,6 +3414,215 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           </div>
         </div>
       )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          MODAL CRM · RANKING DE PRESUPUESTOS POR USUARIO
+          - Ranking GENERAL y POR SUCURSAL (cantidad de presupuestos emitidos)
+          - La sucursal de cada usuario se asigna/cambia con el select
+          - SOLO LECTURA de presupuestos/usuarios: nunca edita nada del sistema
+          ════════════════════════════════════════════════════════════════ */}
+      {crmOpen && (() => {
+        const haySinSucursal = crmRanking.some((f) => f.sucursal === "SIN SUCURSAL");
+        const filtros = ["GENERAL", ...crmSucursales, ...(haySinSucursal ? ["SIN SUCURSAL"] : [])];
+        const filas = [...crmRanking]
+          .filter((f) => crmFiltro === "GENERAL" || f.sucursal === crmFiltro)
+          .sort(
+            (a, b) =>
+              b.total - a.total ||
+              b.aprobadas - a.aprobadas ||
+              a.name.localeCompare(b.name, "es")
+          );
+        const sumaVista = filas.reduce((acc, f) => acc + f.total, 0);
+        const aprobadasVista = filas.reduce((acc, f) => acc + f.aprobadas, 0);
+        const medalStyle = (pos: number): { bg: string; fg: string } | null =>
+          pos === 1
+            ? { bg: "#FFD700", fg: "#6b5200" }
+            : pos === 2
+            ? { bg: "#C0C0C0", fg: "#3f3f3f" }
+            : pos === 3
+            ? { bg: "#CD7F32", fg: "#fff7ed" }
+            : null;
+        return (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => {
+              if (!crmGuardandoSuc) setCrmOpen(false);
+            }}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header azul */}
+              <div
+                className="px-6 py-4 flex items-center justify-between border-b shrink-0"
+                style={{ borderColor: "#e7d9a8", background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+              >
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  CRM · RANKING DE PRESUPUESTOS
+                </h3>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-white/15 text-white text-xs font-bold">
+                    TOTAL EMITIDOS: {crmTotalGeneral}
+                  </span>
+                  <button
+                    onClick={() => setCrmOpen(false)}
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                    title="Cerrar"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Filtros: GENERAL + una pill por sucursal */}
+              <div className="px-6 py-3 flex flex-wrap gap-1.5 border-b border-stone-200 shrink-0">
+                {filtros.map((s) => {
+                  const activo = crmFiltro === s;
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setCrmFiltro(s)}
+                      className={`h-7 px-3 rounded-full text-xs font-bold transition-colors ${
+                        activo
+                          ? "text-white"
+                          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                      }`}
+                      style={activo ? { background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" } : undefined}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Tabla del ranking */}
+              <div className="flex-1 overflow-auto">
+                {crmLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <div className="h-10 w-10 rounded-full border-4 border-stone-200 border-t-[#155789] animate-spin"></div>
+                    <p className="text-sm text-stone-600 font-medium">Calculando ranking…</p>
+                  </div>
+                ) : filas.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-2 text-center px-6">
+                    <BarChart3 className="h-10 w-10 text-stone-300" />
+                    <p className="text-sm font-semibold text-stone-600">
+                      Sin datos para {crmFiltro === "GENERAL" ? "el ranking general" : crmFiltro}
+                    </p>
+                    <p className="text-xs text-stone-400 max-w-sm">
+                      El ranking cuenta los presupuestos guardados por cada usuario. Cuando se emitan presupuestos aparecen acá solos.
+                    </p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-stone-100 border-b border-stone-200">
+                      <tr className="text-[11px] uppercase tracking-wide text-stone-500">
+                        <th className="px-3 py-2 text-left w-12">Pos</th>
+                        <th className="px-3 py-2 text-left">Usuario</th>
+                        <th className="px-3 py-2 text-left w-[220px]">Sucursal</th>
+                        <th className="px-3 py-2 text-center w-24">Emitidos</th>
+                        <th className="px-3 py-2 text-center w-24">Aprobadas</th>
+                        <th className="px-3 py-2 text-center w-20">Último</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filas.map((f, i) => {
+                        const pos = i + 1;
+                        const medal = pos <= 3 ? medalStyle(pos) : null;
+                        return (
+                          <tr key={f.id} className={i % 2 === 0 ? "bg-white" : "bg-stone-50"}>
+                            <td className="px-3 py-2">
+                              {medal ? (
+                                <span
+                                  className="inline-flex items-center justify-center h-6 w-8 rounded-lg text-xs font-bold shadow-sm"
+                                  style={{ background: medal.bg, color: medal.fg }}
+                                  title={pos === 1 ? "1° del ranking" : pos === 2 ? "2° del ranking" : "3° del ranking"}
+                                >
+                                  {pos}°
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center h-6 w-8 text-xs font-semibold text-stone-400">
+                                  {pos}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="font-semibold text-stone-800 truncate flex items-center gap-1.5">
+                                {f.name}
+                                {!f.active && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-stone-200 text-stone-500 shrink-0">
+                                    INACTIVO
+                                  </span>
+                                )}
+                                {f.role === "supremo_admin" && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#0d3d5e] text-white shrink-0">
+                                    SUPREMO
+                                  </span>
+                                )}
+                                {f.role === "admin" && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#1e6ba8] text-white shrink-0">
+                                    ADMIN
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-stone-400 truncate">{f.email}</div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <select
+                                value={f.sucursal === "SIN SUCURSAL" ? "" : f.sucursal}
+                                onChange={(e) => guardarSucursalCrm(f.email, e.target.value)}
+                                disabled={crmGuardandoSuc === f.email}
+                                className="w-full h-7 px-2 rounded-lg border border-stone-300 bg-white text-xs font-medium text-stone-700 focus:border-[#1e6ba8] focus:ring-2 focus:ring-blue-100 outline-none disabled:opacity-50"
+                                title="Asignar sucursal del usuario (para el ranking por sucursal)"
+                              >
+                                <option value="">SIN SUCURSAL</option>
+                                {crmSucursales.map((s) => (
+                                  <option key={s} value={s}>
+                                    {s}
+                                  </option>
+                                ))}
+                              </select>
+                              {crmGuardandoSuc === f.email && (
+                                <span className="ml-1 text-[10px] text-stone-400">guardando…</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className="text-base font-extrabold text-stone-800">{f.total}</span>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`text-sm font-bold ${f.aprobadas > 0 ? "text-green-700" : "text-stone-300"}`}>
+                                {f.aprobadas}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-center text-xs text-stone-500">
+                              {fmtFechaCortaCrm(f.ultimo)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Pie: resumen de la vista actual */}
+              <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600">
+                <span className="font-bold text-stone-700">
+                  {crmFiltro === "GENERAL" ? "GENERAL (todas las sucursales)" : crmFiltro}
+                </span>
+                <span>
+                  {sumaVista} presupuesto{sumaVista !== 1 ? "s" : ""} emitido{sumaVista !== 1 ? "s" : ""}
+                  {" · "}
+                  {aprobadasVista} aprobada{aprobadasVista !== 1 ? "s" : ""}
+                  {" · "}
+                  {filas.length} usuario{filas.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
