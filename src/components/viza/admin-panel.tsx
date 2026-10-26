@@ -315,6 +315,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const onOpenCambiarContrasena = () => setCambiarContrasenaOpen(true);
   // Etiquetas de colores por producto: { [productId]: "verde" | "azul" | "dorado" | "rojo" }
   const [productLabels, setProductLabels] = useState<Record<string, string>>({});
+  // Fila ACTIVA (solo visual): id del producto cuya linea queda pintada al
+  // tocar/clickear cualquiera de sus celdas (o al navegar con el teclado,
+  // porque el focus de los inputs burbujea al <tr>). Al tocar otra fila, esta
+  // pasa a ser la activa y la anterior vuelve a la normalidad. No afecta
+  // datos ni logica: puramente estetico (clase .fila-activa en globals.css).
+  const [filaActivaId, setFilaActivaId] = useState<string | null>(null);
   const [openLabelMenu, setOpenLabelMenu] = useState<string | null>(null);
   // Filtros por columna: { [colKey]: string[] }
   const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
@@ -1688,6 +1694,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                           isDirty={isDirty}
                           label={productLabels[p.id] || null}
                           isLabelMenuOpen={openLabelMenu === p.id}
+                          filaActiva={filaActivaId === p.id}
+                          onTocarFila={() => setFilaActivaId(p.id)}
                           onToggleLabelMenu={() => setOpenLabelMenu(openLabelMenu === p.id ? null : p.id)}
                           onSetLabel={async (color: string | null) => {
                             // Actualización optimista: actualizar UI inmediatamente
@@ -3263,6 +3271,8 @@ const ExcelRow = memo(function ExcelRow({
   isDirty,
   label,
   isLabelMenuOpen,
+  filaActiva,
+  onTocarFila,
   onToggleLabelMenu,
   onSetLabel,
   onChange,
@@ -3275,6 +3285,8 @@ const ExcelRow = memo(function ExcelRow({
   isDirty: boolean;
   label: string | null;
   isLabelMenuOpen: boolean;
+  filaActiva: boolean;
+  onTocarFila: () => void;
   onToggleLabelMenu: () => void;
   onSetLabel: (color: string | null) => void;
   onChange: (key: string, value: string) => void;
@@ -3298,7 +3310,9 @@ const ExcelRow = memo(function ExcelRow({
   return (
     <>
     <tr
-      className={`border-b border-stone-100 ${currentStyle ? currentStyle.cellClass : ""}`}
+      onClick={onTocarFila}
+      onFocusCapture={onTocarFila}
+      className={`border-b border-stone-100 ${filaActiva ? "fila-activa" : ""} ${currentStyle ? currentStyle.cellClass : ""}`}
       style={{ borderBottom: "1px solid #f1f5f9" }}
     >
       {/* Acciones - sticky */}

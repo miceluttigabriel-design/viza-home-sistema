@@ -202,6 +202,26 @@ tr.fila-etiquetada-rojo:hover td {
 }
 
 /* ============================================
+   FILA ACTIVA (fila tocada) - SOLO VISUAL
+   Al tocar/clickear cualquier celda de un producto (o al navegar
+   con el teclado) su linea completa se pinta de un dorado suave.
+   Al tocar otra fila, esa pasa a ser la activa y la anterior
+   vuelve a la normalidad.
+   El !important pinta TODOS los td, incluidas las columnas fijas
+   (ACCIONES/COD/GRUPO/SUB-GRUPO/PROVEDOR/MARCA/REF.FABRICA/
+   DESCRIPCION) que llevan fondo inline, y tambien tiene
+   prioridad sobre los colores de etiquetas mientras dura la
+   seleccion visual (al deseleccionar, la etiqueta vuelve).
+   ============================================ */
+tr.fila-activa td,
+tr.fila-activa > td {
+  background-color: #FBEBC8 !important; /* dorado suave, a juego con el encabezado */
+}
+tr.fila-activa:hover td {
+  background-color: #F7E4B8 !important;
+}
+
+/* ============================================
    FILTROS DE ETIQUETA - LEYENDA CLICKEABLE
    ============================================ */
 .leyenda-item {
