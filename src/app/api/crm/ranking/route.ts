@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { SUCURSALES_VIZA, leerMapaSucursales, sembrarDesdeExcel } from "@/lib/sucursal-usuario";
+import {
+  SUCURSALES_VIZA,
+  leerMapaSucursales,
+  sembrarDesdeExcel,
+  migrarCentralKatuete,
+} from "@/lib/sucursal-usuario";
 
 // GET /api/crm/ranking — CRM: ranking de presupuestos emitidos por usuario.
 // Devuelve el ranking GENERAL (el front lo filtra por sucursal con pills).
@@ -61,6 +66,11 @@ export async function GET() {
     // Primera vez: se siembra solo desde la planilla de funcionarios
     // (FUN.VIZA) coincidiendo el email; lo que no coincide queda
     // "SIN SUCURSAL" y el admin lo asigna a mano desde el panel.
+    // Ajuste del CRM (una sola vez, best-effort): "CENTRAL/KATUETE" dejó de
+    // existir como filtro → sus usuarios pasan a "KATUETE", y
+    // cobranza.katuete@viza.com.py sale de KATUETE (queda sin sucursal).
+    await migrarCentralKatuete();
+
     let mapaSuc = await leerMapaSucursales();
     const sinSucursal = users.filter(
       (u) => !mapaSuc.has(u.email.trim().toLowerCase())

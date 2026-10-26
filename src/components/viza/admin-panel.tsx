@@ -3422,8 +3422,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
           - SOLO LECTURA de presupuestos/usuarios: nunca edita nada del sistema
           ════════════════════════════════════════════════════════════════ */}
       {crmOpen && (() => {
-        const haySinSucursal = crmRanking.some((f) => f.sucursal === "SIN SUCURSAL");
-        const filtros = ["GENERAL", ...crmSucursales, ...(haySinSucursal ? ["SIN SUCURSAL"] : [])];
+        // Filtros del CRM: GENERAL + una pill por sucursal. (Los filtros
+        // "CENTRAL/KATUETE" y "SIN SUCURSAL" fueron eliminados a pedido del
+        // admin: las sucursales válidas vienen de la API y ya no incluyen
+        // CENTRAL/KATUETE; quienes no tienen sucursal solo se ven en GENERAL.)
+        const filtros = ["GENERAL", ...crmSucursales];
         const filas = [...crmRanking]
           .filter((f) => crmFiltro === "GENERAL" || f.sucursal === crmFiltro)
           .sort(
@@ -3576,7 +3579,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                 className="w-full h-7 px-2 rounded-lg border border-stone-300 bg-white text-xs font-medium text-stone-700 focus:border-[#1e6ba8] focus:ring-2 focus:ring-blue-100 outline-none disabled:opacity-50"
                                 title="Asignar sucursal del usuario (para el ranking por sucursal)"
                               >
-                                <option value="">SIN SUCURSAL</option>
+                                <option value="">— NINGUNA —</option>
                                 {crmSucursales.map((s) => (
                                   <option key={s} value={s}>
                                     {s}

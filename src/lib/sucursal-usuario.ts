@@ -22,8 +22,9 @@ import { db } from "@/lib/db";
 
 // Sucursales oficiales de VIZA (de la planilla de funcionarios FUN.VIZA).
 // El orden es el que se muestra en los filtros del CRM.
+// ("CENTRAL/KATUETE" dejó de existir como filtro del CRM: la oficina central
+//  pasa a trabajar dentro de "KATUETE", que ya existe como sucursal propia.)
 export const SUCURSALES_VIZA = [
-  "CENTRAL/KATUETE",
   "KATUETE",
   "LA PALOMA",
   "NUEVA ESPERANZA",
@@ -35,34 +36,35 @@ export const SUCURSALES_VIZA = [
 // asignación automática la primera vez; después manda lo guardado en la
 // base (que el admin puede editar a mano). Emails en minúscula.
 export const MAPA_SUCURSAL_EXCEL: Record<string, string> = {
-  // CENTRAL/KATUETE
-  "viza@viza.com.py": "CENTRAL/KATUETE",
-  "juliane@viza.com.py": "CENTRAL/KATUETE",
-  "larazago@viza.com.py": "CENTRAL/KATUETE",
-  "juliozago@viza.com.py": "CENTRAL/KATUETE",
-  "filipe.campos@viza.com.py": "CENTRAL/KATUETE",
-  "julianamoleiro@viza.com.py": "CENTRAL/KATUETE",
-  "baltazar@viza.com.py": "CENTRAL/KATUETE",
-  "contabilidad@viza.com.py": "CENTRAL/KATUETE",
-  "sac@viza.com.py": "CENTRAL/KATUETE",
-  "rrhh@viza.com.py": "CENTRAL/KATUETE",
-  "auditoria.stock@viza.com.py": "CENTRAL/KATUETE",
-  "auditoria@viza.com.py": "CENTRAL/KATUETE",
-  "documentos@viza.com.py": "CENTRAL/KATUETE",
-  "viza.marketing@viza.com.py": "CENTRAL/KATUETE",
-  "viza.artes@viza.com.py": "CENTRAL/KATUETE",
-  "viza.web@viza.com.py": "CENTRAL/KATUETE",
-  "ventas.online@viza.com.py": "CENTRAL/KATUETE",
-  "factura@viza.com.py": "CENTRAL/KATUETE",
-  "sercom@viza.com.py": "CENTRAL/KATUETE",
-  "viza.cobranza@viza.com.py": "CENTRAL/KATUETE",
-  "credito@viza.com.py": "CENTRAL/KATUETE",
-  "credito1@viza.com.py": "CENTRAL/KATUETE",
+  // CENTRAL (oficina central de VIZA, ahora dentro de KATUETE)
+  "viza@viza.com.py": "KATUETE",
+  "juliane@viza.com.py": "KATUETE",
+  "larazago@viza.com.py": "KATUETE",
+  "juliozago@viza.com.py": "KATUETE",
+  "filipe.campos@viza.com.py": "KATUETE",
+  "julianamoleiro@viza.com.py": "KATUETE",
+  "baltazar@viza.com.py": "KATUETE",
+  "contabilidad@viza.com.py": "KATUETE",
+  "sac@viza.com.py": "KATUETE",
+  "rrhh@viza.com.py": "KATUETE",
+  "auditoria.stock@viza.com.py": "KATUETE",
+  "auditoria@viza.com.py": "KATUETE",
+  "documentos@viza.com.py": "KATUETE",
+  "viza.marketing@viza.com.py": "KATUETE",
+  "viza.artes@viza.com.py": "KATUETE",
+  "viza.web@viza.com.py": "KATUETE",
+  "ventas.online@viza.com.py": "KATUETE",
+  "factura@viza.com.py": "KATUETE",
+  "sercom@viza.com.py": "KATUETE",
+  "viza.cobranza@viza.com.py": "KATUETE",
+  "credito@viza.com.py": "KATUETE",
+  "credito1@viza.com.py": "KATUETE",
   // KATUETE
+  // cobranza.katuete@viza.com.py sale de KATUETE (pedido del admin): no se
+  // siembra más y la migración de abajo le borra la asignación guardada.
   "jeyson@viza.com.py": "KATUETE",
   "caja.katuete@viza.com.py": "KATUETE",
   "fact.katuete@viza.com.py": "KATUETE",
-  "cobranza.katuete@viza.com.py": "KATUETE",
   "deposito.katuete@viza.com.py": "KATUETE",
   "ventas.rafael@viza.com.py": "KATUETE",
   "ventas.carla@viza.com.py": "KATUETE",
@@ -226,5 +228,46 @@ export async function sembrarDesdeExcel(emails: string[]): Promise<void> {
   for (const email of candidatos) {
     const ok = await asignarSucursal(email, MAPA_SUCURSAL_EXCEL[email]);
     if (!ok) return; // sin tabla/BD caída: degradar sin ruido
+  }
+}
+
+// ─── Migración puntual pedida por el admin (ajuste del CRM) ───
+// 1) "CENTRAL/KATUETE" dejó de existir como filtro del CRM: los usuarios que
+//    estaban asignados ahí pasan automáticamente a "KATUETE" (la oficina
+//    central trabaja con la sucursal de Katuete, que ya existía).
+// 2) cobranza.katuete@viza.com.py sale de KATUETE: se borra su asignación
+//    guardada (queda sin sucursal y solo se ve en el ranking GENERAL).
+//
+// Idempotente y best-effort, mismo estilo de siempre: se intenta UNA sola
+// vez por instancia; si la tabla todavía no existe se crea sola y se
+// reintenta; si aun así falla, se degrada en silencio. Escribe SOLO en la
+// tabla aparte "UsuarioSucursal": NUNCA toca User, Quote ni Product.
+let migrado = false;
+
+export async function migrarCentralKatuete(): Promise<void> {
+  if (migrado) return;
+  migrado = true; // aunque falle no se reintenta en esta instancia
+  const intentar = async (): Promise<void> => {
+    // Todos los "CENTRAL/KATUETE" pasan a "KATUETE" (1 sola instrucción).
+    await db.usuarioSucursal.updateMany({
+      where: { sucursal: "CENTRAL/KATUETE" },
+      data: { sucursal: "KATUETE" },
+    });
+    // cobranza.katuete fuera de KATUETE (borrar la fila = quedar sin sucursal).
+    await db.usuarioSucursal.deleteMany({
+      where: { userEmail: "cobranza.katuete@viza.com.py" },
+    });
+  };
+  try {
+    await intentar();
+    return;
+  } catch (error) {
+    if (!esErrorTablaFaltante(error)) return;
+    if (!(await ensureTablaUsuarioSucursal())) return;
+  }
+  try {
+    await intentar();
+  } catch {
+    // sin tabla / BD caída: degradar en silencio, el ranking sigue igual
   }
 }
