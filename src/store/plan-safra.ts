@@ -3,6 +3,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createUserScopedStorage } from "@/lib/user-scoped-storage";
+// CHAPA (COD 100068) = regalo, igual que el casco. Lista pura, segura de
+// importar en cliente. Se usa para EXCLUIR los regalos del promedio de la
+// tasa SAFRA (los regalos se descuentan del neto, no se financian).
+import { esProductoRegalo } from "@/lib/producto-regalo";
 
 // === HELPERS ===
 
@@ -147,6 +151,14 @@ export interface PlanSafraState {
 // PRINCIPIO: "Menos meses de financiación = Menos intereses a pagar"
 //
 // REGLA DE ORO: Solo LECTURA del SAFRA del Admin. No se modifica la BD.
+
+// REDONDEO COMERCIAL SAFRA: los refuerzos y el pago final se redondean
+// SIEMPRE al millar superior (Gs exacto, sin valores quebrados).
+// Ej: 4.295.147 → 4.296.000. El cliente nunca paga de menos: el redondeo
+// sube el total a lo sumo unos miles (el margen no baja).
+const redondeoComercial = (v: number): number =>
+  Math.ceil(Math.max(0, v) / 1000) * 1000;
+
 function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState> {
   const productos = state.productos || [];
   const entradaValor = Math.max(0, state.entradaValor || 0);
@@ -187,9 +199,20 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
 
   // % SAFRA promedio ponderado por quantity (SOLO LECTURA)
   // Esta es la TASA DE INTERÉS MENSUAL que se aplica sobre el saldo restante
-  const totalQuantity = productos.reduce((sum, p) => sum + p.quantity, 0);
+  // FIX v2.3 (regalos fuera de la tasa): el CASCO (detectado por nombre, igual
+  // que en el panel) y la CHAPA (COD 100068, src/lib/producto-regalo.ts) son
+  // REGALOS: su valor se descuenta del neto y NO se financian. Por lo tanto
+  // tampoco deben participar del promedio de la tasa: un casco/chapa con el
+  // campo SAFRA vacío (parsea 0%) arrastraba el % promedio hacia abajo y el
+  // plan salía MÁS BARATO que sin regalos (ej: 7% → 2.33% con 1 moto + casco
+  // + chapa). Con este filtro, el plan con regalos y el plan sin regalos
+  // producen EXACTAMENTE el mismo cronograma y el mismo total.
+  const productosFinanciados = productos.filter(
+    (p) => !p.name.toUpperCase().includes("CASCO") && !esProductoRegalo(p.sku)
+  );
+  const totalQuantity = productosFinanciados.reduce((sum, p) => sum + p.quantity, 0);
   const safraPctPromedio = totalQuantity > 0
-    ? productos.reduce((sum, p) => sum + p.safraPct * p.quantity, 0) / totalQuantity
+    ? productosFinanciados.reduce((sum, p) => sum + p.safraPct * p.quantity, 0) / totalQuantity
     : 0;
 
   if (totalContado <= 0) {
@@ -250,12 +273,16 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     // Estimar interés (mitad del worst-case, más realista)
     const interesEstimado = saldoActual * (safraPctPromedio / 100) * maxMes * 0.5;
     const totalAPagar = saldoActual + interesEstimado;
-    const valorPorRefuerzo = Math.ceil(totalAPagar / refuerzosCalculados.length);
-    // Asignar valores, el ÚLTIMO absorbe el remainder (total exacto)
+    // REDONDEO COMERCIAL: cada refuerzo sale al millar superior
+    // (ej: 4.295.147 → 4.296.000), sin valores quebrados.
+    const valorPorRefuerzo = redondeoComercial(
+      totalAPagar / refuerzosCalculados.length
+    );
+    // Asignar valores, el ÚLTIMO absorbe el remainder (también redondeado arriba)
     refuerzosCalculados.forEach((r, idx) => {
       if (idx === refuerzosCalculados.length - 1) {
         const sumaOtros = valorPorRefuerzo * (refuerzosCalculados.length - 1);
-        r.valor = Math.max(0, Math.ceil(totalAPagar - sumaOtros));
+        r.valor = redondeoComercial(totalAPagar - sumaOtros);
       } else {
         r.valor = valorPorRefuerzo;
       }
@@ -318,7 +345,12 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     });
     // Ajustar el valor del último refuerzo
     const ajuste = Math.round(saldoActual); // positivo = falta pagar, negativo = sobrepagó
-    refuerzosCalculados[lastIdx].valor = Math.max(0, refuerzosCalculados[lastIdx].valor + ajuste);
+    // REDONDEO COMERCIAL: el valor ajustado también sale al millar superior.
+    // Puede quedar un saldo levemente negativo (se pagaron unos Gs de más
+    // por el redondeo): jamás de menos. Eso es válido para el plan.
+    refuerzosCalculados[lastIdx].valor = redondeoComercial(
+      refuerzosCalculados[lastIdx].valor + ajuste
+    );
 
     // Reconstruir pagosPorMes con valor ajustado
     const pagosPorMes2: Record<number, number> = {};
@@ -389,8 +421,32 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   // Regla del 50% en 6 meses (entrada + refuerzos mes 1-6 >= 50% del total contado)
   const cumple50 = totalPagado6Meses >= totalContado * 0.5;
   const faltanPara50 = Math.max(0, totalContado * 0.5 - totalPagado6Meses);
-  // El plan "cuadra" si el saldo final es exactamente 0 (dentro de 1 Gs por redondeo)
-  const cuadra = Math.abs(saldoActual) <= 1;
+  // El plan "cuadra" si NO queda deuda pendiente (saldo <= 1 Gs).
+  // Con el redondeo comercial hacia arriba puede quedar un saldo levemente
+  // NEGATIVO (se pagaron unos Gs de más al redondear al millar): eso
+  // también es válido. Lo que NO es válido es saldo positivo (falta pagar).
+  const cuadra = saldoActual <= 1;
+
+  // === PAGO FINAL COMERCIAL (REDONDEO AL MILLAR) ===
+  // El panel y el PDF muestran el interés acumulado del plan sumado al
+  // ÚLTIMO pago (PAGO FINAL). Ese valor final TAMBIÉN debe salir al millar
+  // superior (ej: 1.470.000 capital + 36.640 interés = 1.506.640 →
+  // 1.507.000), para no mostrar nunca Gs quebrados.
+  // El Total del Plan pasa a ser la suma REAL de las filas mostradas:
+  // entrada + refuerzos + pago final redondeado (con interés incluido).
+  const filasConPago = cronograma.filter((f) => f.pago > 0);
+  const ultimaFilaPago = filasConPago.length > 0
+    ? filasConPago[filasConPago.length - 1]
+    : null;
+  // Si la única fila con pago es la ENTRADA (sin refuerzos), no se toca:
+  // la entrada es valor cargado por el vendedor y se muestra exacta.
+  const esEntradaUnica = filasConPago.length === 1 && ultimaFilaPago?.mes === 0;
+  const aplicaRedondeoFinal = !!ultimaFilaPago && !esEntradaUnica;
+  const interesesRedondeados = Math.round(totalIntereses);
+  const pagoFinalCapital = aplicaRedondeoFinal ? ultimaFilaPago.pago : 0;
+  const pagoFinalComercial = aplicaRedondeoFinal
+    ? redondeoComercial(pagoFinalCapital + interesesRedondeados)
+    : 0;
 
   return {
     // v2.0 FIX: NO devolver refuerzos aquí para evitar loop infinito
@@ -400,7 +456,16 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     descuentoCasco,
     cascoError: cascoAplicado && !cascoValido,
     totalIntereses: Math.round(totalIntereses),
-    totalPlan: Math.round(totalContado + totalIntereses),
+    // Total del Plan = suma de las filas COMERCIALES que se muestran en
+    // pantalla y PDF (entrada + refuerzos + PAGO FINAL con interés, al
+    // millar superior). Así el total SIEMPRE coincide con la suma de las
+    // filas y el cliente nunca ve Gs quebrados. El redondeo solo puede
+    // subir el total unos Gs (jamás de menos).
+    totalPlan: Math.round(
+      aplicaRedondeoFinal
+        ? totalPagos - pagoFinalCapital + pagoFinalComercial
+        : Math.max(totalContado + interesesRedondeados, totalPagos)
+    ),
     saldoFinal: Math.round(saldoActual), // puede ser negativo si se pasa
     totalPagado6Meses,
     cumple50,

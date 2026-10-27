@@ -312,7 +312,12 @@ export function PlanSafra() {
           safraPct: p.safraPct,
         })),
         // === DESCUENTO POR CASCO ===
-        cascoAplicado,
+        // Hardening: el backend rechaza el PDF con 400 si cascoAplicado=true
+        // llega con cascoValor=0 (BLOQUEO DE SEGURIDAD). Eso solo puede pasar
+        // con un producto casco SIN precio cargado (valor exacto 0). En ese
+        // caso no hay descuento que aplicar, así que se envía false y el PDF
+        // se genera normal (el casco sigue figurando en la lista de productos).
+        cascoAplicado: cascoAplicado && cascoValorExacto > 0,
         cascoValor: descuentoCasco,
         cascoDescripcion: cascoDescripcion || (cascoAplicado ? "Descuento por casco" : ""),
         totalContadoBruto,
@@ -486,6 +491,13 @@ export function PlanSafra() {
                             ? ` · Contado: ${formatPYG(p.priceContado)}`
                             : ""}
                         </p>
+                        {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026" */}
+                        {p.hashtag?.valor ? (
+                          <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>
+                            #{Number(p.hashtag.valor).toLocaleString("es-PY")} GS
+                            {p.hashtag.fecha ? ` valido hasta ${p.hashtag.fecha.split("-").reverse().join("/")}` : ""}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span
@@ -736,12 +748,22 @@ export function PlanSafra() {
               Entrada / Pago Inicial (Gs)
             </label>
             <input
-              type="number"
-              min={0}
-              step={1000}
-              value={entradaValor || ""}
-              onChange={(e) => setEntradaValor(Number(e.target.value))}
-              placeholder="Ej: 200000"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={
+                entradaValor
+                  ? Math.round(entradaValor).toLocaleString("es-PY")
+                  : ""
+              }
+              onChange={(e) =>
+                setEntradaValor(
+                  // Solo dígitos: el punto separador de miles es puramente
+                  // visual (se muestra al formatear, no se guarda).
+                  Number(e.target.value.replace(/\D/g, ""))
+                )
+              }
+              placeholder="Ej: 200.000"
               className="w-full h-12 px-3 rounded-lg border-2 border-stone-200 bg-white text-sm font-semibold focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 outline-none tabular-nums"
             />
           </div>
@@ -857,6 +879,27 @@ export function PlanSafra() {
               <div className="space-y-2 mb-4">
                 {pagosReales.map((c, idx) => {
                   const esEntrada = c.mes === 0;
+                  // FIX: el interés acumulado del plan se cobra con el ÚLTIMO
+                  // pago (PAGO FINAL). Así la suma de las filas = TOTAL DEL
+                  // PLAN (pagos + intereses). Antes cada fila mostraba solo
+                  // el valor principal (sin interés) y no cuadraba con el
+                  // total. El cálculo interno (saldo/cuadre) NO cambia.
+                  const valorConInteres =
+                    c.pago +
+                    (idx === pagosReales.length - 1
+                      ? Math.round(totalIntereses)
+                      : 0);
+                  // REDONDEO COMERCIAL: el PAGO FINAL (capital + interés)
+                  // también sale al millar superior (ej: 1.470.000 +
+                  // 36.640 = 1.506.640 → 1.507.000), igual que en el PDF.
+                  // Excepción: si la única fila es la ENTRADA (sin
+                  // refuerzos), se muestra el valor exacto sin tocar.
+                  const esEntradaUnica =
+                    pagosReales.length === 1 && pagosReales[0].mes === 0;
+                  const valorMostrado =
+                    idx === pagosReales.length - 1 && !esEntradaUnica
+                      ? Math.ceil(Math.max(0, valorConInteres) / 1000) * 1000
+                      : valorConInteres;
                   return (
                     <div key={idx} className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${esEntrada ? "bg-emerald-50 border-emerald-200" : "bg-stone-50 border-stone-200"}`}>
                       <div className="flex items-center gap-3">
@@ -871,7 +914,7 @@ export function PlanSafra() {
                         </div>
                       </div>
                       <p className="text-sm font-bold text-stone-900 tabular-nums whitespace-nowrap">
-                        {formatPYG(c.pago)}
+                        {formatPYG(valorMostrado)}
                       </p>
                     </div>
                   );
@@ -893,6 +936,47 @@ export function PlanSafra() {
         <p className="text-xs font-semibold text-amber-700 text-center">
           Completá el Nombre del cliente para habilitar el botón GENERAR PRESUPUESTO.
         </p>
+      )}
+
+      {/* === AVISOS DE BLOQUEO VISIBLES ===
+          Antes el botón GENERAR PRESUPUESTO quedaba gris (disabled) sin
+          ninguna explicación en pantalla cuando el plan no cumplía la regla
+          del 50% o no cuadraba: el vendedor completaba cliente y refuerzos y
+          el botón "no hacía nada". Ahora el motivo se muestra SIEMPRE aquí,
+          con los números exactos y cómo resolverlo. No cambia ninguna
+          validación: solo hace visible lo que ya bloqueaba. */}
+      {productos.length > 0 && (!cumple50 || !cuadra || refuerzos.some((r) => r.mes > 18 || r.mes < 1)) && (
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 sm:p-4 space-y-2">
+          {!cumple50 && (
+            <div>
+              <p className="text-xs font-bold text-amber-800">
+                ⚠️ REGLA DEL 50% — el botón GENERAR PRESUPUESTO sigue bloqueado:
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                Entre la ENTRADA y los refuerzos de los meses 1 a 6 el cliente debe pagar
+                al menos Gs {Math.ceil(totalContado * 0.5).toLocaleString("es-PY")} (50% del plan).
+                Pagado hasta el mes 6: Gs {Math.round(totalPagado6Meses).toLocaleString("es-PY")}
+                {faltanPara50 > 0 && ` — faltan Gs ${faltanPara50.toLocaleString("es-PY")}`}.
+              </p>
+              <p className="text-xs text-amber-700 mt-1">
+                Solución: agregá refuerzos con fecha dentro de los primeros 6 meses
+                (o subí el valor de la entrada).
+              </p>
+            </div>
+          )}
+          {!cuadra && (
+            <p className="text-xs font-bold text-rose-700">
+              ⚠️ El plan no cuadra: saldo final Gs {saldoFinal.toLocaleString("es-PY")}.
+              Revisá la entrada y los refuerzos para que el saldo final quede en 0.
+            </p>
+          )}
+          {refuerzos.some((r) => r.mes > 18 || r.mes < 1) && (
+            <p className="text-xs font-bold text-rose-700">
+              ⚠️ Hay refuerzos con fecha fuera del rango (mes 1 al 18). Corregí la fecha
+              marcada en rojo en la sección REFUERZOS.
+            </p>
+          )}
+        </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* CALCULAR */}
