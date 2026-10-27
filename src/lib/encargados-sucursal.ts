@@ -15,5 +15,10 @@
 export const ENCARGADOS_SUCURSAL: Record<string, string> = {
   // KATUETE — JEYSON MARCELO WEISS
   "jeyson@viza.com.py": "KATUETE",
-  // (Las otras 3 sucursales se agregan acá cuando el admin lo pida.)
+  // LA PALOMA — ANTONIO FAGNER VILLANUEVA ROSATTO
+  "antonio.fagner@viza.com.py": "LA PALOMA",
+  // NUEVA ESPERANZA — DAN WILLIAN AUGUSTO VIEIRA
+  "danwillian@viza.com.py": "NUEVA ESPERANZA",
+  // SALTOS DEL GUAIRA — LIBRADO JUSTO FRANCO AQUINO
+  "librado@viza.com.py": "SALTOS DEL GUAIRA",
 };
