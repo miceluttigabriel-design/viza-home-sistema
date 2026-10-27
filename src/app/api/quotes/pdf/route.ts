@@ -576,15 +576,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ===== OPCIONES DE FINANCIACIÓN (PLANES) =====
-    ensureSpace(120);
-    drawSectionTitle(doc, "OPCIONES DE FINANCIACIÓN", margin, y, contentW);
-    y += 14;
-
-    const pColBadge = 100;
-    const pColCuotas = 140;
-    const pColValor = 150;
-    const pColTotal = contentW - pColBadge - pColCuotas - pColValor;
-
     // Planes de financiación = los de cuotas > 1. El plan "Contado"
     // (cuotas === 1) se muestra como fila propia de la tabla (opción A),
     // también cuando el presupuesto se genera SOLO con el contado.
@@ -593,7 +584,23 @@ export async function POST(req: NextRequest) {
     const hayPlanesConEntrega = body.mostrarConEntrega !== false && planesFin.length > 0;
     const hayPlanesSinEntrega = body.mostrarSinEntrega !== false && body.planesSinEntrega && body.planesSinEntrega.length > 0;
 
-    if (!hayPlanesConEntrega && !hayPlanesSinEntrega && !hayContado) {
+    // CONTADO SOLO: si la única opción es el "Plan A: Contado" (sin ningún
+    // plan de cuotas), NO se dibuja la sección "OPCIONES DE FINANCIACIÓN":
+    // sería repetir el mismo valor que ya muestra el TOTAL CONTADO de arriba.
+    const soloContado =
+      hayContado && planesFin.length === 0 && !hayPlanesSinEntrega;
+
+    if (!soloContado) {
+      ensureSpace(120);
+      drawSectionTitle(doc, "OPCIONES DE FINANCIACIÓN", margin, y, contentW);
+      y += 14;
+
+      const pColBadge = 100;
+      const pColCuotas = 140;
+      const pColValor = 150;
+      const pColTotal = contentW - pColBadge - pColCuotas - pColValor;
+
+      if (!hayPlanesConEntrega && !hayPlanesSinEntrega && !hayContado) {
       ensureSpace(50);
       doc.setFillColor(...LIGHT);
       doc.roundedRect(margin, y, contentW, 38, 6, 6, "F");
@@ -775,6 +782,7 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+    } // fin if (!soloContado)
 
     // ===== OBSERVACIONES =====
     if (body.cliente && body.cliente.observaciones && body.cliente.observaciones.trim()) {
