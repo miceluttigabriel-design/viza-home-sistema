@@ -1621,11 +1621,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                     className="w-full sm:w-64 h-12 px-3 rounded-lg border-2 border-stone-200 bg-white text-sm font-semibold focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 outline-none tabular-nums"
                   />
                 </div>
-                <div className="text-[11px] text-stone-500 leading-relaxed sm:max-w-xs">
-                  Vacío = entrada estándar (la 1ª cuota del plan). Si ponés un
-                  valor, esa es la entrega y el resto se reparte entre las
-                  cuotas: el total del plan y el margen NO cambian.
-                </div>
               </div>
             </div>
           )}
@@ -1720,7 +1715,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                           </div>
                         </td>
                         <td className="px-3 py-3 text-center text-stone-700 font-semibold">
-                          Contado (1 pago)
+                          Contado
                         </td>
                         <td className="px-3 py-3 text-right font-semibold text-rose-600 tabular-nums">
                           {formatPYG(contadoAjustado)}
@@ -1747,7 +1742,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                           : entregaActiva
                           ? `${p.cuotas - 1} CUOTA${
                               p.cuotas - 1 !== 1 ? "S" : ""
-                            } (tras entrega)`
+                            }`
                           : `1 ENTRADA + ${p.cuotas - 1} CUOTA${
                               p.cuotas - 1 !== 1 ? "S" : ""
                             }`;

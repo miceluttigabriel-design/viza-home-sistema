@@ -615,12 +615,8 @@ export async function POST(req: NextRequest) {
           doc.setFont("helvetica", "bold");
           doc.setFontSize(9.5);
           doc.setTextColor(...DARK);
-          doc.text("ENTREGA INICIAL (al día de hoy)", ppE, y + 20);
+          doc.text("ENTREGA INICIAL", ppE, y + 20);
           ppE += pColCuotas;
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          doc.setTextColor(...GREY);
-          doc.text("Se descuenta del plan elegido", ppE, y + 20);
           ppE += pColValor;
           doc.setFont("helvetica", "bold");
           doc.setFontSize(11);
@@ -650,7 +646,7 @@ export async function POST(req: NextRequest) {
           doc.setTextColor(...DARK);
           doc.text(
             entregaInicial > 0
-              ? `${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""} (TRAS ENTREGA)`
+              ? `${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`
               : `1 ENTRADA + ${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`,
             pp2,
             y + 20
