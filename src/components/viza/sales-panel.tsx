@@ -712,7 +712,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       toast.error("No hay productos para generar el PDF");
       return;
     }
-    if (calculatedPlanes.length === 0) {
+    // CONTADO SOLO: si el único marcado es el precio de contado, se puede
+    // generar el presupuesto sin calcular planes de financiación.
+    if (calculatedPlanes.length === 0 && !incluirContadoEnPresupuesto) {
       toast.error("Calculá el presupuesto primero");
       return;
     }
@@ -1873,27 +1875,41 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                   Completá el Nombre del cliente para habilitar el botón GENERAR PRESUPUESTO.
                 </p>
               )}
-              <button
-                onClick={handleGenerarPDF}
-                disabled={generatingPdf || !cliente.nombre.trim()}
-                className="w-full mt-5 h-14 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 transition-all hover:brightness-110"
-                style={{
-                  backgroundImage: `linear-gradient(to right, ${AZUL_OSCURO}, ${AZUL})`,
-                  boxShadow: "0 8px 20px -8px rgba(13, 61, 94, 0.5)",
-                }}
-              >
-                {generatingPdf ? (
-                  <>
-                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    GENERANDO PDF...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="h-5 w-5" />
-                    GENERAR PRESUPUESTO PDF
-                  </>
-                )}
-              </button>
+              {/* LIMPIAR (rojo) + GENERAR PRESUPUESTO PDF — mismo estilo que Plan SAFRA y Plan Cheque */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
+                <button
+                  onClick={handleLimpiar}
+                  className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all hover:scale-[1.01] hover:brightness-110"
+                  style={{
+                    backgroundColor: "#b91c1c",
+                    boxShadow: "0 10px 25px -8px rgba(185, 28, 28, 0.45)",
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  LIMPIAR
+                </button>
+                <button
+                  onClick={handleGenerarPDF}
+                  disabled={generatingPdf || !cliente.nombre.trim()}
+                  className="h-14 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 transition-all hover:brightness-110"
+                  style={{
+                    backgroundImage: `linear-gradient(to right, ${AZUL_OSCURO}, ${AZUL})`,
+                    boxShadow: "0 8px 20px -8px rgba(13, 61, 94, 0.5)",
+                  }}
+                >
+                  {generatingPdf ? (
+                    <>
+                      <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      GENERANDO PDF...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-5 w-5" />
+                      GENERAR PRESUPUESTO PDF
+                    </>
+                  )}
+                </button>
+              </div>
             </Section>
           </div>
         )}

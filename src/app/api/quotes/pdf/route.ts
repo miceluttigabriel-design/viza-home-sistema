@@ -417,6 +417,54 @@ export async function POST(req: NextRequest) {
     // REGLA: Si incluirPrecioContado === false, solo mostrar #, SKU, PRODUCTO, CANT.
     // Si incluirPrecioContado === true, mostrar todas las columnas + bloque TOTAL
     const incluirPrecioContado = body.incluirPrecioContado === true;
+
+    // === MARGEN SOBRE PRECIO CONTADO ===
+    // Si el vendedor aplicó un margen % sobre el contado, el PDF muestra el
+    // precio YA CON MARGEN en P.CONTADO y SUBTOTAL. Así el cliente ve UN
+    // solo valor coherente en todo el presupuesto (nunca el precio "sin
+    // margen" junto a un precio final distinto).
+    const ajusteContado =
+      body.contadoMarginPct > 0 &&
+      body.contadoAjustado !== body.contadoOriginal &&
+      body.contadoOriginal > 0;
+    const factorContado = ajusteContado
+      ? body.contadoAjustado / body.contadoOriginal
+      : 1;
+    let itemsConMargen: PdfItem[] = body.items;
+    if (ajusteContado) {
+      itemsConMargen = body.items.map((it) => {
+        const p = Math.round(it.priceContado * factorContado);
+        return { ...it, priceContado: p, subtotalContado: p * it.quantity };
+      });
+      // Ajuste fino: la diferencia de redondeo (± pocos Gs) se reparte en el
+      // item de mayor subtotal para que la suma de la columna sea EXACTAMENTE
+      // el precio final con margen (contadoAjustado).
+      const sumaConMargen = itemsConMargen.reduce(
+        (s, it) => s + it.subtotalContado,
+        0
+      );
+      const difRedondeo = Math.round(body.contadoAjustado) - sumaConMargen;
+      if (difRedondeo !== 0 && itemsConMargen.length > 0) {
+        const maxSub = Math.max(
+          ...itemsConMargen.map((it) => it.subtotalContado)
+        );
+        let yaAjustado = false;
+        itemsConMargen = itemsConMargen.map((it) => {
+          if (!yaAjustado && it.subtotalContado === maxSub) {
+            yaAjustado = true;
+            const nuevoSub = it.subtotalContado + difRedondeo;
+            const nuevoPrecio =
+              it.quantity === 1 ? nuevoSub : Math.round(nuevoSub / it.quantity);
+            return {
+              ...it,
+              priceContado: nuevoPrecio,
+              subtotalContado: nuevoSub,
+            };
+          }
+          return it;
+        });
+      }
+    }
     const colN = 25;
     const colSku = 70;
     const colCant = 50;
@@ -448,8 +496,8 @@ export async function POST(req: NextRequest) {
     }
     y += 24;
 
-    // Filas productos
-    body.items.forEach((it, idx) => {
+    // Filas productos (con margen aplicado al P.CONTADO si corresponde)
+    itemsConMargen.forEach((it, idx) => {
       ensureSpace(34);
       const rowH = 30;
       if (idx % 2 === 1) {
@@ -498,8 +546,7 @@ export async function POST(req: NextRequest) {
       y += 10;
       const totalBoxW = 280;
       const totalBoxX = pageW - margin - totalBoxW;
-      const ajustado = body.contadoMarginPct > 0 && body.contadoAjustado !== body.contadoOriginal;
-      const boxH = ajustado ? 54 : 32;
+      const boxH = ajusteContado ? 54 : 32;
 
       doc.setFillColor(...BLUE);
       doc.rect(totalBoxX, y, totalBoxW, boxH, "F");
@@ -511,9 +558,16 @@ export async function POST(req: NextRequest) {
       doc.setTextColor(255, 255, 255);
       doc.text("TOTAL CONTADO", totalBoxX + 14, y + 20);
       doc.setFontSize(12);
-      doc.text(formatPYG(body.contadoOriginal), totalBoxX + totalBoxW - 14, y + 20, { align: "right" });
+      // Con margen aplicado el TOTAL muestra el precio final (mismo valor que
+      // P.CONTADO y SUBTOTAL de los productos arriba).
+      doc.text(
+        formatPYG(ajusteContado ? body.contadoAjustado : body.contadoOriginal),
+        totalBoxX + totalBoxW - 14,
+        y + 20,
+        { align: "right" }
+      );
 
-      if (ajustado) {
+      if (ajusteContado) {
         doc.setFontSize(8.5);
         doc.setTextColor(...GOLD);
         doc.text("PRECIO FINAL CONTADO", totalBoxX + 14, y + 40);
@@ -536,10 +590,15 @@ export async function POST(req: NextRequest) {
     const pColValor = 150;
     const pColTotal = contentW - pColBadge - pColCuotas - pColValor;
 
-    const hayPlanesConEntrega = body.mostrarConEntrega !== false && body.planes && body.planes.length > 0;
+    // Planes de financiación = los de cuotas > 1. El plan "Contado"
+    // (cuotas === 1) se muestra como fila propia de la tabla (opción A),
+    // también cuando el presupuesto se genera SOLO con el contado.
+    const planesFin = (body.planes || []).filter((p) => p.cuotas > 1);
+    const hayContado = (body.planes || []).some((p) => p.cuotas === 1);
+    const hayPlanesConEntrega = body.mostrarConEntrega !== false && planesFin.length > 0;
     const hayPlanesSinEntrega = body.mostrarSinEntrega !== false && body.planesSinEntrega && body.planesSinEntrega.length > 0;
 
-    if (!hayPlanesConEntrega && !hayPlanesSinEntrega) {
+    if (!hayPlanesConEntrega && !hayPlanesSinEntrega && !hayContado) {
       ensureSpace(50);
       doc.setFillColor(...LIGHT);
       doc.roundedRect(margin, y, contentW, 38, 6, 6, "F");
@@ -592,8 +651,8 @@ export async function POST(req: NextRequest) {
         doc.text(label, x + 16 + 35, y + 19.3, { align: "center" });
       };
 
-      // ===== CON ENTREGA (saltar si cuotas === 1) =====
-      if (body.mostrarConEntrega !== false && body.planes) {
+      // ===== CON ENTREGA + FILA CONTADO (opción A, también contado solo) =====
+      if ((body.mostrarConEntrega !== false && planesFin.length > 0) || hayContado) {
         // === ENTREGA INICIAL PERSONALIZADA: fila destacada propia ===
         // Si el vendedor definió una entrega inicial distinta a la 1ª cuota
         // estándar, se muestra como fila propia arriba de los planes, y cada
@@ -631,7 +690,35 @@ export async function POST(req: NextRequest) {
           rowIdx++;
         }
         body.planes.forEach((plan) => {
-          if (plan.cuotas === 1) return;
+          // === FILA CONTADO (cuotas === 1) ===
+          // Se muestra siempre que el vendedor incluya el contado en el
+          // presupuesto (incluido el caso SOLO CONTADO, sin planes).
+          if (plan.cuotas === 1) {
+            ensureSpace(rowH);
+            rowBase();
+            let ppC = margin + 10;
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(12);
+            doc.setTextColor(...BLUE);
+            doc.text(plan.letra, ppC, y + 20);
+            badge(ppC, "CONTADO", GOLD, BLUE);
+            ppC += pColBadge;
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(9.5);
+            doc.setTextColor(...DARK);
+            doc.text("Contado", ppC, y + 20);
+            ppC += pColCuotas;
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(11);
+            doc.setTextColor(...BLUE);
+            doc.text(formatPYG(plan.valorPorCuota), ppC, y + 20);
+            ppC += pColValor;
+            doc.setTextColor(...DARK);
+            doc.text(formatPYG(plan.total), margin + contentW - 10, y + 20, { align: "right" });
+            y += rowH;
+            rowIdx++;
+            return;
+          }
           ensureSpace(rowH);
           rowBase();
           let pp2 = margin + 10;
