@@ -250,6 +250,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
     setTipoEntrega,
     fechaInicioPago,
     setFechaInicioPago,
+    // === Entrega inicial personalizada (Plan CUOTA) ===
+    entregaPersonalizada,
+    setEntregaPersonalizada,
     // === Descuento por Casco ===
     // cascoAplicado NO se lee del store - es DERIVADO automáticamente
     cascoValor,
@@ -510,8 +513,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       toast.error("Agregá al menos un producto antes de calcular");
       return;
     }
-    if (planes.length === 0) {
-      toast.error("Agregá al menos un plan de cuotas antes de calcular");
+    // CONTADO SOLO: si el único marcado es el precio de contado, se puede
+    // calcular el presupuesto sin agregar planes de cuotas.
+    if (planes.length === 0 && !incluirContadoEnPresupuesto) {
+      toast.error(
+        "Agregá al menos un plan de cuotas o marcá la opción CONTADO para calcular"
+      );
       return;
     }
     // VALIDACIÓN DEL CASCO - AUTOMÁTICA:
@@ -523,7 +530,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       toast.error("⚠️ El valor del casco no puede ser mayor al total de productos.");
       return;
     }
-    if (!mostrarConEntrega && !mostrarSinEntrega) {
+    if (
+      !mostrarConEntrega &&
+      !mostrarSinEntrega &&
+      !incluirContadoEnPresupuesto
+    ) {
       toast.error("Seleccione al menos una opción");
       return;
     }
@@ -593,7 +604,45 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         calculado: true,
       };
     });
-    setCalculatedPlanes(resultados);
+
+    // === ENTREGA INICIAL PERSONALIZADA (cuadrito opcional) ===
+    // Si el vendedor define un valor de entrega distinto, la ENTRADA del plan
+    // (que por estándar es la 1ª cuota de la BD) pasa a ser ese monto y el
+    // resto (total del plan − entrega) se reparte entre las cuotas restantes.
+    // REGLA DE MARGEN: el TOTAL del plan se mantiene (entrega + cuotas =
+    // total estándar ± redondeo en Gs), así el margen de la BD queda intacto.
+    const entregaExtra =
+      mostrarConEntrega
+        ? Math.max(0, Math.round(entregaPersonalizada || 0))
+        : 0;
+    if (entregaExtra > 0) {
+      const minTotalPlan = Math.min(...resultados.map((r) => r.total));
+      if (entregaExtra >= minTotalPlan) {
+        toast.error(
+          `La entrega (GS ${entregaExtra.toLocaleString("es-PY")}) no puede superar el total del plan más chico (GS ${minTotalPlan.toLocaleString("es-PY")}).`
+        );
+        return;
+      }
+      const ajustados = resultados.map((r) => {
+        // Cuotas que quedan después de la entrada personalizada
+        const cuotasRestantes = Math.max(1, r.cuotas - 1);
+        const restante = Math.max(0, r.total - entregaExtra);
+        // REDONDEO COMERCIAL: la cuota se redondea SIEMPRE al millar
+        // superior (Gs exacto, sin valores quebrados).
+        // Ej: 823.334 → 824.000. El total del plan sube a lo sumo unos
+        // miles (entrega + cuotas ≥ total estándar): el margen nunca baja.
+        const valorPorCuotaAjust = redondeoComercial(restante / cuotasRestantes);
+        return {
+          ...r,
+          valorPorCuota: valorPorCuotaAjust,
+          total: entregaExtra + valorPorCuotaAjust * cuotasRestantes,
+          calculado: true,
+        };
+      });
+      setCalculatedPlanes(ajustados);
+    } else {
+      setCalculatedPlanes(resultados);
+    }
 
     // Si es sin_entrega y válido, calcular también los planes ajustados
     // Ahora también se calcula cuando mostrarSinEntrega está activado
@@ -647,13 +696,23 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       setCalculatedPlanesSinEntrega(ajustados);
       setSinEntregaInfo(sinInfo);
       toast.success(
-        `Calculados ${planes.length} plan${planes.length !== 1 ? "es" : ""} · Sin entrega inicial`
+        planes.length > 0
+          ? `Calculados ${planes.length} plan${
+              planes.length !== 1 ? "es" : ""
+            } · Sin entrega inicial`
+          : "Presupuesto listo: solo valor CONTADO · Sin entrega inicial"
       );
     } else {
       // Limpiar planes sin entrega si no aplica
       setCalculatedPlanesSinEntrega([]);
       setSinEntregaInfo(null);
-      toast.success(`Calculados ${planes.length} plan${planes.length !== 1 ? "es" : ""} de pago`);
+      toast.success(
+        planes.length > 0
+          ? `Calculados ${planes.length} plan${
+              planes.length !== 1 ? "es" : ""
+            } de pago`
+          : "Presupuesto listo: solo valor CONTADO"
+      );
     }
     setCalcDone(true);
 
@@ -671,7 +730,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       toast.error("No hay productos para generar el PDF");
       return;
     }
-    if (calculatedPlanes.length === 0) {
+    // CONTADO SOLO: si el único marcado es el precio de contado, se puede
+    // generar el presupuesto sin calcular planes de financiación.
+    if (calculatedPlanes.length === 0 && !incluirContadoEnPresupuesto) {
       toast.error("Calculá el presupuesto primero");
       return;
     }
@@ -775,6 +836,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         // Flags para mostrar/ocultar opciones en el PDF
         mostrarConEntrega,
         mostrarSinEntrega,
+        // Entrega inicial personalizada (Gs) - solo aplica a planes CON ENTREGA
+        entregaPersonalizada: mostrarConEntrega
+          ? Math.max(0, Math.round(entregaPersonalizada || 0))
+          : 0,
         planes: planesForPdf,
         planesSinEntrega: planesSinEntregaForPdf,
       };
@@ -979,14 +1044,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
           </div>
         </div>
+      </header>
 
-      {/* Modal: Cambiar mi contraseña (visible para todos los roles autenticados) */}
+      {/* Modal: Cambiar mi contraseña (visible para todos los roles autenticados)
+          IMPORTANTE: este modal vive FUERA del <header> (hermano, en la raíz).
+          El header usa backdrop-blur y backdrop-filter crea un "containing
+          block" para position:fixed: si el modal quedara dentro, su fixed
+          inset-0 se calcularía contra el header y el cuadro saldría cortado
+          (mismo bug del modal CRM, ya corregido). En gestion-accesos.tsx se
+          monta fuera del header, por eso allí nunca se cortó. */}
       <CambiarContrasena
         email={user.email}
         open={cambiarContrasenaOpen}
         onClose={() => setCambiarContrasenaOpen(false)}
       />
-      </header>
 
       {/* ══════════════════════════════════════════════════════════════
           MODAL CRM · MI SUCURSAL (solo encargados de sucursal)
@@ -1226,6 +1297,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                             SKU: {p.sku}
                             {p.priceContado ? ` · Contado: ${formatPYG(p.priceContado)}` : ""}
                           </p>
+                          {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026" */}
+                          {p.hashtag?.valor ? (
+                            <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>
+                              #{Number(p.hashtag.valor).toLocaleString("es-PY")} GS
+                              {p.hashtag.fecha ? ` valido hasta ${p.hashtag.fecha.split("-").reverse().join("/")}` : ""}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="font-bold text-rose-600 text-sm whitespace-nowrap">
@@ -1548,6 +1626,44 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </label>
           </div>
 
+          {/* CUADRITO: VALOR DE ENTREGA INICIAL PERSONALIZADO (opcional) */}
+          {/* Solo visible cuando CON ENTREGA INICIAL está marcado. Si queda
+              vacío, se usa la entrada estándar (la 1ª cuota de la BD). Si el
+              vendedor pone un valor, la entrada pasa a ser ese monto y el
+              resto del total se reparte entre las cuotas restantes, sin
+              cambiar el total del plan (el margen queda intacto). */}
+          {mostrarConEntrega && (
+            <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50/60 p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+                <div>
+                  <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+                    Valor de la entrega inicial (Gs) — opcional
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={
+                      entregaPersonalizada
+                        ? Math.round(entregaPersonalizada).toLocaleString("es-PY")
+                        : ""
+                    }
+                    onChange={(e) => {
+                      // Solo dígitos: el punto separador de miles es puramente
+                      // visual (se muestra al formatear, no se guarda).
+                      setEntregaPersonalizada(
+                        Number(e.target.value.replace(/\D/g, ""))
+                      );
+                      resetCalculoEntrega();
+                    }}
+                    placeholder="Estándar del plan (1ª cuota)"
+                    className="w-full sm:w-64 h-12 px-3 rounded-lg border-2 border-stone-200 bg-white text-sm font-semibold focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 outline-none tabular-nums"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* DatePicker y resumen - se muestra cuando SIN ENTREGA está marcado */}
           {mostrarSinEntrega && (
             <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
@@ -1581,7 +1697,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         {/* 5. BOTÓN CALCULAR PRESUPUESTO */}
         <button
           onClick={handleCalcular}
-          disabled={items.length === 0 || planes.length === 0}
+          // CONTADO SOLO: el botón también se habilita sin planes de cuotas
+          // cuando el checkbox "Incluir valor contado" está marcado.
+          disabled={
+            items.length === 0 ||
+            (planes.length === 0 && !incluirContadoEnPresupuesto)
+          }
           className="w-full h-16 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.01] hover:brightness-110"
           style={{
             backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
@@ -1594,9 +1715,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         </button>
 
         {/* 6. RESULTADO */}
-        {calcDone && calculatedPlanes.length > 0 && (
+        {calcDone && (calculatedPlanes.length > 0 || incluirContadoEnPresupuesto) && (
           <div id="resultado-section">
             <Section title="RESULTADO DEL PRESUPUESTO" icon={<FileText className="h-4 w-4" />}>
+              {/* ENTREGA INICIAL PERSONALIZADA - aviso cuando está activa */}
+              {mostrarConEntrega && Math.round(entregaPersonalizada || 0) > 0 && (
+                <div className="mb-3 rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-stone-800 uppercase tracking-wide">
+                    Entrega inicial incluida en cada plan
+                  </p>
+                  <p className="text-base font-extrabold tabular-nums text-emerald-700">
+                    {formatPYG(Math.round(entregaPersonalizada))}
+                  </p>
+                </div>
+              )}
               {/* Tabla comparativa de planes */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border border-stone-200 rounded-lg overflow-hidden">
@@ -1627,7 +1759,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                           </div>
                         </td>
                         <td className="px-3 py-3 text-center text-stone-700 font-semibold">
-                          Contado (1 pago)
+                          Contado
                         </td>
                         <td className="px-3 py-3 text-right font-semibold text-rose-600 tabular-nums">
                           {formatPYG(contadoAjustado)}
@@ -1645,9 +1777,16 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                       const sinEntrega = calculatedPlanesSinEntrega.find(
                         (sp) => sp.id === p.id
                       );
+                      const entregaActiva =
+                        mostrarConEntrega &&
+                        Math.round(entregaPersonalizada || 0) > 0;
                       const cuotasLabelCon =
                         p.cuotas === 1
                           ? "1 pago"
+                          : entregaActiva
+                          ? `${p.cuotas - 1} CUOTA${
+                              p.cuotas - 1 !== 1 ? "S" : ""
+                            }`
                           : `1 ENTRADA + ${p.cuotas - 1} CUOTA${
                               p.cuotas - 1 !== 1 ? "S" : ""
                             }`;
@@ -1766,27 +1905,41 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                   Completá el Nombre del cliente para habilitar el botón GENERAR PRESUPUESTO.
                 </p>
               )}
-              <button
-                onClick={handleGenerarPDF}
-                disabled={generatingPdf || !cliente.nombre.trim()}
-                className="w-full mt-5 h-14 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 transition-all hover:brightness-110"
-                style={{
-                  backgroundImage: `linear-gradient(to right, ${AZUL_OSCURO}, ${AZUL})`,
-                  boxShadow: "0 8px 20px -8px rgba(13, 61, 94, 0.5)",
-                }}
-              >
-                {generatingPdf ? (
-                  <>
-                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    GENERANDO PDF...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="h-5 w-5" />
-                    GENERAR PRESUPUESTO PDF
-                  </>
-                )}
-              </button>
+              {/* LIMPIAR (rojo) + GENERAR PRESUPUESTO PDF — mismo estilo que Plan SAFRA y Plan Cheque */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
+                <button
+                  onClick={handleLimpiar}
+                  className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all hover:scale-[1.01] hover:brightness-110"
+                  style={{
+                    backgroundColor: "#b91c1c",
+                    boxShadow: "0 10px 25px -8px rgba(185, 28, 28, 0.45)",
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  LIMPIAR
+                </button>
+                <button
+                  onClick={handleGenerarPDF}
+                  disabled={generatingPdf || !cliente.nombre.trim()}
+                  className="h-14 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 transition-all hover:brightness-110"
+                  style={{
+                    backgroundImage: `linear-gradient(to right, ${AZUL_OSCURO}, ${AZUL})`,
+                    boxShadow: "0 8px 20px -8px rgba(13, 61, 94, 0.5)",
+                  }}
+                >
+                  {generatingPdf ? (
+                    <>
+                      <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      GENERANDO PDF...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-5 w-5" />
+                      GENERAR PRESUPUESTO PDF
+                    </>
+                  )}
+                </button>
+              </div>
             </Section>
           </div>
         )}

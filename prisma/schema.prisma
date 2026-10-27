@@ -233,6 +233,29 @@ model CostoEditado {
   @@unique([productId, colKey])
 }
 
+// ============================================================
+// #HASHTAG por producto (promo cargada por el admin):
+// valor en Gs (ej: 100000) + fecha de validez ("YYYY-MM-DD",
+// calendario del input date). El vendedor la ve al buscar el
+// producto: "# 100.000 GS valido hasta 30/11/2026".
+// TABLA APARTE A PROPÓSITO (misma lección de CostoEditado): el
+// modelo Product queda EXACTAMENTE igual que siempre, así que
+// NINGUNA consulta existente puede romperse. Si esta tabla
+// todavía no existe en la base, el código que la usa falla en
+// silencio (try/catch) y la app funciona igual que antes; se
+// crea SOLA en el primer uso (SQL idempotente en
+// src/lib/producto-hashtag.ts) o al correr `npx prisma db push`.
+// Sin relación Prisma a propósito, por el mismo motivo que
+// CostoEditado.
+// ============================================================
+model ProductHashtag {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  valor     Float?
+  fecha     String?  // "YYYY-MM-DD" (input date) → se muestra DD/MM/YYYY
+  updatedAt DateTime @updatedAt
+}
+
 // ─── SUCURSAL ASIGNADA A CADA USUARIO (CRM · ranking) ───
 // Una fila por usuario (clave = email) con la sucursal que le asigna el
 // admin. La usa el CRM: ranking de presupuestos emitidos por usuario,

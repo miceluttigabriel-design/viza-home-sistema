@@ -72,6 +72,10 @@ interface Product {
   sku: string;
   name: string;
   description: string | null;
+  // #HASHTAG (promo del admin): valor en Gs + fecha de validez.
+  // Viene de la tabla APARTE ProductHashtag vía GET /api/products
+  // (el modelo Product y el PUT normal NO se tocan).
+  hashtag?: { valor: number | null; fecha: string | null } | null;
   // Costos
   costBR: number | null;
   rsToGs: number | null;
@@ -255,6 +259,12 @@ const COLUMNS: ColDef[] = [
   { key: "referencia", label: "REF.FABRICA", type: "text", group: "DATOS" },
   // Datos de identificacion
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
+  // #HASHTAG (nueva, a pedido del usuario): promo por producto — valor en Gs
+  // + calendario de validez. Va al lado de DESCRIPCION. La celda NO usa el
+  // flujo dirty/PUT: se guarda sola vía PATCH /api/products/[id]/hashtag
+  // (igual que la etiqueta de color). La tabla ProductHashtag es APARTE y
+  // auto-gestionada, así que nada de lo existente se ve afectado.
+  { key: "hashtag", label: "#HASHTAG", type: "text", group: "DATOS" },
   // STOCK movida ENTRE COD SHOW y Costo R$ (atras de Costo R$ = antes, en frente de COD SHOW = despues)
   { key: "stock", label: "STOCK", type: "num", group: "DATOS FINALES" },
   // Costos
@@ -380,6 +390,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const [openFilterColumn, setOpenFilterColumn] = useState<string | null>(null);
   // Ordenamiento de la columna STOCK: null (sin orden) | "desc" (mayor a menor) | "asc" (menor a mayor)
   const [stockSort, setStockSort] = useState<"asc" | "desc" | null>(null);
+  // Ordenamiento de la columna COD (número: mayor a menor / menor a mayor)
+  const [codSort, setCodSort] = useState<"asc" | "desc" | null>(null);
+  // Ordenamiento de la columna DESCRIPCION (alfabético: Z-A = desc / A-Z = asc)
+  const [nameSort, setNameSort] = useState<"asc" | "desc" | null>(null);
   // Filtro activo de etiqueta de color: "verde" | "azul" | "dorado" | "rojo" | null
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
 
@@ -635,8 +649,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       if (Object.keys(activeFilters).length > 0) {
         params.set("filters", JSON.stringify(activeFilters));
       }
-      // Ordenamiento por stock (flechita de la columna STOCK)
-      if (stockSort) {
+      // Ordenamiento: solo UNO activo a la vez (COD numérico / DESCRIPCION
+      // alfabético / STOCK). El click de cada flechita limpia las otras dos.
+      if (codSort) {
+        params.set("sort", "sku");
+        params.set("dir", codSort);
+      } else if (nameSort) {
+        params.set("sort", "name");
+        params.set("dir", nameSort);
+      } else if (stockSort) {
         params.set("sort", "stock");
         params.set("dir", stockSort);
       }
@@ -658,7 +679,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     } finally {
       setLoadingProducts(false);
     }
-  }, [search, page, columnFilters, labelFilter, stockSort]);
+  }, [search, page, columnFilters, labelFilter, stockSort, codSort, nameSort]);
 
   useEffect(() => {
     fetchProducts();
@@ -678,6 +699,39 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
       const existing = d[productId] || {};
       return { ...d, [productId]: { ...existing, [key]: value } };
     });
+  };
+
+  // ─── #HASHTAG (columna nueva al lado de DESCRIPCION) ───
+  // Guardado AUTOMÁTICO con debounce vía endpoint dedicado
+  // PATCH /api/products/[id]/hashtag (NO pasa por el PUT ni por dirty,
+  // igual que la etiqueta de color). Actualización optimista al instante:
+  // la celda muestra el valor mientras se guarda en la tabla aparte
+  // ProductHashtag. Si el guardado falla, avisa con toast y nada más
+  // se ve afectado.
+  const hashtagTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const handleHashtagChange = (
+    productId: string,
+    v: { valor: number | null; fecha: string | null }
+  ) => {
+    setProducts((ps) =>
+      ps.map((x) => (x.id === productId ? { ...x, hashtag: v } : x))
+    );
+    clearTimeout(hashtagTimersRef.current[productId]);
+    hashtagTimersRef.current[productId] = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/products/${productId}/hashtag`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ valor: v.valor, fecha: v.fecha }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          toast.error(errData.error || "Error al guardar #HASHTAG");
+        }
+      } catch {
+        toast.error("Error de red al guardar #HASHTAG");
+      }
+    }, 600);
   };
 
   const handleSave = async (product: Product) => {
@@ -1714,7 +1768,22 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     </th>
                     {/* SKU */}
                     <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[110px] w-[110px]" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
-                      COD
+                      <div className="flex items-center gap-1">
+                        <span>COD</span>
+                        {/* Flechita de orden NUMÉRICO por COD (pedido del usuario):
+                            mayor a menor / menor a mayor. Misma flechita de STOCK. */}
+                        <StockSortButton
+                          dir={codSort}
+                          onClick={() => {
+                            setCodSort((prev) =>
+                              prev === null ? "desc" : prev === "desc" ? "asc" : null
+                            );
+                            setNameSort(null);
+                            setStockSort(null);
+                            setPage(1);
+                          }}
+                        />
+                      </div>
                     </th>
                     {COLUMNS.map((col) => {
                       const hasFilter =
@@ -1755,9 +1824,39 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                                     setStockSort((prev) =>
                                       prev === null ? "desc" : prev === "desc" ? "asc" : null
                                     );
+                                    setCodSort(null);
+                                    setNameSort(null);
                                     setPage(1);
                                   }}
                                 />
+                              ) : col.key === "hashtag" ? (
+                                // #HASHTAG: sin filtro por valor (la celda es un editor
+                                // propio, no un dato filtrable de la base)
+                                null
+                              ) : col.key === "name" ? (
+                                // DESCRIPCION: flechita de orden alfabético (pedido del
+                                // usuario: A hacia abajo / Z hacia adelante) + su filtro
+                                // de valores de siempre, los dos conviven
+                                <>
+                                  <StockSortButton
+                                    dir={nameSort}
+                                    onClick={() => {
+                                      setNameSort((prev) =>
+                                        prev === null ? "desc" : prev === "desc" ? "asc" : null
+                                      );
+                                      setCodSort(null);
+                                      setStockSort(null);
+                                      setPage(1);
+                                    }}
+                                  />
+                                  <FilterButton
+                                    hasFilter={hasFilter}
+                                    isOpen={isOpen}
+                                    onClick={() =>
+                                      setOpenFilterColumn(isOpen ? null : col.key)
+                                    }
+                                  />
+                                </>
                               ) : (
                                 <FilterButton
                                   hasFilter={hasFilter}
@@ -1769,7 +1868,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               )}
                             </div>
                           </div>
-                          {isOpen && col.key !== "stock" && (
+                          {isOpen && col.key !== "stock" && col.key !== "hashtag" && (
                             <FilterDropdown
                               colKey={col.key}
                               selected={columnFilters[col.key] || []}
@@ -1866,6 +1965,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                             }
                           }}
                           onChange={(key, value) => handleChange(p.id, key, value)}
+                          onHashtagChange={(v) => handleHashtagChange(p.id, v)}
                           onSave={() => handleSave(p)}
                           onDelete={() => handleDelete(p)}
                         />
@@ -3642,6 +3742,7 @@ const ExcelRow = memo(function ExcelRow({
   onTocarFila,
   onToggleLabelMenu,
   onSetLabel,
+  onHashtagChange,
   onChange,
   onSave,
   onDelete,
@@ -3656,6 +3757,7 @@ const ExcelRow = memo(function ExcelRow({
   onTocarFila: () => void;
   onToggleLabelMenu: () => void;
   onSetLabel: (color: string | null) => void;
+  onHashtagChange: (v: { valor: number | null; fecha: string | null }) => void;
   onChange: (key: string, value: string) => void;
   onSave: () => void;
   onDelete: () => void;
@@ -3769,6 +3871,8 @@ const ExcelRow = memo(function ExcelRow({
           rowIndex={rowIndex}
           colIndex={ci}
           costoEditado={costosEditadosSet.has(col.key)}
+          hashtag={product.hashtag ?? null}
+          onHashtagChange={onHashtagChange}
           onChange={(v) => onChange(col.key, v)}
         />
       ))}
@@ -3951,6 +4055,8 @@ const Cell = memo(function Cell({
   rowIndex,
   colIndex,
   costoEditado,
+  hashtag,
+  onHashtagChange,
   onChange,
 }: {
   col: ColDef;
@@ -3958,6 +4064,8 @@ const Cell = memo(function Cell({
   rowIndex: number;
   colIndex: number;
   costoEditado?: boolean;
+  hashtag?: { valor: number | null; fecha: string | null } | null;
+  onHashtagChange?: (v: { valor: number | null; fecha: string | null }) => void;
   onChange: (v: string) => void;
 }) {
   // DESCRIPCION (col "name"): celda expandible. La flechita alterna entre el
@@ -3972,6 +4080,49 @@ const Cell = memo(function Cell({
       descRef.current.style.height = `${descRef.current.scrollHeight}px`;
     }
   }, [isDesc, descExpanded, value]);
+
+  // #HASHTAG (col especial): dos cuadritos — VALOR en Gs + CALENDARIO de
+  // validez (input date). La celda NO usa el flujo dirty/PUT: cada cambio
+  // se guarda solo vía PATCH /api/products/[id]/hashtag con debounce
+  // (lo maneja el padre), igual que la etiqueta de color. Si el producto
+  // tiene hashtag, el vendedor lo ve al buscar: "# 100.000 GS valido
+  // hasta 30/11/2026". (Va DESPUÉS de los hooks de arriba: no se puede
+  // hacer return temprano antes de llamarlos.)
+  if (col.key === "hashtag") {
+    const h = hashtag ?? { valor: null as number | null, fecha: null as string | null };
+    return (
+      <td className="px-1 py-0 border-r border-stone-50 bg-white">
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            min={0}
+            value={h.valor ?? ""}
+            placeholder="Gs"
+            title="#HASHTAG: valor en Gs (ej: 100000)"
+            onChange={(e) =>
+              onHashtagChange?.({
+                valor: e.target.value === "" ? null : Number(e.target.value),
+                fecha: h.fecha ?? null,
+              })
+            }
+            className="w-[78px] h-6 px-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums text-right"
+          />
+          <input
+            type="date"
+            value={h.fecha ?? ""}
+            title="#HASHTAG: valido hasta (elegir en el calendario)"
+            onChange={(e) =>
+              onHashtagChange?.({
+                valor: h.valor ?? null,
+                fecha: e.target.value || null,
+              })
+            }
+            className="w-[120px] h-6 px-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums"
+          />
+        </div>
+      </td>
+    );
+  }
 
   // Celdas calculadas (read-only, fondo verde claro)
   if (col.type === "calc") {

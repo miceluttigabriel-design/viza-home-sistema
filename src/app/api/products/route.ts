@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { leerCostosEditados } from "@/lib/costo-editado";
+import { leerHashtags } from "@/lib/producto-hashtag";
 
 // GET /api/products - lista de productos con filtros opcionales y paginación
 export async function GET(req: NextRequest) {
@@ -94,6 +95,11 @@ export async function GET(req: NextRequest) {
     // Ordenamiento:
     // - Si llega sort=stock (dir=asc|desc), ordenar por stock (flechita de la columna STOCK
     //   en el Panel ADM) con category+name como desempate. Solo se permite "stock".
+    // - Si llega sort=name (dir=asc|desc), ordenar ALFABÉTICO por DESCRIPCION
+    //   (flechita de la columna DESCRIPCION en el Panel ADM) con sku de desempate.
+    // - Si llega sort=sku (dir=asc|desc), orden NUMÉRICO por COD (flechita de la
+    //   columna COD): se resuelve MÁS ABAJO en JS (los COD son strings y el orden
+    //   alfabético de la base no respeta el orden numérico: "10000" < "9999").
     // - Si el filtro "editados" está activo, ordenar por ultimaEdicionAt DESC
     //   (más reciente arriba) - IGNORAR el ordenamiento alfabético normal
     // - En caso contrario, orden alfabético estándar (categoría + nombre)
@@ -101,15 +107,55 @@ export async function GET(req: NextRequest) {
     const sortDir: "asc" | "desc" = searchParams.get("dir") === "desc" ? "desc" : "asc";
     const orderBy = sortField === "stock"
       ? [{ stock: sortDir }, { category: "asc" as const }, { name: "asc" as const }]
+      : sortField === "name"
+      ? [{ name: sortDir }, { sku: "asc" as const }]
       : etiquetaColor === "editados"
       ? [{ ultimaEdicionAt: "desc" as const }]
       : [{ category: "asc" as const }, { name: "asc" as const }];
-    const products = await db.product.findMany({
-      where,
-      orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
+
+    // ORDEN NUMÉRICO POR COD (sort=sku): se traen SOLO id+sku de TODAS las
+    // filas que coinciden con los filtros, se ordenan en JS por el número
+    // extraído del código (funciona igual en PostgreSQL y SQLite, sin SQL
+    // crudo ni casts que rompan con códigos alfanuméricos) y se pide la
+    // página completa ya en el orden correcto. Los códigos sin número van
+    // al final (ordenados por su texto). Sin paginar de más: total/pages
+    // siguen siendo los de TODO el filtro (ya calculados arriba).
+    let products;
+    if (sortField === "sku") {
+      const rowsCod = await db.product.findMany({
+        where,
+        select: { id: true, sku: true },
+      });
+      const codNumero = (s: unknown): number | null => {
+        const digitos = String(s ?? "").replace(/\D/g, "");
+        return digitos === "" ? null : Number(digitos);
+      };
+      rowsCod.sort((a, b) => {
+        const na = codNumero(a.sku);
+        const nb = codNumero(b.sku);
+        if (na === null && nb === null) return String(a.sku).localeCompare(String(b.sku));
+        if (na === null) return 1;  // sin número: al final siempre
+        if (nb === null) return -1;
+        return sortDir === "desc" ? nb - na : na - nb;
+      });
+      const pageIds = rowsCod
+        .slice((page - 1) * pageSize, page * pageSize)
+        .map((r) => r.id);
+      const filasPagina = await db.product.findMany({
+        where: { id: { in: pageIds } },
+      });
+      const porId = new Map(filasPagina.map((f) => [f.id, f]));
+      products = pageIds
+        .map((id) => porId.get(id))
+        .filter((f): f is (typeof filasPagina)[number] => !!f);
+    } else {
+      products = await db.product.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      });
+    }
 
     // ─── COSTOS EDITADOS POR EL ADMIN (guardados) ───
     // Tabla aparte AUTO-GESTIONADA (ver src/lib/costo-editado.ts): si aún no
@@ -117,10 +163,19 @@ export async function GET(req: NextRequest) {
     // lista de productos carga igual, con saldos y costos intactos).
     const editadosMap = await leerCostosEditados(products.map((p) => p.id));
 
+    // ─── #HASHTAG por producto (promo del admin) ───
+    // Tabla aparte AUTO-GESTIONADA (ver src/lib/producto-hashtag.ts): si aún
+    // no existe se crea sola y NUNCA rompe esta ruta (devuelve mapa vacío y
+    // los productos salen sin hashtag, igual que antes de esta función).
+    // Cada producto sale con hashtag: {valor, fecha} | null — lo usan la
+    // tabla del Panel ADM y las búsquedas de los paneles del vendedor.
+    const hashtagsMap = await leerHashtags(products.map((p) => p.id));
+
     return NextResponse.json({
       products: products.map((p) => ({
         ...p,
         costosEditados: editadosMap.get(p.id) ?? [],
+        hashtag: hashtagsMap.get(p.id) ?? null,
       })),
       total,
       page,
