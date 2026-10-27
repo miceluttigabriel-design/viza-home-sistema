@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   ShoppingCart,
   LogOut,
-  LayoutDashboard,
   Search,
   KeyRound,
   Eye,
@@ -415,15 +414,12 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
       <header className="sticky top-0 z-30 border-b" style={{ backgroundColor: "#155789", borderColor: "#0d3d5e" }}>
         <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg, #b89853 0%, #D9B86B 50%, #b89853 100%)" }} />
         <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
+          {/* IZQUIERDA: solo el título de la página. Sin logo "VIZA home" y sin
+              el lema "Todo para tu hogar..." (pedidos del dueño, Task 73). */}
           <div className="flex items-center gap-3">
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black text-white tracking-tight" style={{ fontFamily: "system-ui, sans-serif" }}>VIZA</span>
-              <span className="text-base font-bold" style={{ color: "#D9B86B", fontFamily: "system-ui, sans-serif" }}>home</span>
-            </div>
-            <div className="hidden md:block border-l pl-3 ml-1" style={{ borderColor: "#D9B86B" }}>
+            <div>
               <p className="text-[11px] font-medium text-white/80">SUPREMO · Gestión de Accesos y Contraseñas</p>
               <div className="flex items-center gap-2">
-                <p className="text-[10px] italic" style={{ color: "#D9B86B" }}>Todo para tu hogar, en un solo lugar.</p>
                 <span
                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border"
                   style={{
@@ -447,23 +443,24 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* BASE (antes VOLVER A ADMIN): compacto, dorado, sin icono. */}
             <button
               onClick={onGoAdmin}
-              className="h-10 px-3 sm:px-4 rounded-xl text-white font-medium text-xs sm:text-sm flex items-center gap-2 transition-colors shadow-sm hover:brightness-110"
-              style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+              className="h-9 px-3 rounded-xl font-bold text-xs flex items-center justify-center transition-all shadow-sm hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title="Ir a la BASE (Panel Admin)"
             >
-              <LayoutDashboard className="h-4 w-4" />
-              <span className="hidden sm:inline">VOLVER A ADMIN</span>
-              <span className="sm:hidden">ADMIN</span>
+              BASE
             </button>
+            {/* IR A VENTAS: solo el carrito, compacto y dorado (Task 73). */}
             <button
               onClick={onGoSales}
-              className="h-10 px-3 sm:px-4 rounded-xl text-white font-medium text-xs sm:text-sm flex items-center gap-2 transition-colors shadow-sm hover:brightness-110"
-              style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-all shadow-sm hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title="Ir a Ventas"
+              aria-label="Ir a Ventas"
             >
               <ShoppingCart className="h-4 w-4" />
-              <span className="hidden sm:inline">IR A VENTAS</span>
-              <span className="sm:hidden">VENTAS</span>
             </button>
 
             <div className="hidden sm:flex flex-col items-end text-right">
@@ -767,12 +764,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           </div>
         </div>
 
-        <p className="text-center text-[10px] text-stone-400 uppercase tracking-widest pb-4">
-          VIZA HOME E.A.S · Sistema de Gestión de Accesos · Solo Supremo Admin
-        </p>
       </main>
-
-      {/* Modal de historial */}
       {historialModal && (
         <div
           className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
