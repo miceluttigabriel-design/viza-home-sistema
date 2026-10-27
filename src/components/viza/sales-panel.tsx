@@ -969,11 +969,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         open={cambiarContrasenaOpen}
         onClose={() => setCambiarContrasenaOpen(false)}
       />
+      </header>
 
       {/* ══════════════════════════════════════════════════════════════
           MODAL CRM · MI SUCURSAL (solo encargados de sucursal)
           - Ranking de presupuestos SOLO de su sucursal, SOLO LECTURA
           - Sin select de sucursal, sin filtros y sin datos de las demás
+          - IMPORTANTE: este modal vive FUERA del <header> (hermano, en la
+            raíz). El header usa backdrop-blur y backdrop-filter crea un
+            "containing block" para position:fixed: si el modal quedara
+            dentro, el fixed inset-0 se calcularía contra el header y el
+            modal saldría cortado (sin título ni botón X visibles).
           ══════════════════════════════════════════════════════════════ */}
       {crmAbierto && (() => {
         const filas = [...crmFilas].sort(
@@ -1110,7 +1116,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
           </div>
         );
       })()}
-      </header>
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
         {viewMode === "safra" && <PlanSafra />}
