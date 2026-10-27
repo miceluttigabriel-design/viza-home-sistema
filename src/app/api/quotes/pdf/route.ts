@@ -546,7 +546,10 @@ export async function POST(req: NextRequest) {
       y += 10;
       const totalBoxW = 280;
       const totalBoxX = pageW - margin - totalBoxW;
-      const boxH = ajusteContado ? 54 : 32;
+      // UNA SOLA FILA: el TOTAL CONTADO ya muestra el precio final (con el
+      // margen incluido cuando el vendedor lo aplicó). No se duplica la misma
+      // información con una segunda fila "PRECIO FINAL CONTADO".
+      const boxH = 32;
 
       doc.setFillColor(...BLUE);
       doc.rect(totalBoxX, y, totalBoxW, boxH, "F");
@@ -567,14 +570,6 @@ export async function POST(req: NextRequest) {
         { align: "right" }
       );
 
-      if (ajusteContado) {
-        doc.setFontSize(8.5);
-        doc.setTextColor(...GOLD);
-        doc.text("PRECIO FINAL CONTADO", totalBoxX + 14, y + 40);
-        doc.setFontSize(12);
-        doc.setTextColor(255, 255, 255);
-        doc.text(formatPYG(body.contadoAjustado), totalBoxX + totalBoxW - 14, y + 40, { align: "right" });
-      }
       y += boxH + 3 + 22;
     } else {
       y += 18;

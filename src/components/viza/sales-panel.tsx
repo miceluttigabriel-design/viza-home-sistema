@@ -513,8 +513,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       toast.error("Agregá al menos un producto antes de calcular");
       return;
     }
-    if (planes.length === 0) {
-      toast.error("Agregá al menos un plan de cuotas antes de calcular");
+    // CONTADO SOLO: si el único marcado es el precio de contado, se puede
+    // calcular el presupuesto sin agregar planes de cuotas.
+    if (planes.length === 0 && !incluirContadoEnPresupuesto) {
+      toast.error(
+        "Agregá al menos un plan de cuotas o marcá la opción CONTADO para calcular"
+      );
       return;
     }
     // VALIDACIÓN DEL CASCO - AUTOMÁTICA:
@@ -526,7 +530,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       toast.error("⚠️ El valor del casco no puede ser mayor al total de productos.");
       return;
     }
-    if (!mostrarConEntrega && !mostrarSinEntrega) {
+    if (
+      !mostrarConEntrega &&
+      !mostrarSinEntrega &&
+      !incluirContadoEnPresupuesto
+    ) {
       toast.error("Seleccione al menos una opción");
       return;
     }
@@ -688,13 +696,23 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       setCalculatedPlanesSinEntrega(ajustados);
       setSinEntregaInfo(sinInfo);
       toast.success(
-        `Calculados ${planes.length} plan${planes.length !== 1 ? "es" : ""} · Sin entrega inicial`
+        planes.length > 0
+          ? `Calculados ${planes.length} plan${
+              planes.length !== 1 ? "es" : ""
+            } · Sin entrega inicial`
+          : "Presupuesto listo: solo valor CONTADO · Sin entrega inicial"
       );
     } else {
       // Limpiar planes sin entrega si no aplica
       setCalculatedPlanesSinEntrega([]);
       setSinEntregaInfo(null);
-      toast.success(`Calculados ${planes.length} plan${planes.length !== 1 ? "es" : ""} de pago`);
+      toast.success(
+        planes.length > 0
+          ? `Calculados ${planes.length} plan${
+              planes.length !== 1 ? "es" : ""
+            } de pago`
+          : "Presupuesto listo: solo valor CONTADO"
+      );
     }
     setCalcDone(true);
 
@@ -1685,7 +1703,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         </button>
 
         {/* 6. RESULTADO */}
-        {calcDone && calculatedPlanes.length > 0 && (
+        {calcDone && (calculatedPlanes.length > 0 || incluirContadoEnPresupuesto) && (
           <div id="resultado-section">
             <Section title="RESULTADO DEL PRESUPUESTO" icon={<FileText className="h-4 w-4" />}>
               {/* ENTREGA INICIAL PERSONALIZADA - aviso cuando está activa */}
