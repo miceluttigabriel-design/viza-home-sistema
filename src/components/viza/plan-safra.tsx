@@ -736,12 +736,22 @@ export function PlanSafra() {
               Entrada / Pago Inicial (Gs)
             </label>
             <input
-              type="number"
-              min={0}
-              step={1000}
-              value={entradaValor || ""}
-              onChange={(e) => setEntradaValor(Number(e.target.value))}
-              placeholder="Ej: 200000"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={
+                entradaValor
+                  ? Math.round(entradaValor).toLocaleString("es-PY")
+                  : ""
+              }
+              onChange={(e) =>
+                setEntradaValor(
+                  // Solo dígitos: el punto separador de miles es puramente
+                  // visual (se muestra al formatear, no se guarda).
+                  Number(e.target.value.replace(/\D/g, ""))
+                )
+              }
+              placeholder="Ej: 200.000"
               className="w-full h-12 px-3 rounded-lg border-2 border-stone-200 bg-white text-sm font-semibold focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 outline-none tabular-nums"
             />
           </div>

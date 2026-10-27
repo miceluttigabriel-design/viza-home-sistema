@@ -619,7 +619,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         // Cuotas que quedan después de la entrada personalizada
         const cuotasRestantes = Math.max(1, r.cuotas - 1);
         const restante = Math.max(0, r.total - entregaExtra);
-        const valorPorCuotaAjust = Math.ceil(restante / cuotasRestantes);
+        // REDONDEO COMERCIAL: la cuota se redondea SIEMPRE al millar
+        // superior (Gs exacto, sin valores quebrados).
+        // Ej: 823.334 → 824.000. El total del plan sube a lo sumo unos
+        // miles (entrega + cuotas ≥ total estándar): el margen nunca baja.
+        const valorPorCuotaAjust = redondeoComercial(restante / cuotasRestantes);
         return {
           ...r,
           valorPorCuota: valorPorCuotaAjust,
@@ -1609,12 +1613,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                     Valor de la entrega inicial (Gs) — opcional
                   </label>
                   <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    value={entregaPersonalizada || ""}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={
+                      entregaPersonalizada
+                        ? Math.round(entregaPersonalizada).toLocaleString("es-PY")
+                        : ""
+                    }
                     onChange={(e) => {
-                      setEntregaPersonalizada(Number(e.target.value));
+                      // Solo dígitos: el punto separador de miles es puramente
+                      // visual (se muestra al formatear, no se guarda).
+                      setEntregaPersonalizada(
+                        Number(e.target.value.replace(/\D/g, ""))
+                      );
                       resetCalculoEntrega();
                     }}
                     placeholder="Estándar del plan (1ª cuota)"
