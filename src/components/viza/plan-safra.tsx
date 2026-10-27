@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { usePlanSafraStore, parseSafra } from "@/store/plan-safra";
 import { formatPYG } from "@/lib/format";
+import { esProductoRegalo } from "@/lib/producto-regalo";
 import { CostoInterno, extractCosto } from "./costo-interno";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
@@ -83,6 +84,9 @@ export function PlanSafra() {
     setCascoAplicado,
     setCascoValor,
     setCascoDescripcion,
+    // === Chapa (COD 100068, regalo igual que el casco) ===
+    chapaValor,
+    setChapaValor,
     // === Refuerzos (lista dinámica manual) ===
     refuerzos,
     addRefuerzo,
@@ -188,6 +192,13 @@ export function PlanSafra() {
   //    Si no hay casco → cascoAplicado = false (siempre)
   const cascoAplicado = !!cascoEnCarrito;
 
+  // 3-bis. CHAPA (COD 100068): regalo igual que el casco, detectada por COD
+  // exacto (src/lib/producto-regalo.ts). Valor = precio contado × cantidad.
+  const chapaEnCarrito = productos.find((i) => esProductoRegalo(i.sku));
+  const chapaValorExacto = chapaEnCarrito
+    ? (chapaEnCarrito.priceContado ?? 0) * chapaEnCarrito.quantity
+    : 0;
+
   // 4. Auto-sync: sincronizar el store con los valores derivados
   useEffect(() => {
     if (cascoEnCarrito && cascoValorExacto > 0) {
@@ -207,10 +218,19 @@ export function PlanSafra() {
     }
   }, [cascoEnCarrito, cascoValorExacto, cascoValor, setCascoValor, setCascoAplicado]);
 
-  // === Mantener cronograma actualizado cuando cambian productos/pagos/casco ===
+  // Auto-sync de la CHAPA: sincronizar el store con el valor derivado
+  useEffect(() => {
+    if (chapaEnCarrito && chapaValorExacto > 0) {
+      if (chapaValor !== chapaValorExacto) setChapaValor(chapaValorExacto);
+    } else {
+      if (chapaValor !== 0) setChapaValor(0);
+    }
+  }, [chapaEnCarrito, chapaValorExacto, chapaValor, setChapaValor]);
+
+  // === Mantener cronograma actualizado cuando cambian productos/pagos/casco/chapa ===
   useEffect(() => {
     calcularCronograma();
-  }, [productos, entradaValor, refuerzos, cascoAplicado, cascoValor, calcularCronograma]);
+  }, [productos, entradaValor, refuerzos, cascoAplicado, cascoValor, chapaValor, calcularCronograma]);
 
   const handleCalcular = () => {
     if (productos.length === 0) {
@@ -650,6 +670,54 @@ export function PlanSafra() {
               <div>
                 <p className="uppercase font-semibold">Descuento casco</p>
                 <p className="font-bold text-rose-600 tabular-nums mt-0.5">-{formatPYG(cascoValorExacto)}</p>
+              </div>
+              <div>
+                <p className="uppercase font-semibold">Base Plan Safra</p>
+                <p className="font-bold text-emerald-700 tabular-nums mt-0.5">{formatPYG(totalContado)}</p>
+              </div>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {/* === D-bis-2. DESCUENTO POR CHAPA (AUTOMÁTICO - solo si hay chapa COD 100068) === */}
+      {chapaEnCarrito && chapaValorExacto > 0 && (
+        <Section title="DESCUENTO POR CHAPA (AUTOMÁTICO)" icon={<Gift className="h-4 w-4" />}>
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <Gift className="h-4 w-4 text-emerald-600" />
+                <span className="text-xs font-bold text-emerald-700 uppercase">
+                  Chapa detectada automáticamente
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">
+                No editable
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <p className="text-stone-500 uppercase font-semibold">Producto detectado</p>
+                <p className="text-stone-900 font-bold mt-0.5">{chapaEnCarrito.name}</p>
+                <p className="text-stone-400 mt-0.5">
+                  COD: {chapaEnCarrito.sku} · Cantidad: {chapaEnCarrito.quantity}x
+                </p>
+              </div>
+              <div>
+                <p className="text-stone-500 uppercase font-semibold">Valor del descuento</p>
+                <p className="text-rose-600 font-bold text-base mt-0.5 tabular-nums">
+                  -{formatPYG(chapaValorExacto)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-emerald-200 grid grid-cols-3 gap-2 text-[10px] text-stone-600">
+              <div>
+                <p className="uppercase font-semibold">Subtotal productos</p>
+                <p className="font-bold tabular-nums mt-0.5">{formatPYG(totalContadoBruto)}</p>
+              </div>
+              <div>
+                <p className="uppercase font-semibold">Descuentos (casco + chapa)</p>
+                <p className="font-bold text-rose-600 tabular-nums mt-0.5">-{formatPYG(descuentoCasco + chapaValorExacto)}</p>
               </div>
               <div>
                 <p className="uppercase font-semibold">Base Plan Safra</p>

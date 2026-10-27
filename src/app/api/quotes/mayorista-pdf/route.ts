@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { drawHeader, drawFooter, formatPYG, formatDateEs, formatDateTimeEs, BLUE, GOLD, GREY } from "../../../../lib/pdf/vizaPdfDesign";
+import { esProductoRegalo } from "../../../../lib/producto-regalo";
 
 // === Tipos del payload del Presupuesto MAYORISTA ===
 
@@ -240,10 +241,22 @@ export async function POST(req: NextRequest) {
     y += 12;
 
     // El total se recalcula server-side (suma de subtotales) - no se confía en el cliente
-    const totalMayorista = body.productos.reduce(
+    // === REGALO CHAPA (COD 100068) - mismo mecanismo que el CASCO ===
+    // La chapa es un REGALO de VIZA Home: si está en el presupuesto, su
+    // subtotal se detecta acá por COD exacto (no se confía en el cliente) y
+    // se descuenta del TOTAL MAYORISTA. Sin chapa, el total es la suma
+    // normal de siempre.
+    const sumaSubtotales = body.productos.reduce(
       (sum, p) => sum + (p.subtotal || p.priceTecnico * p.quantity),
       0
     );
+    const descuentoChapaPdf = body.productos
+      .filter((p) => esProductoRegalo(p.sku))
+      .reduce(
+        (sum, p) => sum + (p.subtotal || p.priceTecnico * p.quantity),
+        0
+      );
+    const totalMayorista = Math.max(0, sumaSubtotales - descuentoChapaPdf);
 
     const sumBoxW = 320;
     const sumBoxH = 56;

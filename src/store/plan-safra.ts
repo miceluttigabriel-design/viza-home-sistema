@@ -99,6 +99,14 @@ export interface PlanSafraState {
   setCascoValor: (v: number) => void;
   setCascoDescripcion: (s: string) => void;
 
+  // === DESCUENTO POR CHAPA (COD 100068) - mismo mecanismo que el casco ===
+  // La chapa es un REGALO igual que el casco. El componente detecta el
+  // producto por COD exacto (src/lib/producto-regalo.ts) y sincroniza acá
+  // el valor (precio contado × cantidad); el cálculo lo resta del total
+  // contado ANTES de los intereses. 0 = no hay chapa.
+  chapaValor: number;
+  setChapaValor: (v: number) => void;
+
   // === Refuerzos (lista dinámica manual, el vendedor agrega cuantos quiera) ===
   refuerzos: PagoManual[];
   addRefuerzo: () => void;
@@ -162,10 +170,20 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   const cascoValido = !cascoAplicado || (cascoValorRaw > 0 && cascoValorRaw <= totalContadoBruto);
   const descuentoCasco = cascoAplicado && cascoValido ? cascoValorRaw : 0;
 
-  // Total contado NETO = bruto - descuento casco
+  // Descuento por CHAPA (COD 100068, regalo igual que el casco):
+  // el componente sincroniza el valor exacto; se limita al bruto por seguridad.
+  const descuentoChapa = Math.min(
+    Math.max(0, state.chapaValor || 0),
+    totalContadoBruto
+  );
+
+  // Total contado NETO = bruto - descuento casco - descuento chapa
   // Los intereses/márgenes del Plan Safra se calculan sobre este valor NETO
   // (NO sobre el total bruto). El descuento se resta ANTES de los intereses.
-  const totalContado = Math.max(0, totalContadoBruto - descuentoCasco);
+  const totalContado = Math.max(
+    0,
+    totalContadoBruto - descuentoCasco - descuentoChapa
+  );
 
   // % SAFRA promedio ponderado por quantity (SOLO LECTURA)
   // Esta es la TASA DE INTERÉS MENSUAL que se aplica sobre el saldo restante
@@ -413,6 +431,7 @@ type PlanSafraPersistedState = Pick<
   | "cascoAplicado"
   | "cascoValor"
   | "cascoDescripcion"
+  | "chapaValor"
   | "refuerzos"
 >;
 
@@ -462,6 +481,10 @@ export const usePlanSafraStore = create<PlanSafraState>()(
       setCascoAplicado: (v) => set({ cascoAplicado: v }),
       setCascoValor: (v) => set({ cascoValor: Math.max(0, v) }),
       setCascoDescripcion: (s) => set({ cascoDescripcion: s }),
+
+      // --- Chapa (COD 100068, regalo igual que el casco) ---
+      chapaValor: 0,
+      setChapaValor: (v) => set({ chapaValor: Math.max(0, v) }),
 
       // --- Refuerzos (v2.0: solo fecha, valor auto-calculado) ---
       refuerzos: [],
@@ -547,6 +570,7 @@ export const usePlanSafraStore = create<PlanSafraState>()(
           cascoAplicado: false,
           cascoValor: 0,
           cascoDescripcion: "",
+          chapaValor: 0,
           refuerzos: [],
           cronograma: [],
           totalContado: 0,
@@ -577,6 +601,7 @@ export const usePlanSafraStore = create<PlanSafraState>()(
         cascoAplicado: state.cascoAplicado,
         cascoValor: state.cascoValor,
         cascoDescripcion: state.cascoDescripcion,
+        chapaValor: state.chapaValor,
         refuerzos: state.refuerzos,
       }),
     }

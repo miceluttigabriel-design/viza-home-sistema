@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createUserScopedStorage } from "@/lib/user-scoped-storage";
+import { esProductoRegalo } from "@/lib/producto-regalo";
 
 function parseSafra(safra: string | null | undefined): number {
   if (!safra) return 0;
@@ -82,7 +83,11 @@ function calcularHelper(state: ChequeState): Partial<ChequeState> {
   const totalContadoBruto = productos.reduce((s, p) => s + p.priceContado * p.quantity, 0);
   const cascoEnCarrito = productos.find(p => p.name.toUpperCase().includes("CASCO"));
   const descuentoCasco = cascoEnCarrito ? cascoEnCarrito.priceContado * cascoEnCarrito.quantity : 0;
-  const baseCalculo = Math.max(0, totalContadoBruto - descuentoCasco);
+  // CHAPA (COD 100068): regalo igual que el casco, detectada por COD exacto
+  // (src/lib/producto-regalo.ts). Su valor también se descuenta de la base.
+  const chapaEnCarrito = productos.find(p => esProductoRegalo(p.sku));
+  const descuentoChapa = chapaEnCarrito ? chapaEnCarrito.priceContado * chapaEnCarrito.quantity : 0;
+  const baseCalculo = Math.max(0, totalContadoBruto - descuentoCasco - descuentoChapa);
 
   if (baseCalculo <= 0 || fechasCheques.length === 0) {
     return { resultados: [], totalPagar: 0, totalContadoBruto, descuentoCasco, baseCalculo };

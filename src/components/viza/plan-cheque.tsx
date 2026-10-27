@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import { useChequeStore, parseSafra, addDays } from "@/store/cheque";
 import { formatPYG } from "@/lib/format";
+import { esProductoRegalo } from "@/lib/producto-regalo";
 import { CostoInterno, extractCosto } from "./costo-interno";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
@@ -90,6 +91,9 @@ export function PlanCheque() {
   // Casco auto-detectado
   const cascoEnCarrito = productos.find(p => p.name.toUpperCase().includes("CASCO"));
   const cascoValorExacto = cascoEnCarrito ? cascoEnCarrito.priceContado * cascoEnCarrito.quantity : 0;
+  // Chapa (COD 100068) auto-detectada: regalo igual que el casco
+  const chapaEnCarrito = productos.find(p => esProductoRegalo(p.sku));
+  const chapaValorExacto = chapaEnCarrito ? chapaEnCarrito.priceContado * chapaEnCarrito.quantity : 0;
   const fechaMaxima = addDays(fechaEmision || new Date().toISOString().slice(0, 10), 180);
 
   const handleCalcular = () => {
@@ -249,7 +253,35 @@ export function PlanCheque() {
             <div className="grid grid-cols-3 gap-2 text-[10px] text-stone-600">
               <div><p className="uppercase font-semibold">Subtotal productos</p><p className="font-bold tabular-nums mt-0.5">{formatPYG(totalContadoBruto)}</p></div>
               <div><p className="uppercase font-semibold">Descuento casco</p><p className="font-bold text-rose-600 tabular-nums mt-0.5">-{formatPYG(cascoValorExacto)}</p></div>
-              <div><p className="uppercase font-semibold">Base a financiar</p><p className="font-bold text-emerald-700 tabular-nums mt-0.5">{formatPYG(totalContadoBruto - cascoValorExacto)}</p></div>
+              <div><p className="uppercase font-semibold">Base a financiar</p><p className="font-bold text-emerald-700 tabular-nums mt-0.5">{formatPYG(totalContadoBruto - cascoValorExacto - chapaValorExacto)}</p></div>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {/* CHAPA (auto - COD 100068, regalo igual que el casco) */}
+      {chapaEnCarrito && chapaValorExacto > 0 && (
+        <Section title="DESCUENTO POR CHAPA (AUTOMÁTICO)" icon={<Gift className="h-4 w-4" />}>
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2"><Gift className="h-4 w-4 text-emerald-600" /><span className="text-xs font-bold text-emerald-700 uppercase">Chapa detectada automáticamente</span></div>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase">No editable</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <p className="uppercase font-semibold text-stone-500">Producto detectado</p>
+                <p className="text-stone-900 font-bold mt-0.5">{chapaEnCarrito.name}</p>
+                <p className="text-stone-400 mt-0.5">COD: {chapaEnCarrito.sku} · Cantidad: {chapaEnCarrito.quantity}x</p>
+              </div>
+              <div>
+                <p className="uppercase font-semibold text-stone-500">Valor del descuento</p>
+                <p className="text-rose-600 font-bold text-base mt-0.5 tabular-nums">-{formatPYG(chapaValorExacto)}</p>
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-emerald-200 grid grid-cols-3 gap-2 text-[10px] text-stone-600">
+              <div><p className="uppercase font-semibold">Subtotal productos</p><p className="font-bold tabular-nums mt-0.5">{formatPYG(totalContadoBruto)}</p></div>
+              <div><p className="uppercase font-semibold">Descuentos (casco + chapa)</p><p className="font-bold text-rose-600 tabular-nums mt-0.5">-{formatPYG(cascoValorExacto + chapaValorExacto)}</p></div>
+              <div><p className="uppercase font-semibold">Base a financiar</p><p className="font-bold text-emerald-700 tabular-nums mt-0.5">{formatPYG(totalContadoBruto - cascoValorExacto - chapaValorExacto)}</p></div>
             </div>
           </div>
         </Section>

@@ -37,6 +37,7 @@ import { PlanMayorista } from "./plan-mayorista";
 import { CostoInterno, extractCosto } from "./costo-interno";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+import { esProductoRegalo } from "@/lib/producto-regalo";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
 // momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
@@ -464,6 +465,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
   const cascoAplicado = !!cascoEnCarrito;
   const descuentoCasco = cascoAplicado ? cascoValorExacto : 0;
 
+  // === DESCUENTO POR CHAPA (COD 100068) - MISMO MECANISMO QUE EL CASCO ===
+  // La chapa es un REGALO de VIZA Home igual que el casco: se detecta sola
+  // por COD exacto (src/lib/producto-regalo.ts) y su valor (precio contado
+  // × cantidad) se descuenta del bruto. También se excluye del cálculo de
+  // cuotas. Funciona en todos los planes.
+  const chapaEnCarrito = items.find((i) => esProductoRegalo(i.sku));
+  const chapaValorExacto = chapaEnCarrito
+    ? (chapaEnCarrito.priceContado ?? 0) * chapaEnCarrito.quantity
+    : 0;
+  const descuentoChapa = chapaValorExacto;
+
   // Auto-sync: sincronizar el store con los valores derivados
   useEffect(() => {
     if (cascoEnCarrito && cascoValorExacto > 0) {
@@ -475,10 +487,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
     }
   }, [cascoEnCarrito, cascoValorExacto, cascoValor, setCascoValor, setCascoAplicado]);
 
-  // NETO: Total Contado REAL = Bruto - Descuento Casco
+  // NETO: Total Contado REAL = Bruto - Descuento Casco - Descuento Chapa
   // Esto es lo que el cliente realmente paga al contado.
-  // Ej: Moto 10M + Casco 500K = Bruto 10.5M - Casco 500K = Neto 10M
-  const contadoOriginalTotal = Math.max(0, contadoOriginalBruto - descuentoCasco);
+  // Ej: Moto 10M + Casco 500K + Chapa 150K = Bruto 10.65M - regalos = Neto 10M
+  const contadoOriginalTotal = Math.max(
+    0,
+    contadoOriginalBruto - descuentoCasco - descuentoChapa
+  );
 
   // Contado ajustado (con margen) - calculado sobre el NETO
   const contadoAjustado = Math.round(
@@ -553,12 +568,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
       sinInfo = { dias, margen };
     }
 
-    // === FILTRAR CASCO DEL CÁLCULO DE CUOTAS ===
-    // El casco es un regalo (gratis). NO se incluye en el cálculo de cuotas.
-    // Las cuotas se calculan SOLO sobre los productos que no son casco.
-    // Esto garantiza que el valor sea EXACTAMENTE el de la BD (sin recálculos).
+    // === FILTRAR CASCO Y CHAPA DEL CÁLCULO DE CUOTAS ===
+    // El casco y la chapa son regalos (gratis). NO se incluyen en el cálculo
+    // de cuotas: las cuotas se calculan SOLO sobre los productos que no son
+    // regalo. Esto garantiza que el valor sea EXACTAMENTE el de la BD.
     const itemsSinCasco = items.filter(
-      (i) => !i.name.toUpperCase().includes("CASCO")
+      (i) =>
+        !i.name.toUpperCase().includes("CASCO") && !esProductoRegalo(i.sku)
     );
 
     // Calcular todos los planes (CON entrega - valores base)
@@ -600,7 +616,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         // ════════════════════════════════════════════════════════════════
         const margenAplicado = sinInfo.margen; // 0 (0-30 días) o 0.03 (31-60 días)
 
-        // Leer valor EXACTO de la BD para los items SIN casco
+        // Leer valor EXACTO de la BD para los items SIN casco ni chapa
+        // (ambos son regalos y no se financian)
         const valorPorCuotaBase = itemsSinCasco.reduce(
           (sum, i) => sum + getItemPriceN(i, plan.cuotas) * i.quantity,
           0
@@ -1324,18 +1341,72 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
           </Section>
         )}
 
+        {/* 2.6. DESCUENTO POR CHAPA (AUTOMÁTICO - solo si hay chapa COD 100068 en el carrito) */}
+        {chapaEnCarrito && chapaValorExacto > 0 && (
+          <Section title="DESCUENTO POR CHAPA (AUTOMÁTICO)" icon={<Gift className="h-4 w-4" />}>
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2">
+                  <Gift className="h-4 w-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-emerald-700 uppercase">
+                    Chapa detectada automáticamente
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">
+                  No editable
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <p className="text-stone-500 uppercase font-semibold">Producto detectado</p>
+                  <p className="text-stone-900 font-bold mt-0.5">{chapaEnCarrito.name}</p>
+                  <p className="text-stone-400 mt-0.5">
+                    COD: {chapaEnCarrito.sku} · Cantidad: {chapaEnCarrito.quantity}x
+                  </p>
+                </div>
+                <div>
+                  <p className="text-stone-500 uppercase font-semibold">Valor del descuento</p>
+                  <p className="text-rose-600 font-bold text-base mt-0.5 tabular-nums">
+                    -{formatPYG(chapaValorExacto)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-emerald-200 grid grid-cols-3 gap-2 text-[10px] text-stone-600">
+                <div>
+                  <p className="uppercase font-semibold">Subtotal productos</p>
+                  <p className="font-bold tabular-nums mt-0.5">{formatPYG(contadoOriginalBruto)}</p>
+                </div>
+                <div>
+                  <p className="uppercase font-semibold">Descuentos (casco + chapa)</p>
+                  <p className="font-bold text-rose-600 tabular-nums mt-0.5">-{formatPYG(descuentoCasco + descuentoChapa)}</p>
+                </div>
+                <div>
+                  <p className="uppercase font-semibold">Base a financiar</p>
+                  <p className="font-bold text-emerald-700 tabular-nums mt-0.5">
+                    {formatPYG(contadoOriginalTotal)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Section>
+        )}
+
                 {/* 3. PRECIO DE CONTADO CON MARGEN */}
         <Section title="PRECIO DE CONTADO" icon={<Percent className="h-4 w-4" />}>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">Contado (neto con casco descontado)</label>
+              <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">Contado (neto con casco/chapa descontados)</label>
               <div className="h-14 px-4 flex items-center rounded-xl bg-stone-50 border-2 border-stone-200">
                 <span className="text-base font-bold text-stone-900 tabular-nums">{formatPYG(contadoOriginalTotal)}</span>
               </div>
               <p className="text-[10px] text-stone-400 mt-1">
-                {cascoAplicado
-                  ? `Bruto: ${formatPYG(contadoOriginalBruto)} - Casco: ${formatPYG(descuentoCasco)} = Neto`
-                  : "Suma de contado × cantidad"}
+                {cascoAplicado && descuentoChapa > 0
+                  ? `Bruto: ${formatPYG(contadoOriginalBruto)} - Casco: ${formatPYG(descuentoCasco)} - Chapa: ${formatPYG(descuentoChapa)} = Neto`
+                  : cascoAplicado
+                    ? `Bruto: ${formatPYG(contadoOriginalBruto)} - Casco: ${formatPYG(descuentoCasco)} = Neto`
+                    : descuentoChapa > 0
+                      ? `Bruto: ${formatPYG(contadoOriginalBruto)} - Chapa: ${formatPYG(descuentoChapa)} = Neto`
+                      : "Suma de contado × cantidad"}
               </p>
             </div>
             <div>

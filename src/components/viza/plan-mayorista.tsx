@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { usePlanMayoristaStore } from "@/store/mayorista";
 import { formatPYG } from "@/lib/format";
+import { esProductoRegalo } from "@/lib/producto-regalo";
 import { CostoInterno, extractCostoMayorista } from "./costo-interno";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
@@ -160,6 +161,17 @@ export function PlanMayorista() {
     0
   );
 
+  // === REGALO CHAPA (COD 100068) - mismo mecanismo que el CASCO en los
+  // otros planes === La chapa es un REGALO de VIZA Home: se detecta sola
+  // por COD exacto (src/lib/producto-regalo.ts) y su precio técnico ×
+  // cantidad se descuenta del total. El total que ve el vendedor y el que
+  // llega al PDF es el NETO.
+  const chapaEnCarrito = productos.find((p) => esProductoRegalo(p.sku));
+  const descuentoChapa = chapaEnCarrito
+    ? chapaEnCarrito.priceTecnico * chapaEnCarrito.quantity
+    : 0;
+  const totalMayoristaNeto = Math.max(0, totalMayorista - descuentoChapa);
+
   const handleGenerarPDF = async () => {
     if (productos.length === 0) {
       toast.error("No hay productos para generar el PDF");
@@ -197,7 +209,7 @@ export function PlanMayorista() {
           priceTecnico: p.priceTecnico,
           subtotal: p.priceTecnico * p.quantity,
         })),
-        total: totalMayorista,
+        total: totalMayoristaNeto,
       };
 
       const res = await fetch("/api/quotes/mayorista-pdf", {
@@ -464,6 +476,17 @@ export function PlanMayorista() {
                 ))}
               </tbody>
               <tfoot>
+                {descuentoChapa > 0 && (
+                  <tr className="border-t-2" style={{ borderColor: DORADO }}>
+                    <td colSpan={4} className="px-3 py-2 text-right font-bold uppercase text-[11px] tracking-wide text-emerald-700">
+                      REGALO CHAPA (AUTOMÁTICO):
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold tabular-nums text-emerald-700">
+                      -{formatPYG(descuentoChapa)}
+                    </td>
+                    <td></td>
+                  </tr>
+                )}
                 <tr
                   className="border-t-2"
                   style={{
@@ -475,7 +498,7 @@ export function PlanMayorista() {
                     TOTAL MAYORISTA:
                   </td>
                   <td className="px-3 py-3 text-right font-extrabold tabular-nums" style={{ color: AZUL_OSCURO }}>
-                    {formatPYG(totalMayorista)}
+                    {formatPYG(totalMayoristaNeto)}
                   </td>
                   <td></td>
                 </tr>
