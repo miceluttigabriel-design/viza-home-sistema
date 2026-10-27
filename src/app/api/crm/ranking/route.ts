@@ -80,8 +80,9 @@ export async function GET() {
     // (FUN.VIZA) coincidiendo el email; lo que no coincide queda
     // "SIN SUCURSAL" y el admin lo asigna a mano desde el panel.
     // Ajuste del CRM (una sola vez, best-effort): "CENTRAL/KATUETE" dejó de
-    // existir como filtro → sus usuarios pasan a "KATUETE", y
-    // cobranza.katuete@viza.com.py sale de KATUETE (queda sin sucursal).
+    // existir como filtro → sus usuarios pasan a "KATUETE". (Task 77: la
+    // parte que sacaba a cobranza.katuete@ de KATUETE quedó revertida —
+    // vuelve a KATUETE por la siembra del mapa.)
     await migrarCentralKatuete();
 
     let mapaSuc = await leerMapaSucursales();

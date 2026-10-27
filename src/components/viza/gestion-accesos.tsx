@@ -19,6 +19,7 @@ import {
   Bell,
   BellOff,
   MapPin,
+  UserPlus,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -77,23 +78,25 @@ function formatDatePY(ts: string | null): string {
   }
 }
 
-function roleBadge(role: string, email?: string): { label: string; cls: string; icon: string } {
+// Task 77: sin emojis en los tipos (pedido del dueño: sacar la estrella, el
+// escudo y la corona) — solo texto con su color.
+function roleBadge(role: string, email?: string): { label: string; cls: string } {
   if (role === "supremo_admin") {
-    return { label: "SUPREMO ADMIN", cls: "bg-gradient-to-r from-amber-500 to-yellow-600 text-white border-amber-600", icon: "👑" };
+    return { label: "SUPREMO ADMIN", cls: "bg-gradient-to-r from-amber-500 to-yellow-600 text-white border-amber-600" };
   }
   if (role === "admin") {
-    return { label: "ADMIN", cls: "bg-sky-100 text-sky-800 border-sky-300", icon: "🛡️" };
+    return { label: "ADMIN", cls: "bg-sky-100 text-sky-800 border-sky-300" };
   }
   // VIP (Task 76, pedido del dueño): usuario Común que es ENCARGADO de
   // sucursal y por eso SÍ puede ver el CRM de presupuestos de su sucursal
   // (los otros Común no lo ven). Etiqueta visible únicamente: el rol en la
   // base sigue siendo colaborador. Dorado suave, consistente con el sistema.
   if (email && esVip(email)) {
-    return { label: "VIP", cls: "bg-yellow-100 text-yellow-800 border-yellow-400", icon: "⭐" };
+    return { label: "VIP", cls: "bg-yellow-100 text-yellow-800 border-yellow-400" };
   }
   // Compat hacia atrás: representante → colaborador. Etiqueta visible con el
   // vocabulario del dueño (Supremo / Admin / VIP / Común); el rol en la base no cambia.
-  return { label: "COMÚN", cls: "bg-stone-100 text-stone-700 border-stone-300", icon: "👤" };
+  return { label: "COMÚN", cls: "bg-stone-100 text-stone-700 border-stone-300" };
 }
 
 function formatPYG(n: number | null | undefined): string {
@@ -163,6 +166,7 @@ const SECTORES_ORDEN = [
   "DEPOSITO",
   "VENTAS",
   "VENTAS ONLINE",
+  "TELEVENTAS",
   "MARKETING",
   "ARTES VISUAL",
   "REDES SOCIALES",
@@ -216,6 +220,14 @@ const MAPA_SECTOR_EXCEL: Record<string, string> = {
   "ventas.emmanuel@viza.com.py": "VENTAS",
   "ventas.paola@viza.com.py": "VENTAS",
   "ventas.richard@viza.com.py": "VENTAS",
+  // Televentas (Task 77, pedido del dueño): vendedor@ (COMERCIAL VIZA HOME
+  // E.A.S) es TELEVENTAS de KATUETE (antes salía GENERAL).
+  "vendedor@viza.com.py": "TELEVENTAS",
+  // LORENA MERCADO PEREZ (Task 77): VENTAS de KATUETE. Se crea con el botón
+  // CREAR USUARIO del GDA; se dejan los 2 emails que sigue el patrón de la
+  // planilla — el que no se use nunca coincide y no hace nada.
+  "ventas.lorena@viza.com.py": "VENTAS",
+  "lorena@viza.com.py": "VENTAS",
   // LA PALOMA
   "caja.paloma@viza.com.py": "CAJA",
   "fac.paloma@viza.com.py": "FACTURACION",
@@ -272,6 +284,17 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
   const [sonidoActivo, setSonidoActivo] = useState(true);
   // Modal: cambiar mi propia contraseña (visible también para el supremo)
   const [cambiarContrasenaOpen, setCambiarContrasenaOpen] = useState(false);
+  // Modal: crear usuario nuevo (Task 77, pedido del dueño). Usa el POST
+  // /api/admin/usuarios que YA existía en el sistema (la API solo deja al
+  // SUPREMO). Sector y sucursal se asignan solos si el email está en los
+  // mapas de la planilla.
+  const [crearOpen, setCrearOpen] = useState(false);
+  const [crearNombre, setCrearNombre] = useState("");
+  const [crearEmail, setCrearEmail] = useState("");
+  const [crearContrasena, setCrearContrasena] = useState("");
+  const [crearRol, setCrearRol] = useState("colaborador");
+  const [verContrasenaCrear, setVerContrasenaCrear] = useState(false);
+  const [creando, setCreando] = useState(false);
 
   // Función para reproducir un sonido de notificación usando Web Audio API
   // (no requiere archivos externos - generado en runtime)
@@ -475,6 +498,44 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
       toast.error(e.message);
     } finally {
       setToggling(null);
+    }
+  };
+
+  // Crear un usuario nuevo (Task 77): llama al POST /api/admin/usuarios que
+  // ya existía en el sistema (valida, hashea con bcrypt, registra la clave
+  // en PasswordLog y crea el usuario ACTIVO con el rol elegido).
+  const crearUsuario = async () => {
+    const email = crearEmail.trim().toLowerCase();
+    if (!email || !crearContrasena.trim()) {
+      toast.error("El email y la contraseña son obligatorios");
+      return;
+    }
+    setCreando(true);
+    try {
+      const res = await fetch("/api/admin/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          name: crearNombre.trim() || undefined,
+          password: crearContrasena,
+          role: crearRol,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Error HTTP ${res.status}`);
+      toast.success(`Usuario creado: ${email}`);
+      setCrearOpen(false);
+      setCrearNombre("");
+      setCrearEmail("");
+      setCrearContrasena("");
+      setCrearRol("colaborador");
+      setVerContrasenaCrear(false);
+      await cargar(true);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setCreando(false);
     }
   };
 
@@ -733,7 +794,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           </div>
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
             <div className="flex items-center gap-2 text-amber-700 text-[11px] uppercase font-semibold tracking-wide">
-              👑 SUPREMO ADMIN
+              SUPREMO ADMIN
             </div>
             <p className="text-3xl font-black text-amber-600 mt-1">
               {usuarios.filter((u) => u.role === "supremo_admin").length}
@@ -741,7 +802,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           </div>
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
             <div className="flex items-center gap-2 text-sky-700 text-[11px] uppercase font-semibold tracking-wide">
-              🛡️ ADMIN
+              ADMIN
             </div>
             <p className="text-3xl font-black text-sky-600 mt-1">
               {usuarios.filter((u) => u.role === "admin").length}
@@ -749,7 +810,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           </div>
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
             <div className="flex items-center gap-2 text-yellow-700 text-[11px] uppercase font-semibold tracking-wide">
-              ⭐ VIP (CRM)
+              VIP (CRM)
             </div>
             <p className="text-3xl font-black text-yellow-600 mt-1">
               {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && esVip(u.email)).length}
@@ -757,7 +818,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           </div>
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
             <div className="flex items-center gap-2 text-stone-600 text-[11px] uppercase font-semibold tracking-wide">
-              👤 COMÚN
+              COMÚN
             </div>
             <p className="text-3xl font-black text-stone-700 mt-1">
               {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && !esVip(u.email)).length}
@@ -890,6 +951,18 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
             <span className="hidden sm:inline">RECARGAR</span>
           </button>
 
+          {/* CREAR USUARIO (Task 77): formulario que usa la API de creación
+              que ya existía en el sistema (el POST solo deja al SUPREMO). */}
+          <button
+            onClick={() => setCrearOpen(true)}
+            className="h-10 px-3 rounded-lg font-medium text-xs sm:text-sm flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm"
+            title="Crear un usuario nuevo"
+          >
+            <UserPlus className="h-4 w-4" />
+            <span className="hidden sm:inline">CREAR USUARIO</span>
+            <span className="sm:hidden">CREAR</span>
+          </button>
+
           {/* Indicador de última actualización */}
           <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-stone-500 ml-auto">
             <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -995,8 +1068,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
                         </td>
                         {/* TIPO DE USUARIO al lado del sector: Supremo / Admin / VIP / Común. */}
                         <td className="px-3 py-2.5">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}>
-                            <span>{rb.icon}</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}>
                             {rb.label}
                           </span>
                         </td>
@@ -1140,6 +1212,115 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: CREAR USUARIO (Task 77). Mismo estilo que el de historial.
+          Usa el POST /api/admin/usuarios que ya existía (solo SUPREMO). */}
+      {crearOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => !creando && setCrearOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b flex items-center justify-between" style={{ backgroundColor: "#155789", borderColor: "#0d3d5e" }}>
+              <h3 className="text-white font-bold text-base flex items-center gap-2">
+                <UserPlus className="h-5 w-5" style={{ color: "#D9B86B" }} />
+                CREAR NUEVO USUARIO
+              </h3>
+              <button
+                onClick={() => setCrearOpen(false)}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white hover:bg-white/10"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wide text-stone-500 mb-1">
+                  Nombre completo (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={crearNombre}
+                  onChange={(e) => setCrearNombre(e.target.value)}
+                  placeholder="Ej: LORENA MERCADO PEREZ"
+                  className="w-full h-10 px-3 rounded-lg bg-stone-100 border border-stone-200 focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wide text-stone-500 mb-1">
+                  Email (obligatorio)
+                </label>
+                <input
+                  type="email"
+                  value={crearEmail}
+                  onChange={(e) => setCrearEmail(e.target.value)}
+                  placeholder="Ej: ventas.lorena@viza.com.py"
+                  className="w-full h-10 px-3 rounded-lg bg-stone-100 border border-stone-200 focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wide text-stone-500 mb-1">
+                  Contraseña (obligatoria)
+                </label>
+                <div className="relative">
+                  <input
+                    type={verContrasenaCrear ? "text" : "password"}
+                    value={crearContrasena}
+                    onChange={(e) => setCrearContrasena(e.target.value)}
+                    placeholder="La contraseña que le vas a entregar"
+                    className="w-full h-10 px-3 pr-10 rounded-lg bg-stone-100 border border-stone-200 focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setVerContrasenaCrear((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                    title={verContrasenaCrear ? "Ocultar" : "Mostrar"}
+                  >
+                    {verContrasenaCrear ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wide text-stone-500 mb-1">
+                  Tipo de usuario
+                </label>
+                <select
+                  value={crearRol}
+                  onChange={(e) => setCrearRol(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg bg-stone-100 border border-stone-200 text-sm font-medium focus:outline-none"
+                >
+                  <option value="colaborador">COMÚN (colaborador)</option>
+                  <option value="admin">ADMIN</option>
+                  <option value="supremo_admin">SUPREMO ADMIN</option>
+                </select>
+              </div>
+              <p className="text-[11px] text-stone-500 leading-relaxed">
+                Se crea ACTIVO y queda registrado en la bitácora de contraseñas (PasswordLog), igual que un reseteo. Si el email está en la planilla, sector y sucursal se asignan solos (ej.: ventas.lorena@viza.com.py = VENTAS / KATUETE).
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setCrearOpen(false)}
+                  disabled={creando}
+                  className="h-10 flex-1 rounded-lg font-bold text-xs uppercase border border-stone-300 text-stone-600 hover:bg-stone-50 transition-colors disabled:opacity-50"
+                >
+                  CANCELAR
+                </button>
+                <button
+                  onClick={crearUsuario}
+                  disabled={creando || !crearEmail.trim() || !crearContrasena.trim()}
+                  className="h-10 flex-1 rounded-lg font-bold text-xs uppercase bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {creando ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  {creando ? "CREANDO..." : "CREAR USUARIO"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
