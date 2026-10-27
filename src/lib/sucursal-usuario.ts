@@ -59,6 +59,11 @@ export const MAPA_SUCURSAL_EXCEL: Record<string, string> = {
   "viza.cobranza@viza.com.py": "KATUETE",
   "credito@viza.com.py": "KATUETE",
   "credito1@viza.com.py": "KATUETE",
+  // Compras central (pedido del dueño, Task 76): Adriano Ruiz Gómez
+  // (viza.compras@) es ENC. COMPRAS de la central y su sucursal es KATUETE
+  // (antes quedaba SIN SUCURSAL porque no estaba en la planilla). La siembra
+  // solo crea la fila si NO existe: jamás toca una asignación ya guardada.
+  "viza.compras@viza.com.py": "KATUETE",
   // KATUETE
   // cobranza.katuete@viza.com.py sale de KATUETE (pedido del admin): no se
   // siembra más y la migración de abajo le borra la asignación guardada.
