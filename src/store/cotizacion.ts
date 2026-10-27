@@ -118,6 +118,14 @@ interface CotizacionState {
   // Fecha de inicio de la primera cuota (ISO date) para sin_entrega
   fechaInicioPago: string; // default "" (vacío)
 
+  // === ENTREGA INICIAL PERSONALIZADA (Plan CUOTA) ===
+  // Si el vendedor define un valor > 0, la ENTRADA del plan CON ENTREGA pasa
+  // a ser ese monto (en vez de la 1ª cuota estándar de la BD) y el resto
+  // (total del plan − entrega) se reparte entre las cuotas restantes.
+  // El TOTAL del plan no cambia => el margen de la BD queda intacto.
+  // 0 = usar el valor estándar (comportamiento de siempre).
+  entregaPersonalizada: number; // default 0
+
   // === DESCUENTO POR CASCO ===
   // El "Casco" es un descuento/bono que Viza Home otorga al cliente.
   // Si cascoAplicado = true, el sistema OBLIGA a aplicar el descuento.
@@ -140,6 +148,7 @@ interface CotizacionState {
   setIncluirPrecioContado: (value: boolean) => void;
   setTipoEntrega: (tipo: TipoEntrega) => void;
   setFechaInicioPago: (fecha: string) => void;
+  setEntregaPersonalizada: (v: number) => void;
   setClienteField: (field: keyof Omit<ClienteData, "fecha">, value: string) => void;
   setCascoAplicado: (v: boolean) => void;
   setCascoValor: (v: number) => void;
@@ -180,6 +189,8 @@ export const useCotizacionStore = create<CotizacionState>()(
       incluirPrecioContado: false, // Por defecto NO muestra precio unitario
       tipoEntrega: "con_entrega",
       fechaInicioPago: "",
+      // Entrega inicial personalizada (Plan CUOTA) - 0 = estándar
+      entregaPersonalizada: 0,
       // Casco (descuento) - por defecto desactivado
       cascoAplicado: false,
       cascoValor: 0,
@@ -268,6 +279,9 @@ export const useCotizacionStore = create<CotizacionState>()(
 
       setFechaInicioPago: (fecha) => set({ fechaInicioPago: fecha }),
 
+      setEntregaPersonalizada: (v) =>
+        set({ entregaPersonalizada: Math.max(0, Math.round(v || 0)) }),
+
       setCascoAplicado: (v) => set({ cascoAplicado: v }),
 
       setCascoValor: (v) => set({ cascoValor: Math.max(0, v) }),
@@ -289,6 +303,7 @@ export const useCotizacionStore = create<CotizacionState>()(
           incluirPrecioContado: false,
           tipoEntrega: "con_entrega",
           fechaInicioPago: "",
+          entregaPersonalizada: 0,
           cascoAplicado: false,
           cascoValor: 0,
           cascoDescripcion: "",

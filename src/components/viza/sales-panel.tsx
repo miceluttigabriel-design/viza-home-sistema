@@ -250,6 +250,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
     setTipoEntrega,
     fechaInicioPago,
     setFechaInicioPago,
+    // === Entrega inicial personalizada (Plan CUOTA) ===
+    entregaPersonalizada,
+    setEntregaPersonalizada,
     // === Descuento por Casco ===
     // cascoAplicado NO se lee del store - es DERIVADO automáticamente
     cascoValor,
@@ -593,7 +596,41 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         calculado: true,
       };
     });
-    setCalculatedPlanes(resultados);
+
+    // === ENTREGA INICIAL PERSONALIZADA (cuadrito opcional) ===
+    // Si el vendedor define un valor de entrega distinto, la ENTRADA del plan
+    // (que por estándar es la 1ª cuota de la BD) pasa a ser ese monto y el
+    // resto (total del plan − entrega) se reparte entre las cuotas restantes.
+    // REGLA DE MARGEN: el TOTAL del plan se mantiene (entrega + cuotas =
+    // total estándar ± redondeo en Gs), así el margen de la BD queda intacto.
+    const entregaExtra =
+      mostrarConEntrega
+        ? Math.max(0, Math.round(entregaPersonalizada || 0))
+        : 0;
+    if (entregaExtra > 0) {
+      const minTotalPlan = Math.min(...resultados.map((r) => r.total));
+      if (entregaExtra >= minTotalPlan) {
+        toast.error(
+          `La entrega (GS ${entregaExtra.toLocaleString("es-PY")}) no puede superar el total del plan más chico (GS ${minTotalPlan.toLocaleString("es-PY")}).`
+        );
+        return;
+      }
+      const ajustados = resultados.map((r) => {
+        // Cuotas que quedan después de la entrada personalizada
+        const cuotasRestantes = Math.max(1, r.cuotas - 1);
+        const restante = Math.max(0, r.total - entregaExtra);
+        const valorPorCuotaAjust = Math.ceil(restante / cuotasRestantes);
+        return {
+          ...r,
+          valorPorCuota: valorPorCuotaAjust,
+          total: entregaExtra + valorPorCuotaAjust * cuotasRestantes,
+          calculado: true,
+        };
+      });
+      setCalculatedPlanes(ajustados);
+    } else {
+      setCalculatedPlanes(resultados);
+    }
 
     // Si es sin_entrega y válido, calcular también los planes ajustados
     // Ahora también se calcula cuando mostrarSinEntrega está activado
@@ -775,6 +812,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         // Flags para mostrar/ocultar opciones en el PDF
         mostrarConEntrega,
         mostrarSinEntrega,
+        // Entrega inicial personalizada (Gs) - solo aplica a planes CON ENTREGA
+        entregaPersonalizada: mostrarConEntrega
+          ? Math.max(0, Math.round(entregaPersonalizada || 0))
+          : 0,
         planes: planesForPdf,
         planesSinEntrega: planesSinEntregaForPdf,
       };
@@ -1554,6 +1595,41 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </label>
           </div>
 
+          {/* CUADRITO: VALOR DE ENTREGA INICIAL PERSONALIZADO (opcional) */}
+          {/* Solo visible cuando CON ENTREGA INICIAL está marcado. Si queda
+              vacío, se usa la entrada estándar (la 1ª cuota de la BD). Si el
+              vendedor pone un valor, la entrada pasa a ser ese monto y el
+              resto del total se reparte entre las cuotas restantes, sin
+              cambiar el total del plan (el margen queda intacto). */}
+          {mostrarConEntrega && (
+            <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50/60 p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+                <div>
+                  <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+                    Valor de la entrega inicial (Gs) — opcional
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={entregaPersonalizada || ""}
+                    onChange={(e) => {
+                      setEntregaPersonalizada(Number(e.target.value));
+                      resetCalculoEntrega();
+                    }}
+                    placeholder="Estándar del plan (1ª cuota)"
+                    className="w-full sm:w-64 h-12 px-3 rounded-lg border-2 border-stone-200 bg-white text-sm font-semibold focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 outline-none tabular-nums"
+                  />
+                </div>
+                <div className="text-[11px] text-stone-500 leading-relaxed sm:max-w-xs">
+                  Vacío = entrada estándar (la 1ª cuota del plan). Si ponés un
+                  valor, esa es la entrega y el resto se reparte entre las
+                  cuotas: el total del plan y el margen NO cambian.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* DatePicker y resumen - se muestra cuando SIN ENTREGA está marcado */}
           {mostrarSinEntrega && (
             <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
@@ -1603,6 +1679,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         {calcDone && calculatedPlanes.length > 0 && (
           <div id="resultado-section">
             <Section title="RESULTADO DEL PRESUPUESTO" icon={<FileText className="h-4 w-4" />}>
+              {/* ENTREGA INICIAL PERSONALIZADA - aviso cuando está activa */}
+              {mostrarConEntrega && Math.round(entregaPersonalizada || 0) > 0 && (
+                <div className="mb-3 rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-stone-800 uppercase tracking-wide">
+                    Entrega inicial incluida en cada plan
+                  </p>
+                  <p className="text-base font-extrabold tabular-nums text-emerald-700">
+                    {formatPYG(Math.round(entregaPersonalizada))}
+                  </p>
+                </div>
+              )}
               {/* Tabla comparativa de planes */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border border-stone-200 rounded-lg overflow-hidden">
@@ -1651,9 +1738,16 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                       const sinEntrega = calculatedPlanesSinEntrega.find(
                         (sp) => sp.id === p.id
                       );
+                      const entregaActiva =
+                        mostrarConEntrega &&
+                        Math.round(entregaPersonalizada || 0) > 0;
                       const cuotasLabelCon =
                         p.cuotas === 1
                           ? "1 pago"
+                          : entregaActiva
+                          ? `${p.cuotas - 1} CUOTA${
+                              p.cuotas - 1 !== 1 ? "S" : ""
+                            } (tras entrega)`
                           : `1 ENTRADA + ${p.cuotas - 1} CUOTA${
                               p.cuotas - 1 !== 1 ? "S" : ""
                             }`;

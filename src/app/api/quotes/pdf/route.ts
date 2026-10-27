@@ -67,6 +67,8 @@ interface PdfPayload {
   // Flags para mostrar/ocultar opciones en el presupuesto
   mostrarConEntrega?: boolean;
   mostrarSinEntrega?: boolean;
+  // Entrega inicial personalizada (Gs) - fila destacada propia cuando > 0
+  entregaPersonalizada?: number;
   planes: PdfPlan[];
   // Planes alternativos sin entrega inicial (solo si tipoEntrega === "sin_entrega")
   planesSinEntrega?: PdfPlanSinEntrega[] | null;
@@ -592,6 +594,46 @@ export async function POST(req: NextRequest) {
 
       // ===== CON ENTREGA (saltar si cuotas === 1) =====
       if (body.mostrarConEntrega !== false && body.planes) {
+        // === ENTREGA INICIAL PERSONALIZADA: fila destacada propia ===
+        // Si el vendedor definió una entrega inicial distinta a la 1ª cuota
+        // estándar, se muestra como fila propia arriba de los planes, y cada
+        // plan muestra solo las cuotas restantes (el total de cada plan ya
+        // viene ajustado: entrega + cuotas = total estándar ± redondeo Gs).
+        const entregaInicial = Math.max(
+          0,
+          Math.round(body.entregaPersonalizada || 0)
+        );
+        if (entregaInicial > 0) {
+          ensureSpace(rowH);
+          rowBase();
+          let ppE = margin + 10;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(12);
+          doc.setTextColor(...BLUE);
+          doc.text("E", ppE, y + 20);
+          ppE += pColBadge;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9.5);
+          doc.setTextColor(...DARK);
+          doc.text("ENTREGA INICIAL (al día de hoy)", ppE, y + 20);
+          ppE += pColCuotas;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(...GREY);
+          doc.text("Se descuenta del plan elegido", ppE, y + 20);
+          ppE += pColValor;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(11);
+          doc.setTextColor(...DARK);
+          doc.text(
+            formatPYG(entregaInicial),
+            margin + contentW - 10,
+            y + 20,
+            { align: "right" }
+          );
+          y += rowH;
+          rowIdx++;
+        }
         body.planes.forEach((plan) => {
           if (plan.cuotas === 1) return;
           ensureSpace(rowH);
@@ -606,7 +648,13 @@ export async function POST(req: NextRequest) {
           doc.setFont("helvetica", "normal");
           doc.setFontSize(9.5);
           doc.setTextColor(...DARK);
-          doc.text(`1 ENTRADA + ${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`, pp2, y + 20);
+          doc.text(
+            entregaInicial > 0
+              ? `${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""} (TRAS ENTREGA)`
+              : `1 ENTRADA + ${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`,
+            pp2,
+            y + 20
+          );
           pp2 += pColCuotas;
           doc.setFont("helvetica", "bold");
           doc.setFontSize(11);
