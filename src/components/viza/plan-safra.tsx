@@ -877,6 +877,17 @@ export function PlanSafra() {
                     (idx === pagosReales.length - 1
                       ? Math.round(totalIntereses)
                       : 0);
+                  // REDONDEO COMERCIAL: el PAGO FINAL (capital + interés)
+                  // también sale al millar superior (ej: 1.470.000 +
+                  // 36.640 = 1.506.640 → 1.507.000), igual que en el PDF.
+                  // Excepción: si la única fila es la ENTRADA (sin
+                  // refuerzos), se muestra el valor exacto sin tocar.
+                  const esEntradaUnica =
+                    pagosReales.length === 1 && pagosReales[0].mes === 0;
+                  const valorMostrado =
+                    idx === pagosReales.length - 1 && !esEntradaUnica
+                      ? Math.ceil(Math.max(0, valorConInteres) / 1000) * 1000
+                      : valorConInteres;
                   return (
                     <div key={idx} className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${esEntrada ? "bg-emerald-50 border-emerald-200" : "bg-stone-50 border-stone-200"}`}>
                       <div className="flex items-center gap-3">
@@ -891,7 +902,7 @@ export function PlanSafra() {
                         </div>
                       </div>
                       <p className="text-sm font-bold text-stone-900 tabular-nums whitespace-nowrap">
-                        {formatPYG(valorConInteres)}
+                        {formatPYG(valorMostrado)}
                       </p>
                     </div>
                   );

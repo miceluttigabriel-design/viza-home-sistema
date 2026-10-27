@@ -412,6 +412,27 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   // también es válido. Lo que NO es válido es saldo positivo (falta pagar).
   const cuadra = saldoActual <= 1;
 
+  // === PAGO FINAL COMERCIAL (REDONDEO AL MILLAR) ===
+  // El panel y el PDF muestran el interés acumulado del plan sumado al
+  // ÚLTIMO pago (PAGO FINAL). Ese valor final TAMBIÉN debe salir al millar
+  // superior (ej: 1.470.000 capital + 36.640 interés = 1.506.640 →
+  // 1.507.000), para no mostrar nunca Gs quebrados.
+  // El Total del Plan pasa a ser la suma REAL de las filas mostradas:
+  // entrada + refuerzos + pago final redondeado (con interés incluido).
+  const filasConPago = cronograma.filter((f) => f.pago > 0);
+  const ultimaFilaPago = filasConPago.length > 0
+    ? filasConPago[filasConPago.length - 1]
+    : null;
+  // Si la única fila con pago es la ENTRADA (sin refuerzos), no se toca:
+  // la entrada es valor cargado por el vendedor y se muestra exacta.
+  const esEntradaUnica = filasConPago.length === 1 && ultimaFilaPago?.mes === 0;
+  const aplicaRedondeoFinal = !!ultimaFilaPago && !esEntradaUnica;
+  const interesesRedondeados = Math.round(totalIntereses);
+  const pagoFinalCapital = aplicaRedondeoFinal ? ultimaFilaPago.pago : 0;
+  const pagoFinalComercial = aplicaRedondeoFinal
+    ? redondeoComercial(pagoFinalCapital + interesesRedondeados)
+    : 0;
+
   return {
     // v2.0 FIX: NO devolver refuerzos aquí para evitar loop infinito
     cronograma,
@@ -420,11 +441,16 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     descuentoCasco,
     cascoError: cascoAplicado && !cascoValido,
     totalIntereses: Math.round(totalIntereses),
-    // Total del Plan = lo que el cliente paga EN REALIDAD (entrada +
-    // refuerzos redondeados). Con el redondeo comercial puede superar por
-    // unos Gs al contado + intereses teórico: se muestra el real (más
-    // alto), así el total SIEMPRE coincide con la suma del cronograma.
-    totalPlan: Math.round(Math.max(totalContado + totalIntereses, totalPagos)),
+    // Total del Plan = suma de las filas COMERCIALES que se muestran en
+    // pantalla y PDF (entrada + refuerzos + PAGO FINAL con interés, al
+    // millar superior). Así el total SIEMPRE coincide con la suma de las
+    // filas y el cliente nunca ve Gs quebrados. El redondeo solo puede
+    // subir el total unos Gs (jamás de menos).
+    totalPlan: Math.round(
+      aplicaRedondeoFinal
+        ? totalPagos - pagoFinalCapital + pagoFinalComercial
+        : Math.max(totalContado + interesesRedondeados, totalPagos)
+    ),
     saldoFinal: Math.round(saldoActual), // puede ser negativo si se pasa
     totalPagado6Meses,
     cumple50,
