@@ -857,6 +857,16 @@ export function PlanSafra() {
               <div className="space-y-2 mb-4">
                 {pagosReales.map((c, idx) => {
                   const esEntrada = c.mes === 0;
+                  // FIX: el interés acumulado del plan se cobra con el ÚLTIMO
+                  // pago (PAGO FINAL). Así la suma de las filas = TOTAL DEL
+                  // PLAN (pagos + intereses). Antes cada fila mostraba solo
+                  // el valor principal (sin interés) y no cuadraba con el
+                  // total. El cálculo interno (saldo/cuadre) NO cambia.
+                  const valorConInteres =
+                    c.pago +
+                    (idx === pagosReales.length - 1
+                      ? Math.round(totalIntereses)
+                      : 0);
                   return (
                     <div key={idx} className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${esEntrada ? "bg-emerald-50 border-emerald-200" : "bg-stone-50 border-stone-200"}`}>
                       <div className="flex items-center gap-3">
@@ -871,7 +881,7 @@ export function PlanSafra() {
                         </div>
                       </div>
                       <p className="text-sm font-bold text-stone-900 tabular-nums whitespace-nowrap">
-                        {formatPYG(c.pago)}
+                        {formatPYG(valorConInteres)}
                       </p>
                     </div>
                   );

@@ -375,14 +375,21 @@ export async function POST(req: NextRequest) {
     //  con valor 0 porque el cálculo real queda solo dentro del cronograma.)
     // Se muestran solo los pagos reales (pago > 0), igual que en el panel.
     const filasPago = (body.cronograma || []).filter((c) => c.pago > 0);
+    // FIX: el interés acumulado del plan (body.totalIntereses) se muestra
+    // sumado al ÚLTIMO pago (PAGO FINAL), igual que en el panel. Así la suma
+    // de las filas de la tabla coincide con el "TOTAL DEL PLAN SAFRA" del
+    // cuadro final. Antes cada fila mostraba solo el valor principal
+    // (sin interés) y no cuadraba con el total.
+    const totalInteresCrono = Math.round(body.totalIntereses || 0);
+    const lastPagoIdx = filasPago.length - 1;
 
-    filasPago.forEach((c) => {
+    filasPago.forEach((c, idx) => {
       const esEntrada = c.mes === 0;
       const esPagoFinal = (c.concepto || "").toUpperCase() === "PAGO FINAL";
       drawCronoRow(
         esEntrada ? "ENTRADA INICIAL" : (c.concepto || "REFUERZO").toUpperCase(),
         c.fecha || "",
-        c.pago,
+        c.pago + (idx === lastPagoIdx ? totalInteresCrono : 0),
         esEntrada || esPagoFinal
       );
     });
