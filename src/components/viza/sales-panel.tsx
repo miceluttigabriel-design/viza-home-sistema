@@ -979,14 +979,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             </button>
           </div>
         </div>
+      </header>
 
-      {/* Modal: Cambiar mi contraseña (visible para todos los roles autenticados) */}
+      {/* Modal: Cambiar mi contraseña (visible para todos los roles autenticados)
+          IMPORTANTE: este modal vive FUERA del <header> (hermano, en la raíz).
+          El header usa backdrop-blur y backdrop-filter crea un "containing
+          block" para position:fixed: si el modal quedara dentro, su fixed
+          inset-0 se calcularía contra el header y el cuadro saldría cortado
+          (mismo bug del modal CRM, ya corregido). En gestion-accesos.tsx se
+          monta fuera del header, por eso allí nunca se cortó. */}
       <CambiarContrasena
         email={user.email}
         open={cambiarContrasenaOpen}
         onClose={() => setCambiarContrasenaOpen(false)}
       />
-      </header>
 
       {/* ══════════════════════════════════════════════════════════════
           MODAL CRM · MI SUCURSAL (solo encargados de sucursal)
