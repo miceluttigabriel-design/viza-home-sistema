@@ -19,6 +19,7 @@ import {
   Gift,
   AlertTriangle,
   KeyRound,
+  BarChart3,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ import { PlanCheque } from "./plan-cheque";
 import { PlanMayorista } from "./plan-mayorista";
 import { CostoInterno, extractCosto } from "./costo-interno";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
+import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
 // momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
@@ -162,12 +164,52 @@ interface SalesPanelProps {
   isSupremo?: boolean;
 }
 
+// ─── CRM DE MI SUCURSAL (panel de ventas, solo encargados) ───
+// Una fila del ranking que devuelve GET /api/crm/ranking en modo encargado:
+// SOLO los usuarios de SU sucursal y SOLO LECTURA (sin select de sucursal,
+// sin filtros y sin datos de las demás sucursales).
+interface CrmFilaSucursal {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  sucursal: string;
+  total: number;
+  aprobadas: number;
+  ultimo: string | null;
+}
+
+// Fecha corta DD/MM/AA para la columna "último" del CRM
+const fmtFechaCortaCrmSuc = (iso: string | null): string => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
+};
+
+// Medallas 1°/2°/3° del podio (mismo estilo que el CRM del admin)
+const medalStyleSuc = (pos: number): { bg: string; fg: string } | null =>
+  pos === 1
+    ? { bg: "#FFD700", fg: "#6b5200" }
+    : pos === 2
+    ? { bg: "#C0C0C0", fg: "#3f3f3f" }
+    : pos === 3
+    ? { bg: "#CD7F32", fg: "#fff7ed" }
+    : null;
+
 export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPanelProps) {
   // El rol define qué botones de navegación se muestran, NO la vista actual.
   // REGLA DE ORO: el menú depende del ROL del usuario, no de la pantalla.
   // El supremo admin es supremo admin en TODAS las pantallas (admin, ventas, gestión).
   const isAdmin = user.role === "admin" || user.role === "supremo_admin";
   const isSupremoRole = user.role === "supremo_admin";
+  // Encargado de sucursal: ve el CRM de SU sucursal en el panel de ventas
+  // (lista estática ENCARGADOS_SUCURSAL; los admins usan el CRM del panel BASE).
+  const sucursalDelEncargado =
+    ENCARGADOS_SUCURSAL[user.email.trim().toLowerCase()] ?? null;
+  const esEncargadoCrm = !!sucursalDelEncargado && !isAdmin;
 
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -178,6 +220,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
   const [viewMode, setViewMode] = useState<"cotizador" | "safra" | "cheque" | "mayorista">("cotizador");
   // Modal: cambiar mi propia contraseña (visible para todos los roles)
   const [cambiarContrasenaOpen, setCambiarContrasenaOpen] = useState(false);
+  // CRM de mi sucursal (solo encargados): ranking de presupuestos SOLO LECTURA
+  const [crmAbierto, setCrmAbierto] = useState(false);
+  const [crmCargando, setCrmCargando] = useState(false);
+  const [crmFilas, setCrmFilas] = useState<CrmFilaSucursal[]>([]);
+  const [crmTotalSucursal, setCrmTotalSucursal] = useState(0);
+  const [crmSucursalVista, setCrmSucursalVista] = useState<string | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -243,6 +291,34 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
     const hora = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     return `${fecha} - ${hora}`;
   };
+
+  // ─── CRM de mi sucursal: abre el modal y trae el ranking (una llamada) ───
+  // La API recorta todo a la sucursal del encargado (vistaSucursal). Si algo
+  // falla, solo se cierra el modal con un aviso: nada más se ve afectado.
+  const abrirCrmSucursal = useCallback(async () => {
+    setCrmAbierto(true);
+    setCrmCargando(true);
+    try {
+      const res = await fetch("/api/crm/ranking");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || `Error ${res.status}`);
+      }
+      setCrmFilas(Array.isArray(data.ranking) ? data.ranking : []);
+      setCrmTotalSucursal(Number(data.totalGeneral) || 0);
+      setCrmSucursalVista(
+        typeof data.vistaSucursal === "string" && data.vistaSucursal
+          ? data.vistaSucursal
+          : sucursalDelEncargado
+      );
+    } catch (error) {
+      console.error("Error CRM sucursal:", error);
+      toast.error(`CRM: ${(error as Error).message}`);
+      setCrmAbierto(false);
+    } finally {
+      setCrmCargando(false);
+    }
+  }, [sucursalDelEncargado]);
 
   // Buscar productos
   const searchProducts = useCallback(async (q: string) => {
@@ -784,6 +860,21 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 <span>BASE</span>
               </button>
             )}
+            {/* CRM de MI SUCURSAL: solo para encargados de sucursal (ve su
+                sucursal, solo lectura). Los admins ya tienen el CRM completo
+                en el panel BASE; para habilitar otra sucursal alcanza con
+                agregar al encargado en src/lib/encargados-sucursal.ts. */}
+            {esEncargadoCrm && (
+              <button
+                onClick={abrirCrmSucursal}
+                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110 shrink-0"
+                style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO }}
+                title={`CRM · Presupuestos de mi sucursal${sucursalDelEncargado ? ` (${sucursalDelEncargado})` : ""}`}
+                aria-label="CRM de mi sucursal"
+              >
+                CRM
+              </button>
+            )}
             {/* === TOGGLE MODO COTIZADOR / PLAN SAFRA / CON CHEQUE (al lado de BASE) === */}
             <button
               onClick={() => setViewMode("cotizador")}
@@ -878,6 +969,147 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         open={cambiarContrasenaOpen}
         onClose={() => setCambiarContrasenaOpen(false)}
       />
+
+      {/* ══════════════════════════════════════════════════════════════
+          MODAL CRM · MI SUCURSAL (solo encargados de sucursal)
+          - Ranking de presupuestos SOLO de su sucursal, SOLO LECTURA
+          - Sin select de sucursal, sin filtros y sin datos de las demás
+          ══════════════════════════════════════════════════════════════ */}
+      {crmAbierto && (() => {
+        const filas = [...crmFilas].sort(
+          (a, b) =>
+            b.total - a.total ||
+            b.aprobadas - a.aprobadas ||
+            a.name.localeCompare(b.name, "es")
+        );
+        const sumaVista = filas.reduce((acc, f) => acc + f.total, 0);
+        const aprobadasVista = filas.reduce((acc, f) => acc + f.aprobadas, 0);
+        return (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => setCrmAbierto(false)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header azul */}
+              <div
+                className="px-6 py-4 flex items-center justify-between border-b shrink-0"
+                style={{ borderColor: "#e7d9a8", background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+              >
+                <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  CRM · PRESUPUESTOS{crmSucursalVista ? ` · ${crmSucursalVista}` : ""}
+                </h3>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-white/15 text-white text-xs font-bold">
+                    TOTAL EMITIDOS: {crmTotalSucursal}
+                  </span>
+                  <button
+                    onClick={() => setCrmAbierto(false)}
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                    title="Cerrar"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabla del ranking (solo lectura) */}
+              <div className="flex-1 overflow-auto">
+                {crmCargando ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <div className="h-10 w-10 rounded-full border-4 border-stone-200 border-t-[#155789] animate-spin"></div>
+                    <p className="text-sm text-stone-600 font-medium">Calculando ranking…</p>
+                  </div>
+                ) : filas.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-2 text-center px-6">
+                    <BarChart3 className="h-10 w-10 text-stone-300" />
+                    <p className="text-sm font-semibold text-stone-600">
+                      Sin presupuestos de {crmSucursalVista || "tu sucursal"} todavía
+                    </p>
+                    <p className="text-xs text-stone-400 max-w-sm">
+                      Cuando se emitan presupuestos en tu sucursal aparecen acá solos.
+                    </p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-stone-100 border-b border-stone-200">
+                      <tr className="text-[11px] uppercase tracking-wide text-stone-500">
+                        <th className="px-3 py-2 text-left w-12">Pos</th>
+                        <th className="px-3 py-2 text-left">Usuario</th>
+                        <th className="px-3 py-2 text-center w-24">Emitidos</th>
+                        <th className="px-3 py-2 text-center w-24">Aprobadas</th>
+                        <th className="px-3 py-2 text-center w-20">Último</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filas.map((f, i) => {
+                        const pos = i + 1;
+                        const medal = medalStyleSuc(pos);
+                        return (
+                          <tr key={f.id} className={i % 2 === 0 ? "bg-white" : "bg-stone-50"}>
+                            <td className="px-3 py-2">
+                              {medal ? (
+                                <span
+                                  className="inline-flex items-center justify-center h-6 w-8 rounded-lg text-xs font-bold shadow-sm"
+                                  style={{ background: medal.bg, color: medal.fg }}
+                                  title={pos === 1 ? "1° del ranking" : pos === 2 ? "2° del ranking" : "3° del ranking"}
+                                >
+                                  {pos}°
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center h-6 w-8 text-xs font-semibold text-stone-400">
+                                  {pos}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="font-semibold text-stone-800 truncate flex items-center gap-1.5">
+                                {f.name}
+                                {!f.active && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-stone-200 text-stone-500 shrink-0">
+                                    INACTIVO
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-stone-400 truncate">{f.email}</div>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className="text-base font-extrabold text-stone-800">{f.total}</span>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`text-sm font-bold ${f.aprobadas > 0 ? "text-green-700" : "text-stone-300"}`}>
+                                {f.aprobadas}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-center text-xs text-stone-500">
+                              {fmtFechaCortaCrmSuc(f.ultimo)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Pie: resumen de su sucursal */}
+              <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600">
+                <span className="font-bold text-stone-700">{crmSucursalVista || "MI SUCURSAL"}</span>
+                <span>
+                  {sumaVista} presupuesto{sumaVista !== 1 ? "s" : ""} emitido{sumaVista !== 1 ? "s" : ""}
+                  {" · "}
+                  {aprobadasVista} aprobada{aprobadasVista !== 1 ? "s" : ""}
+                  {" · "}
+                  {filas.length} usuario{filas.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       </header>
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">

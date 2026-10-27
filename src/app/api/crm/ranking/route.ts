@@ -8,10 +8,16 @@ import {
   sembrarDesdeExcel,
   migrarCentralKatuete,
 } from "@/lib/sucursal-usuario";
+import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
 
 // GET /api/crm/ranking — CRM: ranking de presupuestos emitidos por usuario.
-// Devuelve el ranking GENERAL (el front lo filtra por sucursal con pills).
-// SOLO admin / supremo_admin (los colaboradores no ven el CRM).
+// DOS formas de entrar:
+//   · admin / supremo_admin → ranking GENERAL con todas las sucursales
+//     (el front lo filtra con pills) — igual que siempre.
+//   · ENCARGADO de sucursal (lista ENCARGADOS_SUCURSAL, ver
+//     src/lib/encargados-sucursal.ts) → SOLO el ranking de SU sucursal,
+//     sin datos de las demás y con el total recortado a su sucursal.
+//   · cualquier otro usuario → 403 (no ve el CRM).
 //
 // SOLO LECTURA: nunca crea, edita ni borra presupuestos, usuarios ni
 // productos. La única escritura posible es la SIEMBRA automática de la
@@ -24,7 +30,14 @@ export async function GET() {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
     const role = (session.user as any)?.role;
-    if (role !== "admin" && role !== "supremo_admin") {
+    const isAdmin = role === "admin" || role === "supremo_admin";
+    // Encargado de sucursal (panel de ventas): entra con el CRM de SU
+    // sucursal, SOLO LECTURA. La clave es el email de la sesión en minúscula.
+    const emailSesion = (session.user?.email || "").trim().toLowerCase();
+    const sucursalEncargado = isAdmin
+      ? null
+      : (ENCARGADOS_SUCURSAL[emailSesion] ?? null);
+    if (!isAdmin && !sucursalEncargado) {
       return NextResponse.json({ error: "Sin permiso para el CRM" }, { status: 403 });
     }
 
@@ -101,6 +114,25 @@ export async function GET() {
           b.aprobadas - a.aprobadas ||
           a.name.localeCompare(b.name, "es")
       );
+
+    // ─── Vista ENCARGADO: solo SU sucursal, sin datos de las demás ───
+    // Mismo ranking ya calculado, recortado a su sucursal. El total que ve
+    // también es solo de su sucursal (nunca el total de la empresa).
+    if (sucursalEncargado) {
+      const rankingSucursal = ranking.filter(
+        (r) => r.sucursal === sucursalEncargado
+      );
+      const totalSucursal = rankingSucursal.reduce(
+        (acc, r) => acc + r.total,
+        0
+      );
+      return NextResponse.json({
+        ranking: rankingSucursal,
+        sucursales: [], // sin filtros: solo ve su sucursal
+        totalGeneral: totalSucursal,
+        vistaSucursal: sucursalEncargado,
+      });
+    }
 
     return NextResponse.json({
       ranking,
