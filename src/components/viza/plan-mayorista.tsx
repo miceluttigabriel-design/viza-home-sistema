@@ -350,6 +350,13 @@ export function PlanMayorista() {
                             {p.name}
                           </p>
                           <p className="text-xs text-stone-500">SKU: {p.sku}</p>
+                          {/* #HASHTAG (promo del admin) */}
+                          {p.hashtag?.valor ? (
+                            <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>
+                              #{Number(p.hashtag.valor).toLocaleString("es-PY")} GS
+                              {p.hashtag.fecha ? ` valido hasta ${p.hashtag.fecha.split("-").reverse().join("/")}` : ""}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
@@ -369,6 +376,13 @@ export function PlanMayorista() {
                             {p.name}
                           </p>
                           <p className="text-xs text-stone-500">SKU: {p.sku}</p>
+                          {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026" */}
+                          {p.hashtag?.valor ? (
+                            <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>
+                              #{Number(p.hashtag.valor).toLocaleString("es-PY")} GS
+                              {p.hashtag.fecha ? ` valido hasta ${p.hashtag.fecha.split("-").reverse().join("/")}` : ""}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span
