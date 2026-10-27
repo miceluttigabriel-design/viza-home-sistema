@@ -80,13 +80,24 @@ function roleBadge(role: string): { label: string; cls: string; icon: string } {
   if (role === "admin") {
     return { label: "ADMIN", cls: "bg-sky-100 text-sky-800 border-sky-300", icon: "🛡️" };
   }
-  // Compat hacia atrás: representante → colaborador
-  return { label: "COLABORADOR", cls: "bg-stone-100 text-stone-700 border-stone-300", icon: "👤" };
+  // Compat hacia atrás: representante → colaborador. Etiqueta visible con el
+  // vocabulario del dueño (Supremo / Admin / Común); el rol en la base no cambia.
+  return { label: "COMÚN", cls: "bg-stone-100 text-stone-700 border-stone-300", icon: "👤" };
 }
 
 function formatPYG(n: number | null | undefined): string {
   const v = Number(n ?? 0);
   return "Gs " + Math.round(v).toLocaleString("es-PY");
+}
+
+// ─── TIPO DE USUARIO (vocabulario del dueño: Supremo / Admin / Común) ───
+// Es SOLO la etiqueta visible del rol guardado en la base: supremo_admin →
+// SUPREMO, admin → ADMIN, colaborador/representante → COMÚN. No cambia
+// ningún dato, permiso ni consulta.
+function tipoUsuario(role: string): string {
+  if (role === "supremo_admin") return "SUPREMO";
+  if (role === "admin") return "ADMIN";
+  return "COMÚN";
 }
 
 // ─── SUCURSALES para dividir la tabla de usuarios (pedido del dueño) ───
@@ -101,6 +112,118 @@ const SIN_SUCURSAL = "SIN SUCURSAL";
 function sucursalDe(u: Usuario): string {
   const v = (u.sucursal || "").trim().toUpperCase();
   return v || SIN_SUCURSAL;
+}
+
+// ─── SECTOR POR USUARIO (planilla oficial FUN.VIZA, columna "Dtpo. LABORAL") ───
+// Pedido del dueño: categorizar cada usuario por el sector que tiene la
+// planilla de funcionarios (VENTAS, CAJA, COBRANZA, GERENTE, etc.),
+// coincidiendo el EMAIL. Es SOLO REFERENCIA de lectura en el cliente:
+// NO se guarda en la base, NO cambia el modelo User, NO toca ninguna API.
+// Si un email no está en la planilla (ej. usuarios creados a mano con
+// correo personal) se muestra "GENERAL". Cero riesgo para el sistema.
+const SECTOR_GENERAL = "GENERAL";
+
+// Orden fijo de los sectores conocidos (directorio primero, ventas después,
+// generales de oficina al medio). Los que no estén acá van alfabéticos y
+// GENERAL siempre al final.
+const SECTORES_ORDEN = [
+  "DIRECTORIO",
+  "GERENTE ADMINISTRATIVO",
+  "GERENTE",
+  "CONTABILIDAD",
+  "FINANCIERO",
+  "RR.HH",
+  "AUDITORIA",
+  "STOCK",
+  "DOCUMENTOS",
+  "CREDITO",
+  "COBRANZA",
+  "CAJA",
+  "FACTURACION",
+  "DEPOSITO",
+  "VENTAS",
+  "VENTAS ONLINE",
+  "MARKETING",
+  "ARTES VISUAL",
+  "REDES SOCIALES",
+  "WEB",
+  "SERCOM",
+] as const;
+
+const MAPA_SECTOR_EXCEL: Record<string, string> = {
+  // DIRECTORIO (Representante Legal, Directores y cónyuges — planilla CENTRAL)
+  "viza@viza.com.py": "DIRECTORIO",
+  "juliane@viza.com.py": "DIRECTORIO",
+  "larazago@viza.com.py": "DIRECTORIO",
+  "juliozago@viza.com.py": "DIRECTORIO",
+  "filipe.campos@viza.com.py": "DIRECTORIO",
+  "julianamoleiro@viza.com.py": "DIRECTORIO",
+  // Gerencias
+  "baltazar@viza.com.py": "GERENTE ADMINISTRATIVO",
+  "jeyson@viza.com.py": "GERENTE",
+  "danwillian@viza.com.py": "GERENTE",
+  "antonio.fagner@viza.com.py": "GERENTE",
+  "librado@viza.com.py": "GERENTE",
+  // Administración central (planilla CENTRAL)
+  "contabilidad@viza.com.py": "CONTABILIDAD",
+  "sac@viza.com.py": "FINANCIERO",
+  "rrhh@viza.com.py": "RR.HH",
+  "auditoria.stock@viza.com.py": "STOCK",
+  "auditoria@viza.com.py": "AUDITORIA",
+  "documentos@viza.com.py": "DOCUMENTOS",
+  "credito@viza.com.py": "CREDITO",
+  "credito1@viza.com.py": "CREDITO",
+  "viza.cobranza@viza.com.py": "COBRANZA",
+  "factura@viza.com.py": "FACTURACION",
+  "ventas.online@viza.com.py": "VENTAS ONLINE",
+  "viza.marketing@viza.com.py": "MARKETING",
+  "viza.artes@viza.com.py": "ARTES VISUAL",
+  "viza.redes@viza.com.py": "REDES SOCIALES",
+  "viza.web@viza.com.py": "WEB",
+  "sercom@viza.com.py": "SERCOM",
+  // KATUETE
+  "caja.katuete@viza.com.py": "CAJA",
+  "fact.katuete@viza.com.py": "FACTURACION",
+  "deposito.katuete@viza.com.py": "DEPOSITO",
+  "cobranza.katuete@viza.com.py": "COBRANZA",
+  "ventas.rafael@viza.com.py": "VENTAS",
+  "ventas.carla@viza.com.py": "VENTAS",
+  "ventas.emmanuel@viza.com.py": "VENTAS",
+  "ventas.paola@viza.com.py": "VENTAS",
+  "ventas.richard@viza.com.py": "VENTAS",
+  // LA PALOMA
+  "caja.paloma@viza.com.py": "CAJA",
+  "fac.paloma@viza.com.py": "FACTURACION",
+  "deposito.paloma@viza.com.py": "DEPOSITO",
+  "cobranza.paloma@viza.com.py": "COBRANZA",
+  "ventas.alvaliz@viza.com.py": "VENTAS",
+  "ventas.camila@viza.com.py": "VENTAS",
+  "ventas.giceli@viza.com.py": "VENTAS",
+  "venta.ana@viza.com.py": "VENTAS",
+  "ventas.victor@viza.com.py": "VENTAS",
+  // NUEVA ESPERANZA
+  "caja.ne@viza.com.py": "CAJA",
+  "fac.ne@viza.com.py": "FACTURACION",
+  "deposito.ne@viza.com.py": "DEPOSITO",
+  "cobranza.ne@viza.com.py": "COBRANZA",
+  "ventas.madelin@viza.com.py": "VENTAS",
+  "ventas.adriano@viza.com.py": "VENTAS",
+  "ventas.michael@viza.com.py": "VENTAS",
+  "ventas.nueva@viza.com.py": "VENTAS",
+  // SALTOS DEL GUAIRA
+  "caja.saltos@viza.com.py": "CAJA",
+  "fac.saltos@viza.com.py": "FACTURACION",
+  "deposito.saltos@viza.com.py": "DEPOSITO",
+  "cobranza.saltos@viza.com.py": "COBRANZA",
+  "ventas.rolando@viza.com.py": "VENTAS",
+  "ventas.hector@viza.com.py": "VENTAS",
+  "ventas.gustavo@viza.com.py": "VENTAS",
+  "ventas.yessica@viza.com.py": "VENTAS",
+};
+
+// Sector de un usuario según la planilla (coincidencia por email).
+function sectorDe(u: Usuario): string {
+  return MAPA_SECTOR_EXCEL[u.email.trim().toLowerCase()] || SECTOR_GENERAL;
 }
 
 export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosProps) {
@@ -339,48 +462,67 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
     lines.push("  Fecha: " + formatDatePY(new Date().toISOString()));
     lines.push("================================================================================");
     lines.push("");
+    lines.push("  ORGANIZACIÓN: SUCURSAL → SECTOR (planilla FUN.VIZA) → usuarios.");
+    lines.push("  TIPO DE USUARIO: SUPREMO = acceso total · ADMIN = Admin + Ventas · COMÚN = solo Ventas.");
+    lines.push("");
 
-    const supremos = usuarios.filter((u) => u.role === "supremo_admin");
-    const admins = usuarios.filter((u) => u.role === "admin");
-    const reps = usuarios.filter((u) => u.role === "colaborador" || u.role === "representante");
+    // ── Agrupar TODOS los usuarios por sucursal (mismo orden del panel) ──
+    const gruposSuc = new Map<string, Usuario[]>();
+    for (const u of usuarios) {
+      const k = sucursalDe(u);
+      const arr = gruposSuc.get(k);
+      if (arr) arr.push(u);
+      else gruposSuc.set(k, [u]);
+    }
+    const sucConocidas = SUCURSALES_GDA.filter((s) => gruposSuc.has(s));
+    const sucExtras = Array.from(gruposSuc.keys())
+      .filter((n) => n !== SIN_SUCURSAL && !(SUCURSALES_GDA as readonly string[]).includes(n))
+      .sort();
+    const ordenSuc = [...sucConocidas, ...sucExtras, ...(gruposSuc.has(SIN_SUCURSAL) ? [SIN_SUCURSAL] : [])];
 
-    if (supremos.length) {
-      lines.push("👑 SUPREMO ADMINISTRADOR (Acceso Total + Gestión de Contraseñas)");
-      lines.push("  ─ PUEDE VER Y RESETEAR TODAS LAS CONTRASEÑAS DESDE EL PANEL ─");
-      lines.push("-".repeat(80));
-      for (const u of supremos) {
-        lines.push(`  Email:        ${u.email}`);
-        lines.push(`  Contraseña:   ${u.contrasenaActual}`);
-        lines.push(`  Nombre:       ${u.name}`);
-        lines.push("");
+    // ── Dentro de cada sucursal: subgrupos por SECTOR (planilla FUN.VIZA) ──
+    for (const suc of ordenSuc) {
+      const grupo = gruposSuc.get(suc)!;
+      lines.push("================================================================================");
+      lines.push(`  SUCURSAL: ${suc} · ${grupo.length} ${grupo.length === 1 ? "USUARIO" : "USUARIOS"}`);
+      lines.push("================================================================================");
+
+      const gruposSec = new Map<string, Usuario[]>();
+      for (const u of grupo) {
+        const k = sectorDe(u);
+        const arr = gruposSec.get(k);
+        if (arr) arr.push(u);
+        else gruposSec.set(k, [u]);
       }
+      const secConocidos = SECTORES_ORDEN.filter((s) => gruposSec.has(s));
+      const secExtras = Array.from(gruposSec.keys())
+        .filter((n) => n !== SECTOR_GENERAL && !(SECTORES_ORDEN as readonly string[]).includes(n))
+        .sort();
+      const ordenSec = [...secConocidos, ...secExtras, ...(gruposSec.has(SECTOR_GENERAL) ? [SECTOR_GENERAL] : [])];
+
+      for (const sec of ordenSec) {
+        lines.push("");
+        lines.push(`  » SECTOR: ${sec} · ${gruposSec.get(sec)!.length} ${gruposSec.get(sec)!.length === 1 ? "usuario" : "usuarios"}`);
+        lines.push("-".repeat(80));
+        for (const u of gruposSec.get(sec)!) {
+          lines.push(`    Email:        ${u.email}`);
+          lines.push(`    Contraseña:   ${u.contrasenaActual}`);
+          lines.push(`    Nombre:       ${u.name || "—"}`);
+          lines.push(`    Tipo:         ${tipoUsuario(u.role)}`);
+          lines.push("");
+        }
+      }
+      lines.push("");
     }
 
-    if (admins.length) {
-      lines.push("🛡️ USUARIOS ADMIN (Acceso Total: Admin + Ventas)");
-      lines.push("-".repeat(80));
-      for (const u of admins) {
-        lines.push(`  ${u.email.padEnd(40)} | ${u.contrasenaActual}`);
-        lines.push(`  ${u.name}`);
-        lines.push("");
-      }
-    }
-
-    if (reps.length) {
-      lines.push("👥 USUARIOS COLABORADORES (Solo Ventas - No Acceden al Panel Admin)");
-      lines.push("-".repeat(80));
-      for (const u of reps) {
-        lines.push(`  ${u.email.padEnd(40)} | ${u.contrasenaActual}`);
-        lines.push(`  ${u.name}`);
-        lines.push("");
-      }
-    }
-
+    // ── Totales: por tipo y por sucursal ──
+    const nSupremos = usuarios.filter((u) => u.role === "supremo_admin").length;
+    const nAdmins = usuarios.filter((u) => u.role === "admin").length;
+    const nComunes = usuarios.filter((u) => u.role === "colaborador" || u.role === "representante").length;
     lines.push("================================================================================");
     lines.push(`  TOTAL: ${usuarios.length} usuarios`);
-    lines.push(`    Supremo Admin:  ${supremos.length}`);
-    lines.push(`    Admin:          ${admins.length}`);
-    lines.push(`    Colaborador:    ${reps.length}`);
+    lines.push(`    Por tipo:      Supremo: ${nSupremos} · Admin: ${nAdmins} · Común: ${nComunes}`);
+    lines.push(`    Por sucursal:  ${ordenSuc.map((s) => `${s}: ${gruposSuc.get(s)!.length}`).join(" · ")}`);
     lines.push("================================================================================");
 
     const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
@@ -580,10 +722,36 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           </div>
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
             <div className="flex items-center gap-2 text-stone-600 text-[11px] uppercase font-semibold tracking-wide">
-              👤 COLABORADOR
+              👤 COMÚN
             </div>
             <p className="text-3xl font-black text-stone-700 mt-1">
               {usuarios.filter((u) => u.role === "colaborador" || u.role === "representante").length}
+            </p>
+          </div>
+        </div>
+
+        {/* USUARIOS POR SUCURSAL: tarjetas de resumen (pedido del dueño, Task 75).
+            Cuenta sobre TODOS los usuarios (igual que la tarjeta TOTAL). */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {SUCURSALES_GDA.map((s) => (
+            <div key={s} className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
+              <div
+                className="flex items-center gap-1.5 text-[11px] uppercase font-semibold tracking-wide"
+                style={{ color: "#b89853" }}
+              >
+                <MapPin className="h-3.5 w-3.5" /> {s}
+              </div>
+              <p className="text-3xl font-black text-stone-900 mt-1">
+                {usuarios.filter((u) => sucursalDe(u) === s).length}
+              </p>
+            </div>
+          ))}
+          <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
+            <div className="flex items-center gap-1.5 text-[11px] uppercase font-semibold tracking-wide text-stone-400">
+              <MapPin className="h-3.5 w-3.5" /> {SIN_SUCURSAL}
+            </div>
+            <p className="text-3xl font-black text-stone-400 mt-1">
+              {usuarios.filter((u) => sucursalDe(u) === SIN_SUCURSAL).length}
             </p>
           </div>
         </div>
@@ -609,7 +777,8 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
             <option value="todos">TODOS</option>
             <option value="supremo_admin">SUPREMO ADMIN</option>
             <option value="admin">ADMIN</option>
-            <option value="colaborador">COLABORADOR</option>
+            {/* Etiqueta con el vocabulario del dueño; el valor "colaborador" es el rol real en la base. */}
+            <option value="colaborador">COMÚN</option>
           </select>
 
           {/* Filtro por SUCURSAL: divide la tabla por sucursal (pedido del dueño). */}
@@ -713,7 +882,10 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
                 <tr style={{ backgroundColor: "#155789" }} className="text-white">
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Usuario</th>
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Nombre</th>
-                  <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Rol</th>
+                  {/* SECTOR (planilla FUN.VIZA) con el TIPO DE USUARIO al lado
+                      (Supremo / Admin / Común) — pedido del dueño, Task 75. */}
+                  <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Sector</th>
+                  <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Tipo</th>
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Estado</th>
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Contraseña Actual</th>
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Último Cambio</th>
@@ -723,14 +895,14 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-stone-500">
+                    <td colSpan={8} className="text-center py-12 text-stone-500">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                       Cargando usuarios...
                     </td>
                   </tr>
                 ) : filtrados.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-stone-500">
+                    <td colSpan={8} className="text-center py-12 text-stone-500">
                       No se encontraron usuarios con esos filtros.
                     </td>
                   </tr>
@@ -744,7 +916,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
                           key={fila.key}
                           style={{ backgroundColor: "rgba(217, 184, 107, 0.16)", borderBottom: "1px solid #e5d9bd" }}
                         >
-                          <td colSpan={7} className="px-3 py-2">
+                          <td colSpan={8} className="px-3 py-2">
                             <div className="flex items-center gap-2">
                               <MapPin className="h-3.5 w-3.5" style={{ color: "#b89853" }} />
                               <span
@@ -778,6 +950,15 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
                           <span className="font-medium text-stone-900 text-xs">{u.email}</span>
                         </td>
                         <td className="px-3 py-2.5 text-stone-700 text-xs">{u.name || "—"}</td>
+                        {/* SECTOR según la planilla FUN.VIZA (solo referencia;
+                            usuarios fuera de la planilla = GENERAL). */}
+                        <td className="px-3 py-2.5 text-stone-600 text-xs">
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3 w-3" style={{ color: "#b89853" }} />
+                            {sectorDe(u)}
+                          </span>
+                        </td>
+                        {/* TIPO DE USUARIO al lado del sector: Supremo / Admin / Común. */}
                         <td className="px-3 py-2.5">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}>
                             <span>{rb.icon}</span>
