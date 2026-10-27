@@ -18,6 +18,7 @@ import {
   Check,
   Bell,
   BellOff,
+  MapPin,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -40,6 +41,8 @@ interface Usuario {
   contrasenaActual: string;
   fechaUltimoCambio: string | null;
   cambiadoPor: string | null;
+  // Sucursal asignada (tabla UsuarioSucursal, la misma del CRM). "" = sin sucursal.
+  sucursal: string;
 }
 
 interface HistorialItem {
@@ -86,11 +89,27 @@ function formatPYG(n: number | null | undefined): string {
   return "Gs " + Math.round(v).toLocaleString("es-PY");
 }
 
+// ─── SUCURSALES para dividir la tabla de usuarios (pedido del dueño) ───
+// MISMA lista que SUCURSALES_VIZA de src/lib/sucursal-usuario.ts, pero
+// definida ACÁ a propósito: esa lib importa Prisma (solo servidor) y este
+// componente es cliente, así que NO se puede importar de ahí.
+const SUCURSALES_GDA = ["KATUETE", "LA PALOMA", "NUEVA ESPERANZA", "SALTOS DEL GUAIRA"] as const;
+const SIN_SUCURSAL = "SIN SUCURSAL";
+
+// Sucursal normalizada de un usuario (mayúsculas, sin espacios). Vacía o
+// sin asignar = SIN SUCURSAL (se muestra al final de la tabla).
+function sucursalDe(u: Usuario): string {
+  const v = (u.sucursal || "").trim().toUpperCase();
+  return v || SIN_SUCURSAL;
+}
+
 export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosProps) {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filtroRol, setFiltroRol] = useState<string>("todos");
+  // Filtro por sucursal (divide la tabla; "todas" = mostrar agrupadas).
+  const [filtroSucursal, setFiltroSucursal] = useState<string>("todas");
   const [mostrarContrasenas, setMostrarContrasenas] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [historialModal, setHistorialModal] = useState<{ email: string; name: string | null; items: HistorialItem[] } | null>(null);
@@ -388,8 +407,43 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
       filtroRol === "todos" ||
       u.role === filtroRol ||
       (filtroRol === "colaborador" && esColaborador(u.role));
-    return matchSearch && matchRol;
+    // Filtro por sucursal ("todas" = no filtra, solo agrupa en secciones)
+    const matchSucursal = filtroSucursal === "todas" || sucursalDe(u) === filtroSucursal;
+    return matchSearch && matchRol && matchSucursal;
   });
+
+  // ─── DIVISIÓN POR SUCURSAL (pedido del dueño) ───
+  // Aplana los usuarios filtrados en una lista de filas para la tabla:
+  // una fila-cabecera por sucursal (con su cantidad) seguida de los usuarios
+  // de esa sucursal. Orden: KATUETE, LA PALOMA, NUEVA ESPERANZA, SALTOS DEL
+  // GUAIRA; después cualquier valor viejo no listado (ej. "CENTRAL/KATUETE")
+  // alfabético; y "SIN SUCURSAL" siempre al final. Se conservan los filtros
+  // de búsqueda y rol: solo aparecen las sucursales que tienen usuarios.
+  type FilaTabla =
+    | { tipo: "sucursal"; key: string; nombre: string; cantidad: number }
+    | { tipo: "usuario"; key: string; usuario: Usuario; zebra: number };
+  const filasTabla: FilaTabla[] = (() => {
+    const grupos = new Map<string, Usuario[]>();
+    for (const u of filtrados) {
+      const k = sucursalDe(u);
+      const arr = grupos.get(k);
+      if (arr) arr.push(u);
+      else grupos.set(k, [u]);
+    }
+    const conocidos = SUCURSALES_GDA.filter((s) => grupos.has(s));
+    const extras = Array.from(grupos.keys())
+      .filter((n) => n !== SIN_SUCURSAL && !(SUCURSALES_GDA as readonly string[]).includes(n))
+      .sort();
+    const orden = [...conocidos, ...extras, ...(grupos.has(SIN_SUCURSAL) ? [SIN_SUCURSAL] : [])];
+    const filas: FilaTabla[] = [];
+    let zebra = 0;
+    for (const nombre of orden) {
+      const grupo = grupos.get(nombre)!;
+      filas.push({ tipo: "sucursal", key: `sucursal-${nombre}`, nombre, cantidad: grupo.length });
+      for (const u of grupo) filas.push({ tipo: "usuario", key: u.id, usuario: u, zebra: zebra++ });
+    }
+    return filas;
+  })();
 
   return (
     <div className="min-h-screen bg-stone-100">
@@ -472,18 +526,21 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
             </div>
             <button
               onClick={() => setCambiarContrasenaOpen(true)}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors text-white hover:bg-white/10"
-              style={{ backgroundColor: "rgba(217, 184, 107, 0.18)", color: "#D9B86B" }}
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-all shadow-sm hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
               title="Cambiar mi contraseña"
+              aria-label="Cambiar mi contraseña"
             >
-              <KeyRound className="h-5 w-5" />
+              <KeyRound className="h-4 w-4" />
             </button>
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors text-white hover:bg-white/10"
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-all shadow-sm hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
               title="Cerrar sesión"
+              aria-label="Cerrar sesión"
             >
-              <LogOut className="h-5 w-5" />
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -553,6 +610,22 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
             <option value="supremo_admin">SUPREMO ADMIN</option>
             <option value="admin">ADMIN</option>
             <option value="colaborador">COLABORADOR</option>
+          </select>
+
+          {/* Filtro por SUCURSAL: divide la tabla por sucursal (pedido del dueño). */}
+          <select
+            value={filtroSucursal}
+            onChange={(e) => setFiltroSucursal(e.target.value)}
+            className="h-10 px-3 rounded-lg bg-stone-100 border border-stone-200 text-sm font-medium focus:outline-none"
+            title="Filtrar por sucursal"
+          >
+            <option value="todas">TODAS LAS SUCURSALES</option>
+            {SUCURSALES_GDA.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+            <option value={SIN_SUCURSAL}>{SIN_SUCURSAL}</option>
           </select>
 
           <button
@@ -662,13 +735,42 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
                     </td>
                   </tr>
                 ) : (
-                  filtrados.map((u, idx) => {
+                  filasTabla.map((fila) => {
+                    // Fila-cabecera de SUCURSAL: divide la tabla en secciones
+                    // (una por sucursal, con su cantidad de usuarios).
+                    if (fila.tipo === "sucursal") {
+                      return (
+                        <tr
+                          key={fila.key}
+                          style={{ backgroundColor: "rgba(217, 184, 107, 0.16)", borderBottom: "1px solid #e5d9bd" }}
+                        >
+                          <td colSpan={7} className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-3.5 w-3.5" style={{ color: "#b89853" }} />
+                              <span
+                                className="text-[11px] font-black uppercase tracking-widest"
+                                style={{ color: "#0d3d5e" }}
+                              >
+                                {fila.nombre}
+                              </span>
+                              <span
+                                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                                style={{ background: "#155789", color: "#D9B86B" }}
+                              >
+                                {fila.cantidad} {fila.cantidad === 1 ? "USUARIO" : "USUARIOS"}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const u = fila.usuario;
                     const rb = roleBadge(u.role);
                     const destacado = destacadosIds.has(u.id);
                     return (
                       <tr
-                        key={u.id}
-                        className={destacado ? "viza-row-highlight" : idx % 2 === 0 ? "bg-white" : "bg-stone-50/60"}
+                        key={fila.key}
+                        className={destacado ? "viza-row-highlight" : fila.zebra % 2 === 0 ? "bg-white" : "bg-stone-50/60"}
                         style={{ borderBottom: "1px solid #f1f5f9" }}
                         data-usuario-id={u.id}
                       >
