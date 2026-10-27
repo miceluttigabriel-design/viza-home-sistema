@@ -147,6 +147,14 @@ export interface PlanSafraState {
 // PRINCIPIO: "Menos meses de financiación = Menos intereses a pagar"
 //
 // REGLA DE ORO: Solo LECTURA del SAFRA del Admin. No se modifica la BD.
+
+// REDONDEO COMERCIAL SAFRA: los refuerzos y el pago final se redondean
+// SIEMPRE al millar superior (Gs exacto, sin valores quebrados).
+// Ej: 4.295.147 → 4.296.000. El cliente nunca paga de menos: el redondeo
+// sube el total a lo sumo unos miles (el margen no baja).
+const redondeoComercial = (v: number): number =>
+  Math.ceil(Math.max(0, v) / 1000) * 1000;
+
 function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState> {
   const productos = state.productos || [];
   const entradaValor = Math.max(0, state.entradaValor || 0);
@@ -250,12 +258,16 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     // Estimar interés (mitad del worst-case, más realista)
     const interesEstimado = saldoActual * (safraPctPromedio / 100) * maxMes * 0.5;
     const totalAPagar = saldoActual + interesEstimado;
-    const valorPorRefuerzo = Math.ceil(totalAPagar / refuerzosCalculados.length);
-    // Asignar valores, el ÚLTIMO absorbe el remainder (total exacto)
+    // REDONDEO COMERCIAL: cada refuerzo sale al millar superior
+    // (ej: 4.295.147 → 4.296.000), sin valores quebrados.
+    const valorPorRefuerzo = redondeoComercial(
+      totalAPagar / refuerzosCalculados.length
+    );
+    // Asignar valores, el ÚLTIMO absorbe el remainder (también redondeado arriba)
     refuerzosCalculados.forEach((r, idx) => {
       if (idx === refuerzosCalculados.length - 1) {
         const sumaOtros = valorPorRefuerzo * (refuerzosCalculados.length - 1);
-        r.valor = Math.max(0, Math.ceil(totalAPagar - sumaOtros));
+        r.valor = redondeoComercial(totalAPagar - sumaOtros);
       } else {
         r.valor = valorPorRefuerzo;
       }
@@ -318,7 +330,12 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     });
     // Ajustar el valor del último refuerzo
     const ajuste = Math.round(saldoActual); // positivo = falta pagar, negativo = sobrepagó
-    refuerzosCalculados[lastIdx].valor = Math.max(0, refuerzosCalculados[lastIdx].valor + ajuste);
+    // REDONDEO COMERCIAL: el valor ajustado también sale al millar superior.
+    // Puede quedar un saldo levemente negativo (se pagaron unos Gs de más
+    // por el redondeo): jamás de menos. Eso es válido para el plan.
+    refuerzosCalculados[lastIdx].valor = redondeoComercial(
+      refuerzosCalculados[lastIdx].valor + ajuste
+    );
 
     // Reconstruir pagosPorMes con valor ajustado
     const pagosPorMes2: Record<number, number> = {};
@@ -389,8 +406,11 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   // Regla del 50% en 6 meses (entrada + refuerzos mes 1-6 >= 50% del total contado)
   const cumple50 = totalPagado6Meses >= totalContado * 0.5;
   const faltanPara50 = Math.max(0, totalContado * 0.5 - totalPagado6Meses);
-  // El plan "cuadra" si el saldo final es exactamente 0 (dentro de 1 Gs por redondeo)
-  const cuadra = Math.abs(saldoActual) <= 1;
+  // El plan "cuadra" si NO queda deuda pendiente (saldo <= 1 Gs).
+  // Con el redondeo comercial hacia arriba puede quedar un saldo levemente
+  // NEGATIVO (se pagaron unos Gs de más al redondear al millar): eso
+  // también es válido. Lo que NO es válido es saldo positivo (falta pagar).
+  const cuadra = saldoActual <= 1;
 
   return {
     // v2.0 FIX: NO devolver refuerzos aquí para evitar loop infinito
@@ -400,7 +420,11 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     descuentoCasco,
     cascoError: cascoAplicado && !cascoValido,
     totalIntereses: Math.round(totalIntereses),
-    totalPlan: Math.round(totalContado + totalIntereses),
+    // Total del Plan = lo que el cliente paga EN REALIDAD (entrada +
+    // refuerzos redondeados). Con el redondeo comercial puede superar por
+    // unos Gs al contado + intereses teórico: se muestra el real (más
+    // alto), así el total SIEMPRE coincide con la suma del cronograma.
+    totalPlan: Math.round(Math.max(totalContado + totalIntereses, totalPagos)),
     saldoFinal: Math.round(saldoActual), // puede ser negativo si se pasa
     totalPagado6Meses,
     cumple50,
