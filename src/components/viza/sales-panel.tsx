@@ -1690,7 +1690,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
         {/* 5. BOTÓN CALCULAR PRESUPUESTO */}
         <button
           onClick={handleCalcular}
-          disabled={items.length === 0 || planes.length === 0}
+          // CONTADO SOLO: el botón también se habilita sin planes de cuotas
+          // cuando el checkbox "Incluir valor contado" está marcado.
+          disabled={
+            items.length === 0 ||
+            (planes.length === 0 && !incluirContadoEnPresupuesto)
+          }
           className="w-full h-16 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.01] hover:brightness-110"
           style={{
             backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
