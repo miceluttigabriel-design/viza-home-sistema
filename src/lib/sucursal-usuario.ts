@@ -59,9 +59,15 @@ export const MAPA_SUCURSAL_EXCEL: Record<string, string> = {
   "viza.cobranza@viza.com.py": "KATUETE",
   "credito@viza.com.py": "KATUETE",
   "credito1@viza.com.py": "KATUETE",
+  // Compras central (pedido del dueño, Task 76): Adriano Ruiz Gómez
+  // (viza.compras@) es ENC. COMPRAS de la central y su sucursal es KATUETE
+  // (antes quedaba SIN SUCURSAL porque no estaba en la planilla). La siembra
+  // solo crea la fila si NO existe: jamás toca una asignación ya guardada.
+  "viza.compras@viza.com.py": "KATUETE",
   // KATUETE
-  // cobranza.katuete@viza.com.py sale de KATUETE (pedido del admin): no se
-  // siembra más y la migración de abajo le borra la asignación guardada.
+  // cobranza.katuete@viza.com.py vuelve a KATUETE (Task 77, pedido del
+  // dueño): se vuelve a sembrar y la migración de abajo YA NO lo borra.
+  "cobranza.katuete@viza.com.py": "KATUETE",
   "jeyson@viza.com.py": "KATUETE",
   "caja.katuete@viza.com.py": "KATUETE",
   "fact.katuete@viza.com.py": "KATUETE",
@@ -71,6 +77,15 @@ export const MAPA_SUCURSAL_EXCEL: Record<string, string> = {
   "ventas.emmanuel@viza.com.py": "KATUETE",
   "ventas.paola@viza.com.py": "KATUETE",
   "ventas.richard@viza.com.py": "KATUETE",
+  // Televentas (Task 77, pedido del dueño): vendedor@ (COMERCIAL VIZA HOME
+  // E.A.S) es de KATUETE. Antes quedaba SIN SUCURSAL.
+  "vendedor@viza.com.py": "KATUETE",
+  // LORENA MERCADO PEREZ (Task 77, pedido del dueño): VENTAS de KATUETE.
+  // El usuario se crea desde el GDA (botón CREAR USUARIO); se dejan los 2
+  // emails que sigue el patrón de la planilla — el que no se use nunca
+  // coincide con nadie y no hace nada.
+  "ventas.lorena@viza.com.py": "KATUETE",
+  "lorena@viza.com.py": "KATUETE",
   // LA PALOMA
   "antonio.fagner@viza.com.py": "LA PALOMA",
   "caja.paloma@viza.com.py": "LA PALOMA",
@@ -235,8 +250,9 @@ export async function sembrarDesdeExcel(emails: string[]): Promise<void> {
 // 1) "CENTRAL/KATUETE" dejó de existir como filtro del CRM: los usuarios que
 //    estaban asignados ahí pasan automáticamente a "KATUETE" (la oficina
 //    central trabaja con la sucursal de Katuete, que ya existía).
-// 2) cobranza.katuete@viza.com.py sale de KATUETE: se borra su asignación
-//    guardada (queda sin sucursal y solo se ve en el ranking GENERAL).
+// 2) (REVERTIDO en Task 77, pedido del dueño) cobranza.katuete@viza.com.py
+//    vuelve a KATUETE: la siembra del mapa lo reasigna y esta migración ya
+//    NO borra su fila (antes lo dejaba sin sucursal).
 //
 // Idempotente y best-effort, mismo estilo de siempre: se intenta UNA sola
 // vez por instancia; si la tabla todavía no existe se crea sola y se
@@ -253,10 +269,8 @@ export async function migrarCentralKatuete(): Promise<void> {
       where: { sucursal: "CENTRAL/KATUETE" },
       data: { sucursal: "KATUETE" },
     });
-    // cobranza.katuete fuera de KATUETE (borrar la fila = quedar sin sucursal).
-    await db.usuarioSucursal.deleteMany({
-      where: { userEmail: "cobranza.katuete@viza.com.py" },
-    });
+    // Task 77: el borrado de cobranza.katuete@viza.com.py se quitó (el dueño
+    // pidió que vuelva a KATUETE; la siembra del mapa lo reasigna solo).
   };
   try {
     await intentar();

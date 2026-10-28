@@ -312,7 +312,12 @@ export function PlanSafra() {
           safraPct: p.safraPct,
         })),
         // === DESCUENTO POR CASCO ===
-        cascoAplicado,
+        // Hardening: el backend rechaza el PDF con 400 si cascoAplicado=true
+        // llega con cascoValor=0 (BLOQUEO DE SEGURIDAD). Eso solo puede pasar
+        // con un producto casco SIN precio cargado (valor exacto 0). En ese
+        // caso no hay descuento que aplicar, así que se envía false y el PDF
+        // se genera normal (el casco sigue figurando en la lista de productos).
+        cascoAplicado: cascoAplicado && cascoValorExacto > 0,
         cascoValor: descuentoCasco,
         cascoDescripcion: cascoDescripcion || (cascoAplicado ? "Descuento por casco" : ""),
         totalContadoBruto,
@@ -931,6 +936,47 @@ export function PlanSafra() {
         <p className="text-xs font-semibold text-amber-700 text-center">
           Completá el Nombre del cliente para habilitar el botón GENERAR PRESUPUESTO.
         </p>
+      )}
+
+      {/* === AVISOS DE BLOQUEO VISIBLES ===
+          Antes el botón GENERAR PRESUPUESTO quedaba gris (disabled) sin
+          ninguna explicación en pantalla cuando el plan no cumplía la regla
+          del 50% o no cuadraba: el vendedor completaba cliente y refuerzos y
+          el botón "no hacía nada". Ahora el motivo se muestra SIEMPRE aquí,
+          con los números exactos y cómo resolverlo. No cambia ninguna
+          validación: solo hace visible lo que ya bloqueaba. */}
+      {productos.length > 0 && (!cumple50 || !cuadra || refuerzos.some((r) => r.mes > 18 || r.mes < 1)) && (
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 sm:p-4 space-y-2">
+          {!cumple50 && (
+            <div>
+              <p className="text-xs font-bold text-amber-800">
+                ⚠️ REGLA DEL 50% — el botón GENERAR PRESUPUESTO sigue bloqueado:
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                Entre la ENTRADA y los refuerzos de los meses 1 a 6 el cliente debe pagar
+                al menos Gs {Math.ceil(totalContado * 0.5).toLocaleString("es-PY")} (50% del plan).
+                Pagado hasta el mes 6: Gs {Math.round(totalPagado6Meses).toLocaleString("es-PY")}
+                {faltanPara50 > 0 && ` — faltan Gs ${faltanPara50.toLocaleString("es-PY")}`}.
+              </p>
+              <p className="text-xs text-amber-700 mt-1">
+                Solución: agregá refuerzos con fecha dentro de los primeros 6 meses
+                (o subí el valor de la entrada).
+              </p>
+            </div>
+          )}
+          {!cuadra && (
+            <p className="text-xs font-bold text-rose-700">
+              ⚠️ El plan no cuadra: saldo final Gs {saldoFinal.toLocaleString("es-PY")}.
+              Revisá la entrada y los refuerzos para que el saldo final quede en 0.
+            </p>
+          )}
+          {refuerzos.some((r) => r.mes > 18 || r.mes < 1) && (
+            <p className="text-xs font-bold text-rose-700">
+              ⚠️ Hay refuerzos con fecha fuera del rango (mes 1 al 18). Corregí la fecha
+              marcada en rojo en la sección REFUERZOS.
+            </p>
+          )}
+        </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* CALCULAR */}

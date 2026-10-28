@@ -3,6 +3,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createUserScopedStorage } from "@/lib/user-scoped-storage";
+// CHAPA (COD 100068) = regalo, igual que el casco. Lista pura, segura de
+// importar en cliente. Se usa para EXCLUIR los regalos del promedio de la
+// tasa SAFRA (los regalos se descuentan del neto, no se financian).
+import { esProductoRegalo } from "@/lib/producto-regalo";
 
 // === HELPERS ===
 
@@ -195,9 +199,20 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
 
   // % SAFRA promedio ponderado por quantity (SOLO LECTURA)
   // Esta es la TASA DE INTERÉS MENSUAL que se aplica sobre el saldo restante
-  const totalQuantity = productos.reduce((sum, p) => sum + p.quantity, 0);
+  // FIX v2.3 (regalos fuera de la tasa): el CASCO (detectado por nombre, igual
+  // que en el panel) y la CHAPA (COD 100068, src/lib/producto-regalo.ts) son
+  // REGALOS: su valor se descuenta del neto y NO se financian. Por lo tanto
+  // tampoco deben participar del promedio de la tasa: un casco/chapa con el
+  // campo SAFRA vacío (parsea 0%) arrastraba el % promedio hacia abajo y el
+  // plan salía MÁS BARATO que sin regalos (ej: 7% → 2.33% con 1 moto + casco
+  // + chapa). Con este filtro, el plan con regalos y el plan sin regalos
+  // producen EXACTAMENTE el mismo cronograma y el mismo total.
+  const productosFinanciados = productos.filter(
+    (p) => !p.name.toUpperCase().includes("CASCO") && !esProductoRegalo(p.sku)
+  );
+  const totalQuantity = productosFinanciados.reduce((sum, p) => sum + p.quantity, 0);
   const safraPctPromedio = totalQuantity > 0
-    ? productos.reduce((sum, p) => sum + p.safraPct * p.quantity, 0) / totalQuantity
+    ? productosFinanciados.reduce((sum, p) => sum + p.safraPct * p.quantity, 0) / totalQuantity
     : 0;
 
   if (totalContado <= 0) {

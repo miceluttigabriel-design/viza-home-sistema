@@ -19,6 +19,14 @@ import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
 //     sin datos de las demás y con el total recortado a su sucursal.
 //   · cualquier otro usuario → 403 (no ve el CRM).
 //
+// Task 78 (pedido del dueño): cada fila del ranking trae también el
+// DESGLOSE POR TIPO DE PLAN (CUOTA / MAYORISTA / SAFRA / CHEQUE) para que
+// el CRM pueda filtrar por plan. El plan se deduce del PREFIJO del
+// quoteNumber (PRESUPUESTO-01 → CUOTA, MAYOR-01 → MAYORISTA,
+// SAFRA-01 → SAFRA, CHEQUE-01 → CHEQUE). Formatos viejos (número
+// aleatorio del estilo VZH-MAYOR-20261026-8515) también matchean por
+// INCLUDE, así el histórico queda agrupado igual.
+//
 // SOLO LECTURA: nunca crea, edita ni borra presupuestos, usuarios ni
 // productos. La única escritura posible es la SIEMBRA automática de la
 // sucursal desde la planilla de funcionarios (tabla aparte
@@ -75,13 +83,41 @@ export async function GET() {
       aprobadasPorUser.set(g.userId, g._count);
     }
 
+    // ─── Desglose POR TIPO DE PLAN (Task 78, pedido del dueño) ───
+    // Solo (userId, quoteNumber): consulta liviana de 2 columnas. Con el
+    // prefijo del quoteNumber se arma el desglose CUOTA/MAYORISTA/SAFRA/
+    // CHEQUE por usuario. Desde Task 78 los 4 PDFs (PRESUPUESTO normal,
+    // MAYORISTA, SAFRA y CHEQUE) guardan su emisión en la base con el MISMO
+    // número impreso, así el desglose coincide con lo que ve el vendedor.
+    function planDeQuote(quoteNumber: string): string {
+      const qn = (quoteNumber || "").toUpperCase();
+      if (qn.includes("MAYOR")) return "MAYORISTA";
+      if (qn.includes("SAFRA")) return "SAFRA";
+      if (qn.includes("CHEQUE")) return "CHEQUE";
+      return "CUOTA"; // PRESUPUESTO-XX y cualquier formato viejo del carrito
+    }
+    const quotesParaPlan = await db.quote.findMany({
+      select: { userId: true, quoteNumber: true },
+    });
+    const porPlanPorUser = new Map<string, Record<string, number>>();
+    for (const q of quotesParaPlan) {
+      if (!q.userId) continue;
+      const rec =
+        porPlanPorUser.get(q.userId) ??
+        { CUOTA: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 };
+      rec[planDeQuote(q.quoteNumber)]++;
+      porPlanPorUser.set(q.userId, rec);
+    }
+    const porPlanVacio = () => ({ CUOTA: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 });
+
     // Sucursal de cada usuario (tabla aparte, auto-creada en el primer uso).
     // Primera vez: se siembra solo desde la planilla de funcionarios
     // (FUN.VIZA) coincidiendo el email; lo que no coincide queda
     // "SIN SUCURSAL" y el admin lo asigna a mano desde el panel.
     // Ajuste del CRM (una sola vez, best-effort): "CENTRAL/KATUETE" dejó de
-    // existir como filtro → sus usuarios pasan a "KATUETE", y
-    // cobranza.katuete@viza.com.py sale de KATUETE (queda sin sucursal).
+    // existir como filtro → sus usuarios pasan a "KATUETE". (Task 77: la
+    // parte que sacaba a cobranza.katuete@ de KATUETE quedó revertida —
+    // vuelve a KATUETE por la siembra del mapa.)
     await migrarCentralKatuete();
 
     let mapaSuc = await leerMapaSucursales();
@@ -105,6 +141,7 @@ export async function GET() {
           sucursal: mapaSuc.get(u.email.trim().toLowerCase()) || "SIN SUCURSAL",
           total: t?.total ?? 0,
           aprobadas: aprobadasPorUser.get(u.id) ?? 0,
+          porPlan: porPlanPorUser.get(u.id) ?? porPlanVacio(),
           ultimo: t?.ultimo ? t.ultimo.toISOString() : null,
         };
       })

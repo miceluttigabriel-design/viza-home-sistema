@@ -91,6 +91,16 @@ export async function PUT(
       );
     }
 
+    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
+    // (independiente del rol que tenga): jamás puede editar celdas.
+    const emailConsulta = ((session.user as any)?.email || "").trim().toLowerCase();
+    if (emailConsulta === "viza.compras@viza.com.py") {
+      return NextResponse.json(
+        { error: "Usuario de consulta SOLO LECTURA: no puede editar la base" },
+        { status: 403 }
+      );
+    }
+
     const { id } = await params;
     const body = await req.json();
 
@@ -227,6 +237,16 @@ export async function DELETE(
     if ((session.user as any)?.role !== "admin" && (session.user as any)?.role !== "supremo_admin") {
       return NextResponse.json(
         { error: "Solo el administrador puede eliminar productos" },
+        { status: 403 }
+      );
+    }
+
+    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
+    // (independiente del rol que tenga): jamás puede eliminar productos.
+    const emailConsultaBaja = ((session.user as any)?.email || "").trim().toLowerCase();
+    if (emailConsultaBaja === "viza.compras@viza.com.py") {
+      return NextResponse.json(
+        { error: "Usuario de consulta SOLO LECTURA: no puede eliminar productos" },
         { status: 403 }
       );
     }

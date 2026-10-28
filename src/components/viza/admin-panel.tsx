@@ -55,8 +55,17 @@ interface CrmFila {
   sucursal: string; // "SIN SUCURSAL" si todavía no tiene asignación
   total: number; // presupuestos emitidos
   aprobadas: number; // de esos, cuántas quedaron en estado "aprobada"
+  // Desglose por TIPO DE PLAN (Task 78, pedido del dueño): el CRM puede
+  // filtrar por CUOTA / MAYORISTA / SAFRA / CHEQUE. Viene de la API
+  // (GET /api/crm/ranking); opcional para compat hacia atrás.
+  porPlan?: { CUOTA: number; MAYORISTA: number; SAFRA: number; CHEQUE: number };
   ultimo: string | null; // fecha ISO del último presupuesto
 }
+
+// Pills del filtro por PLAN del CRM (Task 78): TODOS + los 4 planes que
+// pidió el dueño. CUOTA = el presupuesto normal del panel de ventas
+// (quoteNumber PRESUPUESTO-XX).
+const CRM_PLANES = ["TODOS", "CUOTA", "MAYORISTA", "SAFRA", "CHEQUE"] as const;
 
 // Fecha corta DD/MM/AA para la columna "último" del CRM
 const fmtFechaCortaCrm = (iso: string | null): string => {
@@ -144,6 +153,12 @@ interface AdminPanelProps {
   onGoSales: () => void;
   onGoGestion?: () => void;
   isSupremo?: boolean;
+  // Task 78 (pedido del dueño): MODO SOLO LECTURA para viza.compras@
+  // (ENC. COMPRAS). Ve TODA la base con buscador, filtros, orden y
+  // paginación, pero NO puede editar ninguna celda ni borrar/exportar/
+  // importar nada. La seguridad real ya la da el backend (PUT/DELETE/
+  // PATCH exigen admin); este modo es la capa de UX encima.
+  modoLectura?: boolean;
 }
 
 const PAGE_SIZE = 50; // Más productos por página (filas compactas permiten ver más)
@@ -342,7 +357,7 @@ const FROZEN_COLUMNS: { key: string; width: number }[] = [
   { key: "referencia", width: 130 }, // REF.FABRICA
   { key: "name", width: 400 },       // DESCRIPCION
 ];
-const FROZEN_START_LEFT = 230; // ACCIONES (120px) + COD (110px)
+const FROZEN_START_LEFT = 230; // modo normal: ACCIONES (120px) + COD (110px)
 const FROZEN_BG = "#D9B86B";   // mismo dorado del encabezado / ACCIONES / COD
 // DORADO SUPER VIVO VIBRANTE para las celdas de COSTO que el admin editó a
 // mano y guardó (se ve al instante y se distingue del dorado del padrón).
@@ -351,20 +366,30 @@ const COSTO_EDITADO_BG = "#FFD700";
 // del usuario: DESCRIPCION fija y blanca). El ENCABEZADO sigue dorado,
 // respetando el padrón de encabezados dorados.
 const FROZEN_BLANCO = new Set<string>(["name"]); // "name" = DESCRIPCION
-const frozenLeftByKey: Record<string, number> = (() => {
+// Posiciones left de las columnas fijas: se calculan desde el arranque.
+// Task 80 (ajuste visual): en MODO SOLO LECTURA la columna ACCIONES no
+// existe, así que las fijas arrancan PEGADAS al COD (110px); antes quedaban
+// en 230px (reservando los 120px de ACCIONES que no está) y GRUPO se veía
+// separada del COD. Los anchos son los mismos; solo cambia el arranque.
+function frozenLeftsDesde(start: number): Record<string, number> {
   const m: Record<string, number> = {};
-  let acc = FROZEN_START_LEFT;
+  let acc = start;
   for (const c of FROZEN_COLUMNS) {
     m[c.key] = acc;
     acc += c.width;
   }
   return m;
-})();
+}
+const frozenLeftByKey = frozenLeftsDesde(FROZEN_START_LEFT); // modo normal: ACCIONES (120px) + COD (110px)
+const frozenLeftByKeyLectura = frozenLeftsDesde(110);        // modo SOLO LECTURA: solo COD (110px)
 const frozenWidthByKey: Record<string, number> = Object.fromEntries(
   FROZEN_COLUMNS.map((c) => [c.key, c.width])
 );
 
-export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPanelProps) {
+export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectura }: AdminPanelProps) {
+  // Modo SOLO LECTURA (Task 78): el usuario de COMPRAS ve la base completa
+  // pero no edita nada. Default false = admins de siempre, sin cambios.
+  const esLectura = modoLectura === true;
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -591,6 +616,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   const [crmSucursales, setCrmSucursales] = useState<string[]>([]);
   const [crmTotalGeneral, setCrmTotalGeneral] = useState(0);
   const [crmFiltro, setCrmFiltro] = useState<string>("GENERAL");
+  // Filtro por TIPO DE PLAN (Task 78, pedido del dueño): TODOS por defecto
+  // (comportamiento de siempre); al elegir un plan, el ranking muestra y
+  // ordena por la cantidad de presupuestos de ESE plan.
+  const [crmPlan, setCrmPlan] = useState<string>("TODOS");
   const [crmGuardandoSuc, setCrmGuardandoSuc] = useState<string | null>(null); // email en guardado
 
   // Abre el modal CRM y trae el ranking completo (una sola llamada).
@@ -695,6 +724,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   }, [search]);
 
   const handleChange = (productId: string, key: string, value: string) => {
+    // Modo SOLO LECTURA (Task 78): ninguna celda se edita (defensa extra;
+    // el input ya es readOnly y el backend da 403 a colaboradores).
+    if (esLectura) return;
     setDirty((d) => {
       const existing = d[productId] || {};
       return { ...d, [productId]: { ...existing, [key]: value } };
@@ -713,6 +745,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
     productId: string,
     v: { valor: number | null; fecha: string | null }
   ) => {
+    // Modo SOLO LECTURA (Task 78): el #HASHTAG tampoco se puede editar.
+    if (esLectura) return;
     setProducts((ps) =>
       ps.map((x) => (x.id === productId ? { ...x, hashtag: v } : x))
     );
@@ -735,6 +769,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   };
 
   const handleSave = async (product: Product) => {
+    // Modo SOLO LECTURA (Task 78): sin guardado (el botón ya no existe).
+    if (esLectura) return;
     const changes = dirty[product.id];
     if (!changes) {
       toast.info("Sin cambios para guardar");
@@ -764,6 +800,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
   };
 
   const handleDelete = async (product: Product) => {
+    // Modo SOLO LECTURA (Task 78): sin eliminación (el botón ya no existe).
+    if (esLectura) return;
     if (!confirm(`¿Eliminar "${product.name}"?`)) return;
     try {
       const res = await fetch(`/api/products/${product.id}`, { method: "DELETE" });
@@ -1227,7 +1265,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
             <div
               className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
               style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-              title={`${user.name || user.email} · ${isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}`}
+              title={`${user.name || user.email} · ${esLectura ? "CONSULTA · SOLO LECTURA" : isSupremo ? "SUPREMO ADMIN" : "ADMINISTRADOR"}`}
             >
               {(user.name || user.email).charAt(0).toUpperCase()}
             </div>
@@ -1243,16 +1281,20 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               <ShoppingCart className="h-4 w-4" />
             </button>
 
-            {/* 2.5 CRM (ranking de presupuestos por usuario, general y por sucursal) */}
-            <button
-              onClick={abrirCrm}
-              className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
-              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-              title="CRM · Ranking de presupuestos por usuario"
-              aria-label="CRM · Ranking de presupuestos por usuario"
-            >
-              CRM
-            </button>
+            {/* 2.5 CRM (ranking de presupuestos por usuario, general y por sucursal).
+                En MODO SOLO LECTURA (Task 78) no se muestra: la API del CRM
+                está limitada a admins y encargados de sucursal. */}
+            {!esLectura && (
+              <button
+                onClick={abrirCrm}
+                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
+                style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+                title="CRM · Ranking de presupuestos por usuario"
+                aria-label="CRM · Ranking de presupuestos por usuario"
+              >
+                CRM
+              </button>
+            )}
 
             {/* 3. GDA (solo texto, sin emoji) */}
             {isSupremo && onGoGestion && (
@@ -1340,7 +1382,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                     TOTAL: {total} productos
                   </span>
                 )}
-                {/* Boton EXPORTAR EXCEL */}
+                {/* Boton EXPORTAR EXCEL — oculto en MODO SOLO LECTURA (Task 78):
+                    la API de export exige admin y el modo consulta es solo
+                    para VER y FILTRAR la base. */}
+                {!esLectura && (
                 <button
                   id="btn-export-excel"
                   onClick={async () => {
@@ -1383,6 +1428,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                   <Download className="h-3.5 w-3.5" />
                   EXPORTAR EXCEL
                 </button>
+                )}
 
                 {/* Boton IMPORTAR EXCEL (planilla de inventario) — solo supremo_admin */}
                 {isSupremo && (
@@ -1762,12 +1808,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               <table className="admin-table border-collapse text-xs">
                 <thead className="border-b border-stone-200 sticky top-0 z-30" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
                   <tr>
-                    {/* Columna acciones */}
+                    {/* Columna acciones — NO existe en MODO SOLO LECTURA (Task 78):
+                        sin guardar, etiquetar ni borrar. */}
+                    {!esLectura && (
                     <th className="sticky left-0 z-20 px-2 py-0.5 text-center font-bold border-r border-stone-200 min-w-[120px]" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
                       ACCIONES
                     </th>
+                    )}
                     {/* SKU */}
-                    <th className="sticky left-[120px] z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[110px] w-[110px]" style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
+                    <th className={`sticky ${esLectura ? "left-0" : "left-[120px]"} z-20 px-2 py-0.5 text-left font-bold border-r border-stone-200 min-w-[110px] w-[110px]`} style={{ backgroundColor: "#D9B86B", color: "#1c1917" }}>
                       <div className="flex items-center gap-1">
                         <span>COD</span>
                         {/* Flechita de orden NUMÉRICO por COD (pedido del usuario):
@@ -1794,7 +1843,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       // exactamente como siempre. El encabezado SIEMPRE dorado
                       // (padrón); el fondo blanco de FROZEN_BLANCO aplica solo a
                       // las celdas del cuerpo de la tabla.
-                      const frozenLeft = frozenLeftByKey[col.key];
+                      // Task 80: en MODO SOLO LECTURA las fijas arrancan pegadas
+                      // al COD (sin los 120px de ACCIONES, que no existe aquí).
+                      const frozenLeft = (esLectura ? frozenLeftByKeyLectura : frozenLeftByKey)[col.key];
                       const frozenWidth = frozenWidthByKey[col.key];
                       const esFija = frozenLeft !== undefined;
                       return (
@@ -1895,13 +1946,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                 <tbody>
                   {loadingProducts ? (
                     <tr>
-                      <td colSpan={COLUMNS.length + 2} className="text-center py-12 text-stone-400">
+                      <td colSpan={COLUMNS.length + (esLectura ? 1 : 2)} className="text-center py-12 text-stone-400">
                         Cargando productos...
                       </td>
                     </tr>
                   ) : products.length === 0 ? (
                     <tr>
-                      <td colSpan={COLUMNS.length + 2} className="text-center py-12 text-stone-400">
+                      <td colSpan={COLUMNS.length + (esLectura ? 1 : 2)} className="text-center py-12 text-stone-400">
                         No se encontraron productos.
                       </td>
                     </tr>
@@ -1916,12 +1967,22 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                           rowIndex={ri}
                           form={form}
                           isDirty={isDirty}
+                          modoLectura={esLectura}
                           label={productLabels[p.id] || null}
                           isLabelMenuOpen={openLabelMenu === p.id}
                           filaActiva={filaActivaId === p.id}
                           onTocarFila={() => setFilaActivaId(p.id)}
-                          onToggleLabelMenu={() => setOpenLabelMenu(openLabelMenu === p.id ? null : p.id)}
+                          onToggleLabelMenu={() => {
+                            // SOLO LECTURA (Task 79): el menú de etiquetas de
+                            // color no se abre JAMÁS (defensa extra; el botón
+                            // que lo dispara ni siquiera se renderiza aquí).
+                            if (esLectura) return;
+                            setOpenLabelMenu(openLabelMenu === p.id ? null : p.id);
+                          }}
                           onSetLabel={async (color: string | null) => {
+                            // Modo SOLO LECTURA (Task 78): la etiqueta de color
+                            // tampoco se puede cambiar (el botón ya no existe).
+                            if (esLectura) return;
                             // Actualización optimista: actualizar UI inmediatamente
                             setProductLabels(prev => {
                               const next = { ...prev };
@@ -3527,16 +3588,30 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
         // admin: las sucursales válidas vienen de la API y ya no incluyen
         // CENTRAL/KATUETE; quienes no tienen sucursal solo se ven en GENERAL.)
         const filtros = ["GENERAL", ...crmSucursales];
+        // Valor de cada fila según el PLAN elegido (Task 78): con TODOS es el
+        // total de siempre; con un plan, la cantidad de ESE plan.
+        const totalDeFila = (f: CrmFila): number =>
+          crmPlan === "TODOS"
+            ? f.total
+            : (f.porPlan?.[crmPlan as keyof NonNullable<CrmFila["porPlan"]>] ?? 0);
         const filas = [...crmRanking]
           .filter((f) => crmFiltro === "GENERAL" || f.sucursal === crmFiltro)
+          .filter((f) => crmPlan === "TODOS" || totalDeFila(f) > 0)
           .sort(
             (a, b) =>
+              totalDeFila(b) - totalDeFila(a) ||
               b.total - a.total ||
-              b.aprobadas - a.aprobadas ||
               a.name.localeCompare(b.name, "es")
           );
-        const sumaVista = filas.reduce((acc, f) => acc + f.total, 0);
+        const sumaVista = filas.reduce((acc, f) => acc + totalDeFila(f), 0);
         const aprobadasVista = filas.reduce((acc, f) => acc + f.aprobadas, 0);
+        // Total del encabezado: con TODOS es el general de siempre; con un
+        // plan, la suma de ese plan sobre TODOS los usuarios (sin filtro de
+        // sucursal), igual criterio que crmTotalGeneral.
+        const totalHeader =
+          crmPlan === "TODOS"
+            ? crmTotalGeneral
+            : crmRanking.reduce((acc, f) => acc + totalDeFila(f), 0);
         const medalStyle = (pos: number): { bg: string; fg: string } | null =>
           pos === 1
             ? { bg: "#FFD700", fg: "#6b5200" }
@@ -3567,7 +3642,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                 </h3>
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-1 rounded-full bg-white/15 text-white text-xs font-bold">
-                    TOTAL EMITIDOS: {crmTotalGeneral}
+                    TOTAL EMITIDOS: {totalHeader}{crmPlan !== "TODOS" ? ` · ${crmPlan}` : ""}
                   </span>
                   <button
                     onClick={() => setCrmOpen(false)}
@@ -3595,6 +3670,33 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                       style={activo ? { background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" } : undefined}
                     >
                       {s}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Filtro por TIPO DE PLAN (Task 78, pedido del dueño):
+                  TODOS / CUOTA / MAYORISTA / SAFRA / CHEQUE. Con un plan
+                  elegido, el ranking cuenta solo los presupuestos de ese
+                  plan (CUOTA = el presupuesto normal del panel de ventas). */}
+              <div className="px-6 py-2.5 flex flex-wrap items-center gap-1.5 border-b border-stone-200 shrink-0 bg-stone-50">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-stone-400 mr-1">
+                  Tipo de PLAN:
+                </span>
+                {CRM_PLANES.map((pl) => {
+                  const activo = crmPlan === pl;
+                  return (
+                    <button
+                      key={pl}
+                      onClick={() => setCrmPlan(pl)}
+                      className={`h-7 px-3 rounded-full text-xs font-bold transition-colors ${
+                        activo
+                          ? "text-white"
+                          : "bg-white text-stone-600 hover:bg-stone-200 border border-stone-200"
+                      }`}
+                      style={activo ? { background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)" } : undefined}
+                    >
+                      {pl}
                     </button>
                   );
                 })}
@@ -3691,7 +3793,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
                               )}
                             </td>
                             <td className="px-3 py-2 text-center">
-                              <span className="text-base font-extrabold text-stone-800">{f.total}</span>
+                              <span className="text-base font-extrabold text-stone-800">{totalDeFila(f)}</span>
                             </td>
                             <td className="px-3 py-2 text-center">
                               <span className={`text-sm font-bold ${f.aprobadas > 0 ? "text-green-700" : "text-stone-300"}`}>
@@ -3713,6 +3815,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo }: AdminPan
               <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600">
                 <span className="font-bold text-stone-700">
                   {crmFiltro === "GENERAL" ? "GENERAL (todas las sucursales)" : crmFiltro}
+                  {crmPlan !== "TODOS" ? ` · Plan ${crmPlan}` : ""}
                 </span>
                 <span>
                   {sumaVista} presupuesto{sumaVista !== 1 ? "s" : ""} emitido{sumaVista !== 1 ? "s" : ""}
@@ -3736,6 +3839,7 @@ const ExcelRow = memo(function ExcelRow({
   rowIndex,
   form,
   isDirty,
+  modoLectura,
   label,
   isLabelMenuOpen,
   filaActiva,
@@ -3751,6 +3855,8 @@ const ExcelRow = memo(function ExcelRow({
   rowIndex: number;
   form: any;
   isDirty: boolean;
+  // MODO SOLO LECTURA (Task 78): sin columna ACCIONES y celdas readOnly.
+  modoLectura?: boolean;
   label: string | null;
   isLabelMenuOpen: boolean;
   filaActiva: boolean;
@@ -3791,7 +3897,9 @@ const ExcelRow = memo(function ExcelRow({
       className={`border-b border-stone-100 ${filaActiva ? "fila-activa" : ""} ${currentStyle ? currentStyle.cellClass : ""}`}
       style={{ borderBottom: "1px solid #f1f5f9" }}
     >
-      {/* Acciones - sticky */}
+      {/* Acciones - sticky — NO existe en MODO SOLO LECTURA (Task 78):
+          sin guardar, etiquetar ni borrar. */}
+      {!modoLectura && (
       <td className="sticky left-0 z-10 px-2 py-0.5 text-center border-r border-stone-100 bg-[#D9B86B]">
         <div className="flex flex-row items-center justify-center gap-0.5 relative">
           <button
@@ -3826,8 +3934,10 @@ const ExcelRow = memo(function ExcelRow({
           </button>
         </div>
       </td>
-      {/* SKU - sticky - con badge de última edición encima */}
-      <td className="sticky left-[120px] z-10 px-2 py-0.5 font-mono text-[#1c1917] font-semibold border-r border-stone-100 bg-[#D9B86B] align-top w-[110px]">
+      )}
+      {/* SKU - sticky - con badge de última edición encima (en MODO SOLO
+          LECTURA ocupa el left-0 porque no existe la columna ACCIONES) */}
+      <td className={`sticky ${modoLectura ? "left-0" : "left-[120px]"} z-10 px-2 py-0.5 font-mono text-[#1c1917] font-semibold border-r border-stone-100 bg-[#D9B86B] align-top w-[110px]`}>
         {/* Badge de última edición manual del admin */}
         {product.ultimaEdicionAt && (() => {
           const d = new Date(product.ultimaEdicionAt);
@@ -3872,6 +3982,7 @@ const ExcelRow = memo(function ExcelRow({
           colIndex={ci}
           costoEditado={costosEditadosSet.has(col.key)}
           hashtag={product.hashtag ?? null}
+          modoLectura={modoLectura}
           onHashtagChange={onHashtagChange}
           onChange={(v) => onChange(col.key, v)}
         />
@@ -4056,6 +4167,7 @@ const Cell = memo(function Cell({
   colIndex,
   costoEditado,
   hashtag,
+  modoLectura,
   onHashtagChange,
   onChange,
 }: {
@@ -4065,6 +4177,8 @@ const Cell = memo(function Cell({
   colIndex: number;
   costoEditado?: boolean;
   hashtag?: { valor: number | null; fecha: string | null } | null;
+  // MODO SOLO LECTURA (Task 78): las celdas NO se pueden editar (readOnly).
+  modoLectura?: boolean;
   onHashtagChange?: (v: { valor: number | null; fecha: string | null }) => void;
   onChange: (v: string) => void;
 }) {
@@ -4099,25 +4213,35 @@ const Cell = memo(function Cell({
             value={h.valor ?? ""}
             placeholder="Gs"
             title="#HASHTAG: valor en Gs (ej: 100000)"
+            readOnly={modoLectura}
             onChange={(e) =>
               onHashtagChange?.({
                 valor: e.target.value === "" ? null : Number(e.target.value),
                 fecha: h.fecha ?? null,
               })
             }
-            className="w-[78px] h-6 px-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums text-right"
+            className={`w-[78px] h-6 px-1 rounded border outline-none text-xs tabular-nums text-right ${
+              modoLectura
+                ? "border-transparent bg-white text-stone-700 cursor-default"
+                : "border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100"
+            }`}
           />
           <input
             type="date"
             value={h.fecha ?? ""}
             title="#HASHTAG: valido hasta (elegir en el calendario)"
+            readOnly={modoLectura}
             onChange={(e) =>
               onHashtagChange?.({
                 valor: h.valor ?? null,
                 fecha: e.target.value || null,
               })
             }
-            className="w-[120px] h-6 px-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums"
+            className={`w-[120px] h-6 px-1 rounded border outline-none text-xs tabular-nums ${
+              modoLectura
+                ? "border-transparent bg-white text-stone-700 cursor-default"
+                : "border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100"
+            }`}
           />
         </div>
       </td>
@@ -4156,6 +4280,7 @@ const Cell = memo(function Cell({
       type={isNum || isPct ? "number" : "text"}
       step={isPct ? "0.01" : isNum ? "1" : undefined}
       value={displayValue}
+      readOnly={modoLectura}
       onChange={(e) => {
         if (isPct) {
           const numVal = e.target.value === "" ? "" : String(Number(e.target.value) / 100);
@@ -4168,8 +4293,12 @@ const Cell = memo(function Cell({
       data-ri={rowIndex}
       data-ci={colIndex}
       data-text={isText ? "1" : "0"}
-      className={`w-full ${isDesc ? "min-w-[400px]" : "min-w-[80px]"} h-6 px-2 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs tabular-nums ${
+      className={`w-full ${isDesc ? "min-w-[400px]" : "min-w-[80px]"} h-6 px-2 rounded border outline-none text-xs tabular-nums ${
         isText ? "text-left" : "text-right"
+      } ${
+        modoLectura
+          ? "border-transparent bg-white text-stone-700 cursor-default"
+          : "border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100"
       }`}
       placeholder="—"
     />
@@ -4179,7 +4308,9 @@ const Cell = memo(function Cell({
   // Las CELDAS de FROZEN_BLANCO (DESCRIPCION) llevan fondo blanco; el resto de
   // las fijas lleva dorado. El encabezado siempre es dorado (padrón). Sin
   // entrada en FROZEN_COLUMNS queda como siempre (bg-white).
-  const frozenLeft = frozenLeftByKey[col.key];
+  // Task 80: en MODO SOLO LECTURA las fijas arrancan pegadas al COD (110px),
+  // igual que los encabezados — sin el hueco de los 120px de ACCIONES.
+  const frozenLeft = (modoLectura ? frozenLeftByKeyLectura : frozenLeftByKey)[col.key];
   const frozenWidth = frozenWidthByKey[col.key];
   const esFija = frozenLeft !== undefined;
   const fondoFija = esFija
@@ -4221,10 +4352,15 @@ const Cell = memo(function Cell({
           <textarea
             ref={descRef}
             value={displayValue}
+            readOnly={modoLectura}
             onChange={(e) => onChange(e.target.value)}
             rows={2}
             placeholder="—"
-            className="w-full min-w-[400px] px-2 py-1 rounded border border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100 outline-none text-xs text-left leading-4 resize-none"
+            className={`w-full min-w-[400px] px-2 py-1 rounded border outline-none text-xs text-left leading-4 resize-none ${
+              modoLectura
+                ? "border-transparent bg-white text-stone-700 cursor-default"
+                : "border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100"
+            }`}
           />
         ) : (
           inputNode

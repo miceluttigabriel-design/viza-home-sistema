@@ -31,6 +31,16 @@ export async function PATCH(
       );
     }
 
+    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
+    // (independiente del rol que tenga): jamás puede cargar el #HASHTAG.
+    const emailConsulta = ((session.user as any)?.email || "").trim().toLowerCase();
+    if (emailConsulta === "viza.compras@viza.com.py") {
+      return NextResponse.json(
+        { error: "Usuario de consulta SOLO LECTURA: no puede cargar el #HASHTAG" },
+        { status: 403 }
+      );
+    }
+
     const { id } = await params;
     const body = await req.json();
 

@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
+import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
 import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 const GREEN: [number, number, number] = [40, 167, 69];
 const RED: [number, number, number] = [220, 53, 69];
@@ -132,12 +133,16 @@ export async function POST(req: NextRequest) {
     // ===== ENCABEZADO (nuevo diseño con logo + wave + 3 cajas) =====
     const now = parseFechaEmision(body.cliente?.fecha, body.cliente?.hora) ?? new Date();
     // N° SECUENCIAL por (plan CHEQUE, usuario): CHEQUE-01, CHEQUE-02 ...
+    // (Task 78: el número se captura en una variable para registrar la
+    // EMISIÓN en la base y que el CRM la contabilice — mismo número
+    // impreso en el PDF = mismo número en el ranking por plan.)
+    const quoteNumberCheque = await nextSequentialQuoteNumber("CHEQUE", (session.user as any)?.id);
     const headerBottom = drawHeader(
       doc,
       pageW,
       margin,
       contentW,
-      await nextSequentialQuoteNumber("CHEQUE", (session.user as any)?.id),
+      quoteNumberCheque,
       "CON CHEQUE",
       now,
       formatDateTimeEs,
@@ -358,6 +363,20 @@ export async function POST(req: NextRequest) {
 
     // ===== FOOTER (nuevo diseño) =====
     drawFooter(doc, pageW, pageH, margin, contentW, "Plan Con Cheque");
+
+    // REGISTRO DE EMISIÓN (Task 78, pedido del dueño): queda en la base
+    // para que el CRM contabilice el presupuesto CON CHEQUE emitido.
+    // Best-effort: si falla, el PDF sale igual (nunca rompe la emisión).
+    await guardarQuoteEmitido({
+      plan: "CHEQUE",
+      quoteNumber: quoteNumberCheque,
+      userId: (session.user as any)?.id,
+      customerName: body.cliente?.nombre,
+      customerPhone: body.cliente?.telefono,
+      notes: body.cliente?.observaciones,
+      subtotal: body.totalContadoBruto ?? totalFinal,
+      total: totalFinal,
+    });
 
     // Devolver PDF
     const pdfBuffer = doc.output("arraybuffer");
