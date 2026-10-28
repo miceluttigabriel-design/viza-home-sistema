@@ -1282,19 +1282,20 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
             </button>
 
             {/* 2.5 CRM (ranking de presupuestos por usuario, general y por sucursal).
-                En MODO SOLO LECTURA (Task 78) no se muestra: la API del CRM
-                está limitada a admins y encargados de sucursal. */}
-            {!esLectura && (
-              <button
-                onClick={abrirCrm}
-                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
-                style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-                title="CRM · Ranking de presupuestos por usuario"
-                aria-label="CRM · Ranking de presupuestos por usuario"
-              >
-                CRM
-              </button>
-            )}
+                Task 82 (pedido del dueño): en MODO SOLO LECTURA TAMBIÉN se
+                muestra — es SOLO VISUALIZACIÓN (viza.compras@ y filipe.campos@
+                ven el ranking general). La asignación de sucursal (select del
+                modal) queda congelada para ellos y su API no acepta escritura
+                de usuarios de consulta. */}
+            <button
+              onClick={abrirCrm}
+              className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title="CRM · Ranking de presupuestos por usuario"
+              aria-label="CRM · Ranking de presupuestos por usuario"
+            >
+              CRM
+            </button>
 
             {/* 3. GDA (solo texto, sin emoji) */}
             {isSupremo && onGoGestion && (
@@ -3777,9 +3778,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                               <select
                                 value={f.sucursal === "SIN SUCURSAL" ? "" : f.sucursal}
                                 onChange={(e) => guardarSucursalCrm(f.email, e.target.value)}
-                                disabled={crmGuardandoSuc === f.email}
+                                disabled={esLectura || crmGuardandoSuc === f.email}
                                 className="w-full h-7 px-2 rounded-lg border border-stone-300 bg-white text-xs font-medium text-stone-700 focus:border-[#1e6ba8] focus:ring-2 focus:ring-blue-100 outline-none disabled:opacity-50"
-                                title="Asignar sucursal del usuario (para el ranking por sucursal)"
+                                title={esLectura ? "SOLO VISUALIZACIÓN: no puede asignar sucursales" : "Asignar sucursal del usuario (para el ranking por sucursal)"}
                               >
                                 <option value="">— NINGUNA —</option>
                                 {crmSucursales.map((s) => (

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { guardarHashtag } from "@/lib/producto-hashtag";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 /**
  * PATCH /api/products/[id]/hashtag
@@ -31,10 +32,10 @@ export async function PATCH(
       );
     }
 
-    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
-    // (independiente del rol que tenga): jamás puede cargar el #HASHTAG.
-    const emailConsulta = ((session.user as any)?.email || "").trim().toLowerCase();
-    if (emailConsulta === "viza.compras@viza.com.py") {
+    // Task 79 + 82: usuarios de consulta (viza.compras@, filipe.campos@ —
+    // lista en src/lib/usuarios-consulta.ts) son SOLO LECTURA de la base
+    // (independiente del rol que tengan): jamás pueden cargar el #HASHTAG.
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
       return NextResponse.json(
         { error: "Usuario de consulta SOLO LECTURA: no puede cargar el #HASHTAG" },
         { status: 403 }

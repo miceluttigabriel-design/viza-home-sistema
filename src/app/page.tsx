@@ -8,6 +8,7 @@ import { AdminPanel } from "@/components/viza/admin-panel";
 import { GestionAccesos } from "@/components/viza/gestion-accesos";
 import { Loader2 } from "lucide-react";
 import { setCurrentUserId } from "@/lib/user-scoped-storage";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -51,17 +52,19 @@ export default function Home() {
     role,
   };
 
-  // ═══ SOLO LECTURA TOTAL (Task 79, pedido del dueño) ═══
-  // viza.compras@viza.com.py (ENC. COMPRAS, Adriano) ve la BASE completa
-  // con buscador/filtros/orden/paginación pero NADA editable: ni celdas,
-  // ni etiquetas de color, ni #HASHTAG, ni guardar/borrar/importar.
+  // ═══ SOLO LECTURA TOTAL (Task 79 + Task 82, pedido del dueño) ═══
+  // Usuarios de CONSULTA (lista única en src/lib/usuarios-consulta.ts):
+  //   · viza.compras@viza.com.py (ENC. COMPRAS, Adriano) — Task 79
+  //   · filipe.campos@viza.com.py — Task 82 (ADM solo para visualización)
+  // Ven la BASE completa con buscador/filtros/orden/paginación y el CRM
+  // (ranking de presupuestos) pero NADA editable: ni celdas, ni etiquetas
+  // de color, ni #HASHTAG, ni guardar/borrar/importar.
   // El control va por EMAIL y NO por rol: así el modo lectura se aplica
-  // SIEMPRE para este usuario, tenga el rol que tenga en la base (el
+  // SIEMPRE para estos usuarios, tengan el rol que tengan en la base (el
   // backend también lo rechaza en toda escritura de productos).
   // La vista alterna se activa con el botón VER BASE del panel de ventas
-  // (onGoBase SOLO se pasa a este email; ningún otro usuario lo recibe).
-  const esConsultaBase =
-    (user.email || "").trim().toLowerCase() === "viza.compras@viza.com.py";
+  // (onGoBase SOLO se pasa a estos emails; ningún otro usuario lo recibe).
+  const esConsultaBase = esEmailSoloLectura(user.email);
   if (esConsultaBase) {
     if (adminView === "base") {
       return (

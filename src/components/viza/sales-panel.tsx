@@ -203,9 +203,11 @@ interface SalesPanelProps {
   onGoAdmin?: () => void;
   onGoGestion?: () => void;
   isSupremo?: boolean;
-  // Task 78 (pedido del dueño): SOLO llega para viza.compras@viza.com.py
-  // (ENC. COMPRAS). Le habilita el botón VER BASE: puede ver TODA la base
-  // de productos con filtros, pero SOLO LECTURA (ninguna celda editable).
+  // Task 78 + 82 (pedido del dueño): SOLO llega para los usuarios de consulta
+  // (viza.compras@viza.com.py y filipe.campos@viza.com.py — lista en
+  // src/lib/usuarios-consulta.ts). Les habilita el botón VER BASE: pueden ver
+  // TODA la base de productos con filtros, pero SOLO LECTURA (ninguna celda
+  // editable).
   onGoBase?: () => void;
 }
 

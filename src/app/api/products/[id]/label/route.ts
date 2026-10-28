@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 // Valores válidos de etiqueta de color
 const VALID_LABELS = ["verde", "azul", "dorado", "rojo"];
@@ -33,10 +34,10 @@ export async function PATCH(
       );
     }
 
-    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
-    // (independiente del rol que tenga): jamás puede etiquetar productos.
-    const emailConsulta = ((session.user as any)?.email || "").trim().toLowerCase();
-    if (emailConsulta === "viza.compras@viza.com.py") {
+    // Task 79 + 82: usuarios de consulta (viza.compras@, filipe.campos@ —
+    // lista en src/lib/usuarios-consulta.ts) son SOLO LECTURA de la base
+    // (independiente del rol que tengan): jamás pueden etiquetar productos.
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
       return NextResponse.json(
         { error: "Usuario de consulta SOLO LECTURA: no puede etiquetar productos" },
         { status: 403 }

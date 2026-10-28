@@ -7,6 +7,7 @@ import {
   marcarCostosEditados,
   leerColKeysProducto,
 } from "@/lib/costo-editado";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 // Recalcula los campos derivados según las fórmulas del Excel
 function recalculate(p: any): any {
@@ -91,10 +92,10 @@ export async function PUT(
       );
     }
 
-    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
-    // (independiente del rol que tenga): jamás puede editar celdas.
-    const emailConsulta = ((session.user as any)?.email || "").trim().toLowerCase();
-    if (emailConsulta === "viza.compras@viza.com.py") {
+    // Task 79 + 82: usuarios de consulta (viza.compras@, filipe.campos@ —
+    // lista en src/lib/usuarios-consulta.ts) son SOLO LECTURA de la base
+    // (independiente del rol que tengan): jamás pueden editar celdas.
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
       return NextResponse.json(
         { error: "Usuario de consulta SOLO LECTURA: no puede editar la base" },
         { status: 403 }
@@ -241,10 +242,10 @@ export async function DELETE(
       );
     }
 
-    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
-    // (independiente del rol que tenga): jamás puede eliminar productos.
-    const emailConsultaBaja = ((session.user as any)?.email || "").trim().toLowerCase();
-    if (emailConsultaBaja === "viza.compras@viza.com.py") {
+    // Task 79 + 82: usuarios de consulta (viza.compras@, filipe.campos@ —
+    // lista en src/lib/usuarios-consulta.ts) son SOLO LECTURA de la base
+    // (independiente del rol que tengan): jamás pueden eliminar productos.
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
       return NextResponse.json(
         { error: "Usuario de consulta SOLO LECTURA: no puede eliminar productos" },
         { status: 403 }

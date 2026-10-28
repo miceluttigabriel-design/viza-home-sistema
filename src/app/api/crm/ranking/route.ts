@@ -9,6 +9,7 @@ import {
   migrarCentralKatuete,
 } from "@/lib/sucursal-usuario";
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 // GET /api/crm/ranking — CRM: ranking de presupuestos emitidos por usuario.
 // DOS formas de entrar:
@@ -42,10 +43,14 @@ export async function GET() {
     // Encargado de sucursal (panel de ventas): entra con el CRM de SU
     // sucursal, SOLO LECTURA. La clave es el email de la sesión en minúscula.
     const emailSesion = (session.user?.email || "").trim().toLowerCase();
-    const sucursalEncargado = isAdmin
+    // Usuarios de CONSULTA (viza.compras@, filipe.campos@ — Task 82): el CRM
+    // es SOLO VISUALIZACIÓN y ven el ranking GENERAL (como admin). La
+    // asignación de sucursal (PUT /api/crm/sucursal) sigue cerrada para ellos.
+    const esConsulta = esEmailSoloLectura(emailSesion);
+    const sucursalEncargado = isAdmin || esConsulta
       ? null
       : (ENCARGADOS_SUCURSAL[emailSesion] ?? null);
-    if (!isAdmin && !sucursalEncargado) {
+    if (!isAdmin && !sucursalEncargado && !esConsulta) {
       return NextResponse.json({ error: "Sin permiso para el CRM" }, { status: 403 });
     }
 
