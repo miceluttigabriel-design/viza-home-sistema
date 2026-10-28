@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
+import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
 import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../lib/pdf/vizaLogo";
 
 interface PdfItem {
@@ -360,12 +361,16 @@ export async function POST(req: NextRequest) {
     // ===== ENCABEZADO (solo página 1) =====
     const now = parseFechaEmision(body.cliente?.fecha, body.cliente?.hora) ?? new Date();
     // N° SECUENCIAL por (plan PRESUPUESTO, usuario): PRESUPUESTO-01, 02 ...
+    // (Task 78: el número se captura en una variable para registrar la
+    // EMISIÓN en la base y que el CRM la contabilice — mismo número
+    // impreso en el PDF = mismo número en el ranking por plan.)
+    const quoteNumberPresupuesto = await nextSequentialQuoteNumber("PRESUPUESTO", (session.user as any)?.id);
     const headerBottom = drawHeader(
       doc,
       pageW,
       margin,
       contentW,
-      await nextSequentialQuoteNumber("PRESUPUESTO", (session.user as any)?.id),
+      quoteNumberPresupuesto,
       now,
       formatDateTimeEs,
       formatDateEs
@@ -813,6 +818,23 @@ export async function POST(req: NextRequest) {
 
     // Generar buffer
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+
+    // REGISTRO DE EMISIÓN (Task 78, pedido del dueño): queda en la base
+    // para que el CRM contabilice el presupuesto CUOTA emitido. Este es el
+    // flujo principal del panel de ventas (plan A/B/C): antes NUNCA se
+    // guardaba y por eso el CRM no contaba estos presupuestos.
+    // Best-effort: si falla, el PDF sale igual (nunca rompe la emisión).
+    await guardarQuoteEmitido({
+      plan: "PRESUPUESTO",
+      quoteNumber: quoteNumberPresupuesto,
+      userId: (session.user as any)?.id,
+      customerName: body.cliente?.nombre,
+      customerPhone: body.cliente?.telefono,
+      notes: body.cliente?.observaciones,
+      subtotal: body.contadoOriginal,
+      discount: body.cascoValor ?? 0,
+      total: body.contadoAjustado ?? body.contadoOriginal ?? 0,
+    });
 
     return new NextResponse(pdfBuffer, {
       headers: {

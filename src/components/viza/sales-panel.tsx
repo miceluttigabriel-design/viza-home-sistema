@@ -163,6 +163,10 @@ interface SalesPanelProps {
   onGoAdmin?: () => void;
   onGoGestion?: () => void;
   isSupremo?: boolean;
+  // Task 78 (pedido del dueño): SOLO llega para viza.compras@viza.com.py
+  // (ENC. COMPRAS). Le habilita el botón VER BASE: puede ver TODA la base
+  // de productos con filtros, pero SOLO LECTURA (ninguna celda editable).
+  onGoBase?: () => void;
 }
 
 // ─── CRM DE MI SUCURSAL (panel de ventas, solo encargados) ───
@@ -178,8 +182,16 @@ interface CrmFilaSucursal {
   sucursal: string;
   total: number;
   aprobadas: number;
+  // Desglose por TIPO DE PLAN (Task 78, pedido del dueño): el CRM puede
+  // filtrar por CUOTA / MAYORISTA / SAFRA / CHEQUE. Opcional por compat.
+  porPlan?: { CUOTA: number; MAYORISTA: number; SAFRA: number; CHEQUE: number };
   ultimo: string | null;
 }
+
+// Pills del filtro por PLAN del CRM (Task 78, pedido del dueño: "para
+// nosotros y los usuarios VIP también"): TODOS + los 4 planes. CUOTA = el
+// presupuesto normal del panel de ventas (quoteNumber PRESUPUESTO-XX).
+const CRM_PLANES_SUC = ["TODOS", "CUOTA", "MAYORISTA", "SAFRA", "CHEQUE"] as const;
 
 // Fecha corta DD/MM/AA para la columna "último" del CRM
 const fmtFechaCortaCrmSuc = (iso: string | null): string => {
@@ -200,7 +212,7 @@ const medalStyleSuc = (pos: number): { bg: string; fg: string } | null =>
     ? { bg: "#CD7F32", fg: "#fff7ed" }
     : null;
 
-export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPanelProps) {
+export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }: SalesPanelProps) {
   // El rol define qué botones de navegación se muestran, NO la vista actual.
   // REGLA DE ORO: el menú depende del ROL del usuario, no de la pantalla.
   // El supremo admin es supremo admin en TODAS las pantallas (admin, ventas, gestión).
@@ -227,6 +239,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
   const [crmFilas, setCrmFilas] = useState<CrmFilaSucursal[]>([]);
   const [crmTotalSucursal, setCrmTotalSucursal] = useState(0);
   const [crmSucursalVista, setCrmSucursalVista] = useState<string | null>(null);
+  // Filtro por TIPO DE PLAN del CRM (Task 78): TODOS por defecto = igual que
+  // siempre; con un plan elegido el ranking cuenta solo ESE plan.
+  const [crmPlanSuc, setCrmPlanSuc] = useState<string>("TODOS");
   const searchRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -957,6 +972,21 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 CRM
               </button>
             )}
+            {/* Task 78 (pedido del dueño): viza.compras@ (ENC. COMPRAS) puede
+                VER toda la BASE de productos con filtros, pero SOLO LECTURA:
+                ninguna celda editable ni botón de guardado. El prop onGoBase
+                solo llega a ese email desde page.tsx (ningún otro usuario lo
+                recibe), así que el botón no aparece para nadie más. */}
+            {onGoBase && (
+              <button
+                onClick={onGoBase}
+                className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border border-transparent hover:brightness-95 shrink-0"
+                style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
+                title="Ver la BASE de productos (solo lectura, no se puede editar nada)"
+              >
+                <span>VER BASE</span>
+              </button>
+            )}
             {/* === TOGGLE MODO COTIZADOR / PLAN SAFRA / CON CHEQUE (al lado de BASE) === */}
             <button
               onClick={() => setViewMode("cotizador")}
@@ -1070,14 +1100,28 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
             modal saldría cortado (sin título ni botón X visibles).
           ══════════════════════════════════════════════════════════════ */}
       {crmAbierto && (() => {
-        const filas = [...crmFilas].sort(
-          (a, b) =>
-            b.total - a.total ||
-            b.aprobadas - a.aprobadas ||
-            a.name.localeCompare(b.name, "es")
-        );
-        const sumaVista = filas.reduce((acc, f) => acc + f.total, 0);
+        // Valor de cada fila según el PLAN elegido (Task 78): con TODOS es el
+        // total de siempre; con un plan, la cantidad de ESE plan.
+        const totalDeFilaSuc = (f: CrmFilaSucursal): number =>
+          crmPlanSuc === "TODOS"
+            ? f.total
+            : (f.porPlan?.[crmPlanSuc as keyof NonNullable<CrmFilaSucursal["porPlan"]>] ?? 0);
+        const filas = [...crmFilas]
+          .filter((f) => crmPlanSuc === "TODOS" || totalDeFilaSuc(f) > 0)
+          .sort(
+            (a, b) =>
+              totalDeFilaSuc(b) - totalDeFilaSuc(a) ||
+              b.total - a.total ||
+              a.name.localeCompare(b.name, "es")
+          );
+        const sumaVista = filas.reduce((acc, f) => acc + totalDeFilaSuc(f), 0);
         const aprobadasVista = filas.reduce((acc, f) => acc + f.aprobadas, 0);
+        // Total del encabezado: con TODOS es el total de la sucursal de
+        // siempre; con un plan, la suma de ese plan sobre TODAS las filas.
+        const totalHeaderSuc =
+          crmPlanSuc === "TODOS"
+            ? crmTotalSucursal
+            : crmFilas.reduce((acc, f) => acc + totalDeFilaSuc(f), 0);
         return (
           <div
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
@@ -1098,7 +1142,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                 </h3>
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-1 rounded-full bg-white/15 text-white text-xs font-bold">
-                    TOTAL EMITIDOS: {crmTotalSucursal}
+                    TOTAL EMITIDOS: {totalHeaderSuc}{crmPlanSuc !== "TODOS" ? ` · ${crmPlanSuc}` : ""}
                   </span>
                   <button
                     onClick={() => setCrmAbierto(false)}
@@ -1108,6 +1152,32 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                     <X className="h-5 w-5" />
                   </button>
                 </div>
+              </div>
+
+              {/* Filtro por TIPO DE PLAN (Task 78, pedido del dueño): mismo
+                  filtro que el CRM del admin — TODOS/CUOTA/MAYORISTA/SAFRA/
+                  CHEQUE. Con un plan elegido el ranking cuenta solo ese plan. */}
+              <div className="px-6 py-2.5 flex flex-wrap items-center gap-1.5 border-b border-stone-200 shrink-0 bg-stone-50">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-stone-400 mr-1">
+                  Tipo de PLAN:
+                </span>
+                {CRM_PLANES_SUC.map((pl) => {
+                  const activo = crmPlanSuc === pl;
+                  return (
+                    <button
+                      key={pl}
+                      onClick={() => setCrmPlanSuc(pl)}
+                      className={`h-7 px-3 rounded-full text-xs font-bold transition-colors ${
+                        activo
+                          ? "text-white"
+                          : "bg-white text-stone-600 hover:bg-stone-200 border border-stone-200"
+                      }`}
+                      style={activo ? { background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)" } : undefined}
+                    >
+                      {pl}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Tabla del ranking (solo lectura) */}
@@ -1171,7 +1241,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
                               <div className="text-[11px] text-stone-400 truncate">{f.email}</div>
                             </td>
                             <td className="px-3 py-2 text-center">
-                              <span className="text-base font-extrabold text-stone-800">{f.total}</span>
+                              <span className="text-base font-extrabold text-stone-800">{totalDeFilaSuc(f)}</span>
                             </td>
                             <td className="px-3 py-2 text-center">
                               <span className={`text-sm font-bold ${f.aprobadas > 0 ? "text-green-700" : "text-stone-300"}`}>
@@ -1191,7 +1261,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo }: SalesPan
 
               {/* Pie: resumen de su sucursal */}
               <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600">
-                <span className="font-bold text-stone-700">{crmSucursalVista || "MI SUCURSAL"}</span>
+                <span className="font-bold text-stone-700">
+                  {crmSucursalVista || "MI SUCURSAL"}
+                  {crmPlanSuc !== "TODOS" ? ` · Plan ${crmPlanSuc}` : ""}
+                </span>
                 <span>
                   {sumaVista} presupuesto{sumaVista !== 1 ? "s" : ""} emitido{sumaVista !== 1 ? "s" : ""}
                   {" · "}

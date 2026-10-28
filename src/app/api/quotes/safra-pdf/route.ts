@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
+import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
 import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 
 // === Tipos del payload del Plan Safra ===
@@ -145,12 +146,16 @@ export async function POST(req: NextRequest) {
     // ===== ENCABEZADO (nuevo diseño con logo + wave + 3 cajas) =====
     const now = parseFechaEmision(body.cliente?.fecha, body.cliente?.hora) ?? new Date();
     // N° SECUENCIAL por (plan SAFRA, usuario): SAFRA-01, SAFRA-02 ...
+    // (Task 78: el número se captura en una variable para registrar la
+    // EMISIÓN en la base y que el CRM la contabilice — mismo número
+    // impreso en el PDF = mismo número en el ranking por plan.)
+    const quoteNumberSafra = await nextSequentialQuoteNumber("SAFRA", (session.user as any)?.id);
     const headerBottom = drawHeader(
       doc,
       pageW,
       margin,
       contentW,
-      await nextSequentialQuoteNumber("SAFRA", (session.user as any)?.id),
+      quoteNumberSafra,
       "SAFRA",
       now,
       formatDateTimeEs,
@@ -493,6 +498,20 @@ export async function POST(req: NextRequest) {
 
     // Generar buffer
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+
+    // REGISTRO DE EMISIÓN (Task 78, pedido del dueño): queda en la base
+    // para que el CRM contabilice el presupuesto SAFRA emitido.
+    // Best-effort: si falla, el PDF sale igual (nunca rompe la emisión).
+    await guardarQuoteEmitido({
+      plan: "SAFRA",
+      quoteNumber: quoteNumberSafra,
+      userId: (session.user as any)?.id,
+      customerName: body.cliente?.nombre,
+      customerPhone: body.cliente?.telefono,
+      notes: body.cliente?.observaciones,
+      subtotal: body.totalContado,
+      total: body.totalPlan,
+    });
 
     return new NextResponse(pdfBuffer, {
       headers: {

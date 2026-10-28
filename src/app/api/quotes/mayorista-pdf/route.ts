@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
+import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
 import { drawHeader, drawFooter, formatPYG, formatDateEs, formatDateTimeEs, BLUE, GOLD, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 import { esProductoRegalo } from "../../../../lib/producto-regalo";
 
@@ -92,12 +93,16 @@ export async function POST(req: NextRequest) {
     // drawHeader devuelve el borde inferior de las 3 cajas (N°/FECHA/VÁLIDO):
     // todo el contenido arranca DEBAJO de esa línea para no pisar el encabezado
     // N° SECUENCIAL por (plan MAYOR, usuario): MAYOR-01, MAYOR-02 ...
+    // (Task 78: el número se captura en una variable para registrar la
+    // EMISIÓN en la base y que el CRM la contabilice — mismo número
+    // impreso en el PDF = mismo número en el ranking por plan.)
+    const quoteNumberMayor = await nextSequentialQuoteNumber("MAYOR", (session.user as any)?.id);
     const headerBottom = drawHeader(
       doc,
       pageW,
       margin,
       contentW,
-      await nextSequentialQuoteNumber("MAYOR", (session.user as any)?.id),
+      quoteNumberMayor,
       "MAYORISTA",
       now,
       formatDateTimeEs,
@@ -326,6 +331,21 @@ export async function POST(req: NextRequest) {
 
     // Generar buffer
     const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+
+    // REGISTRO DE EMISIÓN (Task 78, pedido del dueño): queda en la base
+    // para que el CRM contabilice el presupuesto MAYORISTA emitido.
+    // Best-effort: si falla, el PDF sale igual (nunca rompe la emisión).
+    await guardarQuoteEmitido({
+      plan: "MAYOR",
+      quoteNumber: quoteNumberMayor,
+      userId: (session.user as any)?.id,
+      customerName: body.cliente?.nombre,
+      customerPhone: body.cliente?.telefono,
+      notes: body.cliente?.observaciones,
+      subtotal: sumaSubtotales,
+      discount: descuentoChapaPdf,
+      total: totalMayorista,
+    });
 
     return new NextResponse(pdfBuffer, {
       headers: {

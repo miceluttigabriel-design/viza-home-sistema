@@ -11,10 +11,12 @@ import { setCurrentUserId } from "@/lib/user-scoped-storage";
 
 export default function Home() {
   const { data: session, status } = useSession();
-  // Vista interna: "sales" | "admin" | "gestion"
+  // Vista interna: "sales" | "admin" | "gestion" | "base"
   // - admin/supremo_admin: pueden alternar entre las 3 (supremo tiene "gestion" extra)
+  // - "base" (Task 78): solo para viza.compras@ (colaborador de COMPRAS) —
+  //   la vista de la BASE completa en SOLO LECTURA desde su panel de ventas.
   // Regla de oro: el menú depende del ROL del usuario, no de la vista actual.
-  const [adminView, setAdminView] = useState<"sales" | "admin" | "gestion">("admin");
+  const [adminView, setAdminView] = useState<"sales" | "admin" | "gestion" | "base">("admin");
 
   // Setear el userId actual en localStorage para que los stores (cart, cotizacion,
   // plan-safra, cheque) usen un storage AISLADO POR USUARIO.
@@ -50,8 +52,28 @@ export default function Home() {
 
   // Colaborador → solo SalesPanel (no puede ver Admin ni Gestión)
   // Compat hacia atrás: representante = colaborador
+  // EXCEPCIÓN (Task 78, pedido del dueño): viza.compras@viza.com.py
+  // (ENC. COMPRAS, sector de Adriano) también puede VER la BASE completa
+  // de productos con buscador/filtros/orden/paginación, pero en MODO SOLO
+  // LECTURA: ninguna celda editable ni botón de guardar/borrar/importar.
+  // La vista alterna se activa con el botón VER BASE del panel de ventas
+  // (onGoBase SOLO se pasa a este email; ningún otro usuario lo recibe).
   if (role === "colaborador" || role === "representante") {
-    return <SalesPanel user={user} />;
+    const esConsultaBase =
+      (user.email || "").trim().toLowerCase() === "viza.compras@viza.com.py";
+    if (esConsultaBase && adminView === "base") {
+      return (
+        <AdminPanel user={user} onGoSales={() => setAdminView("sales")} modoLectura />
+      );
+    }
+    return (
+      <SalesPanel
+        user={user}
+        onGoBase={
+          esConsultaBase ? () => setAdminView("base") : undefined
+        }
+      />
+    );
   }
 
   // Admin "común" → puede cambiar entre Sales y Admin (sin Gestión de Accesos)
