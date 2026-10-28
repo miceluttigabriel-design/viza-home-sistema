@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import ExcelJS from "exceljs";
+import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 
 function toNumber(val: any): number | null {
   if (val === null || val === undefined || val === "") return null;
@@ -16,9 +17,10 @@ function toString(val: any): string {
   return String(val).trim();
 }
 
-function recalculate(p: any): void {
-  const cambioRS = 1100;
-  const cambioUS = 6000;
+// Task 87: tasas por parámetro (activas de la base; antes fijas 1100/6000).
+function recalculate(p: any, tasas: TasasCambio = TASAS_DEFAULT): void {
+  const cambioRS = tasas.cambioRS; // $C$1 del Excel (editable desde la Base)
+  const cambioUS = tasas.cambioUS; // $G$1 del Excel (editable desde la Base)
   const d = p.costBR && p.costBR > 0 ? p.costBR * cambioRS : null;
   const f = p.costUS && p.costUS > 0 ? p.costUS * cambioUS : null;
   p.rsNoUS = d && d > 0 ? d : f;
@@ -77,6 +79,10 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File;
     if (!file) return NextResponse.json({ error: "No se encontro archivo" }, { status: 400 });
+
+    // Task 87: tasas activas de la base para TODO el import (una sola
+    // lectura; fallback blando a 1100/6000 si aún no se configuró).
+    const tasasImport = await getTasasCambio();
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const wb = new ExcelJS.Workbook();
@@ -216,7 +222,7 @@ export async function POST(req: NextRequest) {
           subcategory: toString(getCell(row, "SUB-GRUPO")) || null,
           // etiquetaColor: queda null por defecto (definido en schema)
         };
-        recalculate(productData);
+        recalculate(productData, tasasImport);
         await db.product.create({ data: productData });
         results.nuevos++;
       }

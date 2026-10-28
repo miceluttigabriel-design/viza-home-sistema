@@ -165,9 +165,13 @@ interface AdminPanelProps {
 const PAGE_SIZE = 50; // Más productos por página (filas compactas permiten ver más)
 
 // Recalcular en vivo (espejo del cálculo del servidor)
-function recalcLive(form: any): any {
-  const cambioRS = 1100;
-  const cambioUS = 6000;
+// Task 87: las tasas vienen por parámetro (las activas de la base, cargadas
+// al abrir la Base). Si por algún motivo no llegaron, usa las de siempre
+// (1100/6000) — mismo comportamiento que antes de esta función existir.
+const TASAS_FRONT_DEFAULT = { cambioRS: 1100, cambioUS: 6000 };
+function recalcLive(form: any, tasas: { cambioRS: number; cambioUS: number } = TASAS_FRONT_DEFAULT): any {
+  const cambioRS = tasas.cambioRS;
+  const cambioUS = tasas.cambioUS;
   const d = form.costBR && Number(form.costBR) > 0 ? Number(form.costBR) * cambioRS : 0;
   const f = form.costUS && Number(form.costUS) > 0 ? Number(form.costUS) * cambioUS : 0;
   const rsNoUS = d > 0 ? d : f;
@@ -445,6 +449,38 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
         }
       } catch {
         // sin etiquetas creadas — la Base funciona igual que siempre
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // ─── TASA DE CAMBIO ACTIVA (Task 87, pedido del dueño) ───
+  // Tasas R$→Gs y US$→Gs que usa el sistema al recalcular costos (antes
+  // fijas en 1100/6000). Se cargan UNA VEZ al montar la Base y se usan:
+  //   · para el recálculo EN VIVO de la tabla (recalcLive),
+  //   · para mostrarlas en el chip de la barra (informativo, todos),
+  //   · para precargar el modal TASA DE CAMBIO (solo Supremo).
+  // Si la lectura falla, quedan las de siempre y nada se rompe.
+  const [tasasCambio, setTasasCambio] = useState<{ cambioRS: number; cambioUS: number }>(TASAS_FRONT_DEFAULT);
+  const [modalTasaOpen, setModalTasaOpen] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/config-cambio");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (
+          vivo &&
+          typeof data?.cambioRS === "number" && data.cambioRS > 0 &&
+          typeof data?.cambioUS === "number" && data.cambioUS > 0
+        ) {
+          setTasasCambio({ cambioRS: data.cambioRS, cambioUS: data.cambioUS });
+        }
+      } catch {
+        // tasas de siempre — la Base funciona igual que siempre
       }
     })();
     return () => {
@@ -1271,7 +1307,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
       if (sinCostoEntrada && !tocoCosto && Number((product as any).costProd) > 0) {
         fullForm.costGs = (product as any).costProd;
       }
-      const recalculated = recalcLive(fullForm);
+      const recalculated = recalcLive(fullForm, tasasCambio);
       // Sobrescribir los campos calculados en form
       Object.assign(form, recalculated);
     }
@@ -1403,6 +1439,21 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
         />
       )}
 
+      {/* Modal: TASA DE CAMBIO (Task 87, solo supremo_admin) — montado SOLO
+          cuando está abierto, así arranca limpio en cada apertura. Al
+          aplicar: actualiza las tasas del panel Y recarga la lista de
+          productos para que costos y precios nuevos se vean al instante. */}
+      {modalTasaOpen && (
+        <ModalTasaCambio
+          onClose={() => setModalTasaOpen(false)}
+          tasasActuales={tasasCambio}
+          onAplicadas={(nuevas) => {
+            setTasasCambio(nuevas);
+            fetchProducts();
+          }}
+        />
+      )}
+
       <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 pt-6 pb-3 flex flex-col">
         <div className="space-y-4 flex-1 min-h-0 flex flex-col">
           {/* (Buscador movido al header) */}
@@ -1424,6 +1475,34 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 text-stone-600 ring-1 ring-stone-200 text-xs font-semibold">
                     TOTAL: {total} productos
                   </span>
+                )}
+                {/* Chip TASA DE CAMBIO ACTIVA (Task 87, pedido del dueño) —
+                    informativo, visible para todos en la Base: muestra el
+                    cambio R$→Gs y US$→Gs que el sistema usa HOY al recalcular
+                    costos. Editable solo por el Supremo (botón de al lado). */}
+                <span
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200 text-xs font-semibold"
+                  title="Tasa de cambio activa: el sistema la usa para convertir costos cargados en Real y en Dólar a Guaraníes"
+                >
+                  <Coins className="h-3.5 w-3.5" />
+                  CAMBIO: R$ {tasasCambio.cambioRS.toLocaleString("es-PY")} · US$ {tasasCambio.cambioUS.toLocaleString("es-PY")}
+                </span>
+                {/* Botón TASA DE CAMBIO (Task 87, pedido del dueño) — solo
+                    supremo_admin: abre el modal para editar el cambio R$→Gs y
+                    US$→Gs y APLICARLO a la base general (recalcula costos y
+                    precios de los productos cargados en R$ o US$ con las
+                    mismas fórmulas de siempre). */}
+                {isSupremo && !esLectura && (
+                  <button
+                    id="btn-tasa-cambio"
+                    onClick={() => setModalTasaOpen(true)}
+                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                    title="Editar la tasa de cambio (R$→Gs y US$→Gs) y aplicarla a la base general"
+                  >
+                    <Coins className="h-3.5 w-3.5" />
+                    TASA DE CAMBIO
+                  </button>
                 )}
                 {/* Boton EXPORTAR EXCEL — oculto en MODO SOLO LECTURA (Task 78):
                     la API de export exige admin y el modo consulta es solo
@@ -4945,6 +5024,261 @@ function ModalCrearEtiqueta({
               </div>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MODAL TASA DE CAMBIO (Task 87, pedido del dueño) ───
+// Solo supremo_admin (el botón de la toolbar solo se muestra para él).
+// Dos pasos adentro del modal:
+//   1) EDITAR: el Supremo pone el cambio R$→Gs y US$→Gs y aprieta
+//      "APLICAR A LA BASE GENERAL".
+//   2) CONFIRMAR: resumen viejo → nuevo + qué se recalcula y qué NO.
+// Al confirmar llama POST /api/config-cambio: guarda las tasas y recalcula
+// la base (productos con costo en R$ o US$, mismas fórmulas de siempre).
+// El padre (onAplicadas) actualiza el chip y recarga la lista de productos.
+function ModalTasaCambio({
+  onClose,
+  tasasActuales,
+  onAplicadas,
+}: {
+  onClose: () => void;
+  tasasActuales: { cambioRS: number; cambioUS: number };
+  onAplicadas: (tasas: { cambioRS: number; cambioUS: number }) => void;
+}) {
+  // El padre monta este componente SOLO cuando el modal está abierto
+  // ({modalTasaOpen && ...}), así que los estados arrancan limpios en
+  // cada apertura — sin effects de reset ni estados sincrónicos.
+  const [rsStr, setRsStr] = useState(String(tasasActuales.cambioRS));
+  const [usStr, setUsStr] = useState(String(tasasActuales.cambioUS));
+  const [etapa, setEtapa] = useState<"editar" | "confirmar">("editar");
+  const [ocupado, setOcupado] = useState(false);
+  const [errorTxt, setErrorTxt] = useState<string | null>(null);
+
+  // Acepta "1100", "7450,5" y "7450.5" (coma decimal incluida).
+  const parseTasa = (s: string): number | null => {
+    const n = Number(String(s).trim().replace(",", "."));
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n;
+  };
+
+  const rsNuevo = parseTasa(rsStr);
+  const usNuevo = parseTasa(usStr);
+  const valido = rsNuevo !== null && usNuevo !== null;
+
+  const irAConfirmar = () => {
+    setErrorTxt(null);
+    if (!valido) {
+      setErrorTxt("Poné números mayores que 0 para el cambio del Real y del Dólar.");
+      return;
+    }
+    setEtapa("confirmar");
+  };
+
+  const aplicar = async () => {
+    if (ocupado || !valido) return;
+    setOcupado(true);
+    setErrorTxt(null);
+    const toastId = toast.loading("Aplicando el cambio a la base... (puede tardar un poco)");
+    try {
+      const res = await fetch("/api/config-cambio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cambioRS: rsNuevo, cambioUS: usNuevo }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Error HTTP ${res.status}`);
+      }
+      const aplicadas = {
+        cambioRS: data.tasas?.cambioRS ?? rsNuevo!,
+        cambioUS: data.tasas?.cambioUS ?? usNuevo!,
+      };
+      toast.success(
+        `Cambio aplicado: R$ ${aplicadas.cambioRS.toLocaleString("es-PY")} · US$ ${aplicadas.cambioUS.toLocaleString("es-PY")} — ${data.actualizados ?? 0} productos recalculados`,
+        { id: toastId, duration: 6000 }
+      );
+      onAplicadas(aplicadas);
+      onClose();
+    } catch (error) {
+      toast.error(`Error: ${(error as Error).message}`, { id: toastId });
+      setErrorTxt(
+        "No se pudo aplicar el cambio. Si la base es muy grande puede haberse cortado: apretar APLICAR de nuevo completa el trabajo (no se duplica nada)."
+      );
+      setOcupado(false);
+    }
+  };
+
+  const fmt = (n: number) => n.toLocaleString("es-PY");
+
+  return (
+    <div
+      className="fixed inset-0 z-[99990] flex items-center justify-center p-4"
+      style={{ background: "rgba(28, 25, 23, 0.45)" }}
+      onClick={ocupado ? undefined : onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        {/* Encabezado */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white rounded-t-2xl">
+          <h3 className="font-bold text-stone-900 flex items-center gap-2 text-sm">
+            <Coins className="h-4 w-4" style={{ color: "#155789" }} />
+            TASA DE CAMBIO
+          </h3>
+          <button
+            onClick={onClose}
+            disabled={ocupado}
+            className="h-7 w-7 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors disabled:opacity-50"
+            title="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {etapa === "editar" ? (
+            <>
+              {/* Explicación corta */}
+              <div className="rounded-lg px-3 py-2.5 bg-sky-50 border border-sky-100 text-xs text-sky-900 leading-relaxed">
+                El sistema usa este cambio para convertir a Guaraníes los costos
+                cargados en <strong>Real</strong> y en <strong>Dólar</strong>. Al
+                aplicar, se recalculan los costos y precios de TODOS los productos
+                con costo en R$ o US$, con las mismas fórmulas de siempre. Los
+                productos con costo cargado directo en Gs <strong>no se tocan</strong>
+                {" "}y los costos de entrada quedan intactos.
+              </div>
+
+              {/* Cambio R$ */}
+              <div>
+                <label className="text-xs font-semibold text-stone-600 block mb-1">
+                  CAMBIO R$ → Gs (Real a Guaraní)
+                </label>
+                <input
+                  value={rsStr}
+                  onChange={(ev) => setRsStr(ev.target.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter") irAConfirmar();
+                  }}
+                  inputMode="decimal"
+                  placeholder="Ej: 1100"
+                  className="w-full h-9 px-3 rounded-lg border border-stone-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#1e6ba8] focus:border-transparent"
+                />
+                <p className="text-[11px] text-stone-400 mt-1">
+                  Actual: R$ {fmt(tasasActuales.cambioRS)} por 1 Real
+                </p>
+              </div>
+
+              {/* Cambio US$ */}
+              <div>
+                <label className="text-xs font-semibold text-stone-600 block mb-1">
+                  CAMBIO US$ → Gs (Dólar a Guaraní)
+                </label>
+                <input
+                  value={usStr}
+                  onChange={(ev) => setUsStr(ev.target.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter") irAConfirmar();
+                  }}
+                  inputMode="decimal"
+                  placeholder="Ej: 6000"
+                  className="w-full h-9 px-3 rounded-lg border border-stone-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#1e6ba8] focus:border-transparent"
+                />
+                <p className="text-[11px] text-stone-400 mt-1">
+                  Actual: US$ {fmt(tasasActuales.cambioUS)} por 1 Dólar
+                </p>
+              </div>
+
+              {errorTxt && (
+                <div className="rounded-lg px-3 py-2 bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold">
+                  {errorTxt}
+                </div>
+              )}
+
+              {/* Botón continuar */}
+              <button
+                onClick={irAConfirmar}
+                disabled={ocupado}
+                className={`w-full h-10 rounded-lg text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors ${
+                  valido ? "hover:brightness-110" : "opacity-50 cursor-not-allowed"
+                }`}
+                style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+              >
+                <Coins className="h-4 w-4" />
+                APLICAR A LA BASE GENERAL
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Resumen antes de aplicar */}
+              <div className="rounded-lg px-3 py-2.5 bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  Vas a recalcular <strong>TODA la base</strong> con el cambio
+                  nuevo. Los precios de los presupuestos NUEVOS salen con los
+                  valores recalculados; los presupuestos ya guardados quedan
+                  como están.
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span className="font-semibold text-stone-600">Real (R$ → Gs)</span>
+                  <span className="font-mono text-xs">
+                    <span className="text-stone-400">{fmt(tasasActuales.cambioRS)}</span>
+                    <span className="mx-1.5 text-stone-300">→</span>
+                    <span className="font-bold text-stone-900">{fmt(rsNuevo!)}</span>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span className="font-semibold text-stone-600">Dólar (US$ → Gs)</span>
+                  <span className="font-mono text-xs">
+                    <span className="text-stone-400">{fmt(tasasActuales.cambioUS)}</span>
+                    <span className="mx-1.5 text-stone-300">→</span>
+                    <span className="font-bold text-stone-900">{fmt(usNuevo!)}</span>
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-stone-500 leading-relaxed">
+                Se recalculan: sub-costo, Costo Prod., márgenes y precios de los
+                productos con costo en R$ o US$. NO se tocan: los costos de
+                entrada, los productos con costo en Gs, las etiquetas, el stock
+                ni los registros. Si se corta la conexión a mitad, apretar
+                APLICAR de nuevo completa el trabajo.
+              </p>
+
+              {errorTxt && (
+                <div className="rounded-lg px-3 py-2 bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold">
+                  {errorTxt}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEtapa("editar")}
+                  disabled={ocupado}
+                  className="flex-1 h-10 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-sm transition-colors disabled:opacity-50"
+                >
+                  VOLVER
+                </button>
+                <button
+                  onClick={aplicar}
+                  disabled={ocupado}
+                  className={`flex-1 h-10 rounded-lg text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors ${
+                    ocupado ? "opacity-60 cursor-wait" : "hover:brightness-110"
+                  }`}
+                  style={{ background: "linear-gradient(135deg, #166534 0%, #15803d 100%)" }}
+                >
+                  <Check className="h-4 w-4" />
+                  {ocupado ? "APLICANDO..." : "SÍ, APLICAR"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -300,6 +300,30 @@ model UsuarioSucursal {
   updatedAt DateTime @updatedAt
 }
 
+// ============================================================
+// TASA DE CAMBIO ACTIVA (Task 87, pedido del dueño)
+// UNA sola fila (id "ACTIVA") con el cambio R$→Gs y US$→Gs que
+// usa TODO el sistema al recalcular costos y precios. Antes
+// esas tasas vivían fijas en el código (1100 / 6000); ahora el
+// supremo las edita desde la Base (botón TASA DE CAMBIO) y las
+// aplica a la base general.
+// El modelo Product NO se toca: los costos de entrada
+// (costBR / costUS / costGs) y todos los registros quedan igual
+// que siempre — la tasa solo alimenta las fórmulas de siempre
+// (D = C * cambio, F = E * cambio, ...).
+// TABLA AUTO-GESTIONADA (mismo patrón que CostoEditado y
+// ProductHashtag, ver src/lib/tasas-cambio.ts): se crea sola en
+// el primer uso y NUNCA rompe la app; si la lectura falla, el
+// sistema vuelve a las tasas de siempre (1100 / 6000).
+// ============================================================
+model TasaCambio {
+  id             String   @id // "ACTIVA" (fila única de configuración)
+  cambioRS       Float    @default(1100) // R$ → Gs
+  cambioUS       Float    @default(6000) // US$ → Gs
+  updatedAt      DateTime @updatedAt
+  actualizadoPor String   @default("SISTEMA")
+}
+
 model Quote {
   id            String      @id @default(cuid())
   quoteNumber   String      @unique

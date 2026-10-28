@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { leerCostosEditados } from "@/lib/costo-editado";
 import { leerHashtags } from "@/lib/producto-hashtag";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
+import { getTasasCambio } from "@/lib/tasas-cambio";
 
 // GET /api/products - lista de productos con filtros opcionales y paginación
 export async function GET(req: NextRequest) {
@@ -281,8 +282,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Recalcular campos derivados
-    const cambioRS = 1100;
-    const cambioUS = 6000;
+    // Task 87: tasas activas de la base (antes fijas 1100/6000).
+    const tasas = await getTasasCambio();
+    const cambioRS = tasas.cambioRS; // R$ → Gs (editable desde la Base)
+    const cambioUS = tasas.cambioUS; // US$ → Gs (editable desde la Base)
     const d = data.costBR && data.costBR > 0 ? data.costBR * cambioRS : null;
     const f = data.costUS && data.costUS > 0 ? data.costUS * cambioUS : null;
     data.rsNoUS = d && d > 0 ? d : f;

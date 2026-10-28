@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { leerProductosProtegidos } from "@/lib/costo-editado";
+import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 import { Prisma } from "@prisma/client";
 import {
   computeDbMarginStats,
@@ -98,10 +99,12 @@ const COST_UPDATE_BATCH_SIZE = 100;
 function recalcExistingWithNewCostGs(
   dbp: any,
   newCostGs: number,
-  newStock: number
+  newStock: number,
+  tasas: TasasCambio = TASAS_DEFAULT
 ): Record<string, number | null> {
-  const cambioRS = 1100;
-  const cambioUS = 6000;
+  // Task 87: tasas activas de la base (antes fijas 1100/6000).
+  const cambioRS = tasas.cambioRS;
+  const cambioUS = tasas.cambioUS;
 
   const d = dbp.costBR && dbp.costBR > 0 ? dbp.costBR * cambioRS : null;
   const f = dbp.costUS && dbp.costUS > 0 ? dbp.costUS * cambioUS : null;
@@ -177,9 +180,10 @@ const COST_UPDATE_COLS: string[] = [
 // columnas quedaban vacías; además, al editar un margen el sistema
 // recalculaba desde costGs (vacío) y ponía el costo y los precios en 0.
 // ─────────────────────────────────────────────────────────────
-function recalculateFull(p: any): void {
-  const cambioRS = 1100;
-  const cambioUS = 6000;
+function recalculateFull(p: any, tasas: TasasCambio = TASAS_DEFAULT): void {
+  // Task 87: tasas activas de la base (antes fijas 1100/6000).
+  const cambioRS = tasas.cambioRS;
+  const cambioUS = tasas.cambioUS;
 
   // Entrada: costo importado (Gs)
   p.costGs = p.costProd ?? null;
@@ -232,7 +236,8 @@ function recalculateFull(p: any): void {
 function buildNuevoProduct(
   n: { sku: string; name: string | null; referencia: string | null; subGrupo: string | null; stock: number; costProd: number | null },
   stats: MarginStats | null,
-  safraStats?: SafraStats | null
+  safraStats?: SafraStats | null,
+  tasas?: TasasCambio
 ): any {
   const p: any = {
     sku: n.sku,
@@ -270,7 +275,7 @@ function buildNuevoProduct(
     }
   }
   // Disparar la cadena de cálculo completa (costGs → costProd → márgenes → precios)
-  recalculateFull(p);
+  recalculateFull(p, tasas ?? TASAS_DEFAULT);
   return p;
 }
 
@@ -374,6 +379,10 @@ export async function POST(req: NextRequest) {
     // nadie va protegido y todo funciona igual que antes — nunca rompe esto).
     const protegidosIds = await leerProductosProtegidos();
 
+    // Task 87: tasas activas de la base para TODA esta importación (una
+    // sola lectura; fallback blando a 1100/6000 si aún no se configuró).
+    const tasasStock = await getTasasCambio();
+
     // Separar los updates:
     //   - costUpdates: la planilla trae un costo DISTINTO al guardado →
     //     se actualiza COSTO GS + toda la cadena automática (con las
@@ -399,7 +408,7 @@ export async function POST(req: NextRequest) {
       ) {
         costUpdates.push({
           sku: u.sku,
-          data: recalcExistingWithNewCostGs(row, costoExcel, u.stock),
+          data: recalcExistingWithNewCostGs(row, costoExcel, u.stock, tasasStock),
         });
       } else {
         stockOnlyUpdates.push({ sku: u.sku, stock: u.stock });
@@ -426,7 +435,7 @@ export async function POST(req: NextRequest) {
       // También disparamos el cálculo automático de márgenes y precios
       // a partir del costProd importado, con margen automática por tipo.
       const nuevosData: any[] = trulyNew.map((n) => {
-        const p = buildNuevoProduct(n, stats, safraStats);
+        const p = buildNuevoProduct(n, stats, safraStats, tasasStock);
         if (p.marginContado > 0) margenesAutomaticas++;
         if (p.safra) conSafraAutomatica++;
         return p;
@@ -445,7 +454,7 @@ export async function POST(req: NextRequest) {
         errores.push(`createMany falló: ${msg}. Intentando individual…`);
         for (const n of trulyNew) {
           try {
-            const p = buildNuevoProduct(n, stats, safraStats);
+            const p = buildNuevoProduct(n, stats, safraStats, tasasStock);
             if (p.marginContado > 0) margenesAutomaticas++;
             if (p.safra) conSafraAutomatica++;
             await db.product.create({ data: p });
