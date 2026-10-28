@@ -4,6 +4,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
+import { db } from "../../../../lib/db";
+import { leerHashtags } from "../../../../lib/producto-hashtag";
+import { textoHashtag } from "../../../../lib/hashtag-formato";
 import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../lib/pdf/vizaLogo";
 
 interface PdfItem {
@@ -137,6 +140,8 @@ const LIGHT: RGB = [238, 243, 248];
 const ZEBRA: RGB = [246, 248, 251];
 const GOLD_LIGHT: RGB = [250, 243, 224];
 const LINE: RGB = [216, 222, 230];
+// Dorado oscuro para el texto del #HASHTAG bajo la descripción (Task 83).
+const DORADO_TXT: RGB = [138, 109, 47]; // #8a6d2f
 
 const VALIDEZ_DIAS = 10;
 const FOOTER_H = 64;
@@ -470,6 +475,32 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+    // #HASHTAG por producto (Task 83, pedido del dueño): se lee DIRECTO de
+    // la base por sku (tabla aparte ProductHashtag) y se dibuja DEBAJO de la
+    // descripción: "# 200 GS" (el valor 200.000 de la base en miles, sin los
+    // ceros). Si la lectura falla, el PDF sale igual sin el hashtag.
+    const hashtagPorSku = new Map<string, string>();
+    try {
+      const skusHashtag = Array.from(
+        new Set(itemsConMargen.map((it) => (it.sku || "").trim()).filter(Boolean))
+      );
+      if (skusHashtag.length > 0) {
+        const prodsHashtag = await db.product.findMany({
+          where: { sku: { in: skusHashtag } },
+          select: { id: true, sku: true },
+        });
+        const idPorSku = new Map(prodsHashtag.map((p) => [p.sku, p.id]));
+        const mapaHashtags = await leerHashtags(Array.from(idPorSku.values()));
+        for (const [sku, id] of idPorSku) {
+          const h = mapaHashtags.get(id);
+          const txt = textoHashtag(h?.valor ?? null);
+          if (txt) hashtagPorSku.set(sku, txt);
+        }
+      }
+    } catch {
+      // sin hashtag en el PDF si falla — el resto del presupuesto sale igual
+    }
+
     const colN = 25;
     const colSku = 70;
     const colCant = 50;
@@ -503,8 +534,11 @@ export async function POST(req: NextRequest) {
 
     // Filas productos (con margen aplicado al P.CONTADO si corresponde)
     itemsConMargen.forEach((it, idx) => {
-      ensureSpace(34);
-      const rowH = 30;
+      // #HASHTAG (Task 83): si el producto tiene, la fila crece 30→40 para
+      // que el hashtag entre bien abajo de la descripción sin pisar nada.
+      const hashtagTxt = hashtagPorSku.get((it.sku || "").trim()) || "";
+      const rowH = hashtagTxt ? 40 : 30;
+      ensureSpace(rowH + 4);
       if (idx % 2 === 1) {
         doc.setFillColor(...ZEBRA);
         doc.rect(margin, y, contentW, rowH, "F");
@@ -527,6 +561,14 @@ export async function POST(req: NextRequest) {
       doc.setFontSize(8.5);
       const nameLines = doc.splitTextToSize(it.name, colName - 6);
       doc.text(nameLines.slice(0, 2), xxx, y + 13);
+      // #HASHTAG bien abajo de la descripción (Task 83): "# 200 GS" en dorado.
+      if (hashtagTxt) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(...DORADO_TXT);
+        doc.text(hashtagTxt, xxx, y + 13 + nameLines.length * 9.5 + 1.5);
+        doc.setTextColor(...DARK); // restaurar para cant./precios de la misma fila
+      }
 
       xxx += colName;
       doc.setFont("helvetica", "normal");

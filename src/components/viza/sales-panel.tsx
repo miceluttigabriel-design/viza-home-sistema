@@ -30,6 +30,7 @@ import {
   type PlanCuotas,
   type TipoEntrega,
 } from "@/store/cotizacion";
+import { textoHashtag } from "@/lib/hashtag-formato";
 import { formatPYG } from "@/lib/format";
 import { PlanSafra } from "./plan-safra";
 import { PlanCheque } from "./plan-cheque";
@@ -495,6 +496,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
       // Costo UNITARIO de la BASE: SOLO para el cuadrito interno del vendedor.
       // Nunca viaja en el payload de ningún PDF ni se guarda en la BD.
       cost: extractCosto(product),
+      // #HASHTAG (promo del admin, Task 83): se muestra bajo la descripción
+      // en el carrito ("# 200 GS"). El PDF lo lee directo de la base por sku.
+      hashtag: (product as any).hashtag ?? null,
       quantity: 1,
     };
     addItem(item);
@@ -2174,6 +2178,13 @@ function ProductItemRow({
       <div className="h-7 w-7 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center text-xs font-bold shrink-0">{index}</div>
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-sm text-stone-900 line-clamp-2 leading-snug">{item.name}</p>
+        {/* #HASHTAG (Task 83, pedido del dueño): bajo la descripción del
+            producto agregado, en miles sin los ceros (200.000 → "# 200 GS"). */}
+        {item.hashtag?.valor ? (
+          <p className="text-[11px] font-bold mt-0.5" style={{ color: "#8a6d2f" }}>
+            {textoHashtag(item.hashtag.valor)}
+          </p>
+        ) : null}
         <p className="text-xs text-stone-500 mt-0.5">
           SKU: <span className="font-mono">{item.sku}</span> · Contado:{" "}
           <span className="font-semibold">{formatPYG(item.priceContado)}</span> c/u

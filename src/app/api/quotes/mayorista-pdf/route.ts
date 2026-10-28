@@ -6,6 +6,9 @@ import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
 import { drawHeader, drawFooter, formatPYG, formatDateEs, formatDateTimeEs, BLUE, GOLD, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 import { esProductoRegalo } from "../../../../lib/producto-regalo";
+import { db } from "../../../../lib/db";
+import { leerHashtags } from "../../../../lib/producto-hashtag";
+import { textoHashtag } from "../../../../lib/hashtag-formato";
 
 // === Tipos del payload del Presupuesto MAYORISTA ===
 
@@ -194,10 +197,38 @@ export async function POST(req: NextRequest) {
     y += 24;
 
     // Filas productos
+    // #HASHTAG por producto (Task 83, pedido del dueño): se lee DIRECTO de
+    // la base por sku (tabla aparte ProductHashtag) y se dibuja DEBAJO de la
+    // descripción: "# 200 GS" (200.000 en miles, sin los ceros). Si la
+    // lectura falla, el PDF sale igual sin el hashtag.
+    const hashtagPorSku = new Map<string, string>();
+    try {
+      const skusHashtag = Array.from(
+        new Set(body.productos.map((it) => (it.sku || "").trim()).filter(Boolean))
+      );
+      if (skusHashtag.length > 0) {
+        const prodsHashtag = await db.product.findMany({
+          where: { sku: { in: skusHashtag } },
+          select: { id: true, sku: true },
+        });
+        const idPorSku = new Map(prodsHashtag.map((p) => [p.sku, p.id]));
+        const mapaHashtags = await leerHashtags(Array.from(idPorSku.values()));
+        for (const [sku, id] of idPorSku) {
+          const h = mapaHashtags.get(id);
+          const txt = textoHashtag(h?.valor ?? null);
+          if (txt) hashtagPorSku.set(sku, txt);
+        }
+      }
+    } catch {
+      // sin hashtag en el PDF si falla — el resto del presupuesto sale igual
+    }
     doc.setFontSize(9);
     body.productos.forEach((it, idx) => {
-      ensureSpace(60);
-      const rowH = 30;
+      // #HASHTAG (Task 83): fila más alta (30→40) cuando el producto tiene
+      // hashtag para que entre bien abajo de la descripción sin pisar nada.
+      const hashtagTxt = hashtagPorSku.get((it.sku || "").trim()) || "";
+      const rowH = hashtagTxt ? 40 : 30;
+      ensureSpace(rowH + 34);
 
       if (idx % 2 === 0) {
         doc.setFillColor(245, 245, 244);
@@ -218,6 +249,14 @@ export async function POST(req: NextRequest) {
       doc.setFontSize(9);
       const nameLines = doc.splitTextToSize(it.name, colName - 6);
       doc.text(nameLines.slice(0, 2), xxx, y + 13);
+      // #HASHTAG bien abajo de la descripción (Task 83): "# 200 GS" en dorado.
+      if (hashtagTxt) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(138, 109, 47); // #8a6d2f dorado oscuro
+        doc.text(hashtagTxt, xxx, y + 13 + nameLines.length * 9.5 + 1.5);
+        doc.setTextColor(28, 25, 23); // restaurar para el resto de la fila
+      }
 
       xxx += colName;
       doc.setFont("helvetica", "normal");

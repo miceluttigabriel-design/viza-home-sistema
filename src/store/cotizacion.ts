@@ -82,6 +82,13 @@ export interface CotizacionItem {
   // quantity/precios). Opcional: items viejos guardados antes de esta
   // versión no lo tienen y muestran "—" en el cuadrito.
   cost?: number;
+  // === #HASHTAG (promo del admin, Task 83) ===
+  // Se muestra DEBAJO de la descripción en el carrito del panel de ventas:
+  // "# 200 GS" (valor de la base en miles, sin los ceros). Viene del GET de
+  // productos (tabla aparte ProductHashtag). Opcional: items viejos y
+  // productos sin hashtag no lo tienen y no muestran nada. El PDF lo lee
+  // DIRECTO de la base por sku (no viaja en el payload).
+  hashtag?: { valor: number | null; fecha: string | null } | null;
 }
 
 export interface PlanCuotas {
