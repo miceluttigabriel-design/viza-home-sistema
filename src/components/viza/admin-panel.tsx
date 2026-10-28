@@ -2015,9 +2015,11 @@ tr.fila-etiquetada-${e.id}:hover td {
                       <div className="flex items-center gap-1">
                         <span>COD</span>
                         {/* Flechita de orden NUMÉRICO por COD (pedido del usuario):
-                            mayor a menor / menor a mayor. Misma flechita de STOCK. */}
-                        <StockSortButton
+                            mayor a menor / menor a mayor. Misma flechita de las
+                            columnas STOCK y DESCRIPCION. */}
+                        <ColumnSortButton
                           dir={codSort}
+                          label="COD"
                           onClick={() => {
                             setCodSort((prev) =>
                               prev === null ? "desc" : prev === "desc" ? "asc" : null
@@ -2064,8 +2066,9 @@ tr.fila-etiquetada-${e.id}:hover td {
                               <span>{col.label}</span>
                               {col.key === "stock" ? (
                                 // STOCK: sin filtro por valor, solo flechita de ordenamiento
-                                <StockSortButton
+                                <ColumnSortButton
                                   dir={stockSort}
+                                  label="STOCK"
                                   onClick={() => {
                                     setStockSort((prev) =>
                                       prev === null ? "desc" : prev === "desc" ? "asc" : null
@@ -2084,8 +2087,9 @@ tr.fila-etiquetada-${e.id}:hover td {
                                 // usuario: A hacia abajo / Z hacia adelante) + su filtro
                                 // de valores de siempre, los dos conviven
                                 <>
-                                  <StockSortButton
+                                  <ColumnSortButton
                                     dir={nameSort}
+                                    label="DESCRIPCION"
                                     onClick={() => {
                                       setNameSort((prev) =>
                                         prev === null ? "desc" : prev === "desc" ? "asc" : null
@@ -4632,15 +4636,31 @@ const FilterButton = memo(function FilterButton({
   );
 });
 
-// Botón de ordenamiento para la columna STOCK (flechita)
-// Estados: null (sin orden, flecha neutral) → "desc" (mayor a menor, ↓) → "asc" (menor a mayor, ↑) → null
-const StockSortButton = memo(function StockSortButton({
+// Botón de ordenamiento de columnas (flechita) — compartido por COD, STOCK y
+// DESCRIPCION. El tooltip (title) SIEMPRE nombra la columna correcta:
+//   COD / STOCK     → numérico: "de mayor a menor" / "de menor a mayor"
+//   DESCRIPCION     → alfabético: "de Z a A" / "de A a Z" (nunca dice "stock")
+// Estados: null (sin orden, flecha neutral) → "desc" (↓) → "asc" (↑) → null
+const ColumnSortButton = memo(function ColumnSortButton({
   dir,
+  label,
   onClick,
 }: {
   dir: "asc" | "desc" | null;
+  label: "COD" | "STOCK" | "DESCRIPCION";
   onClick: () => void;
 }) {
+  const esAlfabetico = label === "DESCRIPCION";
+  const title =
+    dir === "desc"
+      ? esAlfabetico
+        ? "DESCRIPCION: de Z a A (click: de A a Z)"
+        : `${label}: de mayor a menor (click: de menor a mayor)`
+      : dir === "asc"
+      ? esAlfabetico
+        ? "DESCRIPCION: de A a Z (click: orden normal)"
+        : `${label}: de menor a mayor (click: orden normal)`
+      : `Ordenar por ${label}`;
   return (
     <button
       type="button"
@@ -4650,13 +4670,7 @@ const StockSortButton = memo(function StockSortButton({
         e.preventDefault();
         onClick();
       }}
-      title={
-        dir === "desc"
-          ? "Stock: mayor a menor (click para menor a mayor)"
-          : dir === "asc"
-          ? "Stock: menor a mayor (click para volver al orden normal)"
-          : "Ordenar por stock: mayor a menor / menor a mayor"
-      }
+      title={title}
       className={`inline-flex items-center justify-center h-5 w-5 rounded transition-colors ${
         dir
           ? "bg-stone-800 text-white"
