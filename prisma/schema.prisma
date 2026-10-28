@@ -256,6 +256,26 @@ model ProductHashtag {
   updatedAt DateTime @updatedAt
 }
 
+// ============================================================
+// ETIQUETAS DE COLOR CREADAS POR EL SUPREMO (Task 84)
+// Etiquetas ADICIONALES a las 4 fijas de siempre (verde, azul,
+// dorado, rojo). El supremo_admin las crea con el botón CREAR
+// ETIQUETA de la Base: nombre visible + color "#RRGGBB".
+// El producto guarda en su columna etiquetaColor (LA MISMA DE
+// SIEMPRE) el id de la etiqueta — así los filtros, la edición y
+// las importaciones siguen funcionando exactamente igual.
+// TABLA AUTO-GESTIONADA (mismo patrón que CostoEditado y
+// ProductHashtag, ver src/lib/etiquetas.ts): se crea sola en el
+// primer uso y NUNCA rompe la app.
+// ============================================================
+model Etiqueta {
+  id        String   @id @default(cuid())
+  nombre    String   @unique
+  color     String   // "#RRGGBB"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ─── SUCURSAL ASIGNADA A CADA USUARIO (CRM · ranking) ───
 // Una fila por usuario (clave = email) con la sucursal que le asigna el
 // admin. La usa el CRM: ranking de presupuestos emitidos por usuario,

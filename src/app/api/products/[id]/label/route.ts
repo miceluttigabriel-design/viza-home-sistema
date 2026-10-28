@@ -3,8 +3,11 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
+import { existeEtiquetaCreada } from "@/lib/etiquetas";
 
-// Valores válidos de etiqueta de color
+// Valores válidos de etiqueta de color (las 4 fijas de siempre).
+// Task 84: además se acepta el id de una etiqueta CREADA por el supremo
+// (ver existeEtiquetaCreada más abajo).
 const VALID_LABELS = ["verde", "azul", "dorado", "rojo"];
 
 /**
@@ -48,12 +51,15 @@ export async function PATCH(
     const body = await req.json();
     const color = body.color; // string | null
 
-    // Validar: debe ser null o uno de los valores válidos
+    // Validar: debe ser null, una de las fijas, o una etiqueta creada
     if (color !== null && !VALID_LABELS.includes(color)) {
-      return NextResponse.json(
-        { error: `Color inválido. Debe ser uno de: ${VALID_LABELS.join(", ")} o null` },
-        { status: 400 }
-      );
+      const creadaValida = await existeEtiquetaCreada(color);
+      if (!creadaValida) {
+        return NextResponse.json(
+          { error: `Etiqueta inválida (no es una fija ni una etiqueta creada)` },
+          { status: 400 }
+        );
+      }
     }
 
     // Verificar que el producto existe

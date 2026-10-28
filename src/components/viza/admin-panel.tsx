@@ -33,6 +33,7 @@ import {
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import { formatPYG } from "@/lib/format";
+import type { EtiquetaCreada } from "@/lib/etiquetas";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 
 // Formatea una fracción decimal de porcentaje (0.25 = 25%) igual que la tabla
@@ -421,6 +422,35 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
   const [nameSort, setNameSort] = useState<"asc" | "desc" | null>(null);
   // Filtro activo de etiqueta de color: "verde" | "azul" | "dorado" | "rojo" | null
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
+
+  // ─── ETIQUETAS CREADAS POR EL SUPREMO (Task 84) ───
+  // Etiquetas extra a las 4 fijas (verde/azul/dorado/rojo), con nombre y
+  // color. Se usan en el menú de etiquetado de cada fila, en los filtros
+  // clickeables y para pintar la fila (clase dinámica inyectada más abajo).
+  const [etiquetasCreadas, setEtiquetasCreadas] = useState<EtiquetaCreada[]>([]);
+  const [modalEtiquetaOpen, setModalEtiquetaOpen] = useState(false);
+
+  // Cargar etiquetas creadas (una vez al montar la Base). Si falla o aún
+  // no existe la tabla, quedan solo las 4 fijas de siempre y nada se rompe
+  // (el API responde lista vacía igual).
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/products/labels");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (vivo && Array.isArray(data?.creadas)) {
+          setEtiquetasCreadas(data.creadas);
+        }
+      } catch {
+        // sin etiquetas creadas — la Base funciona igual que siempre
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   // ─── IMPORTAR EXCEL (planilla de inventario) ───
   // Estados del modal de importación de stock desde planilla de inventario
@@ -1363,13 +1393,25 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
         onClose={() => setCambiarContrasenaOpen(false)}
       />
 
+      {/* Modal: CREAR ETIQUETA (Task 84, solo supremo_admin) — montado
+          SOLO cuando está abierto, así arranca limpio en cada apertura. */}
+      {modalEtiquetaOpen && (
+        <ModalCrearEtiqueta
+          onClose={() => setModalEtiquetaOpen(false)}
+          creadas={etiquetasCreadas}
+          onCreadas={(lista) => setEtiquetasCreadas(lista)}
+        />
+      )}
+
       <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 pt-6 pb-3 flex flex-col">
         <div className="space-y-4 flex-1 min-h-0 flex flex-col">
           {/* (Buscador movido al header) */}
           <div className="flex flex-col gap-3 shrink-0">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-lg font-bold text-stone-900">Gestión de productos</h2>
+                {/* (Título "Gestión de productos" eliminado — pedido del dueño:
+                    más espacio para los botones, que ahora arrancan a la
+                    izquierda). */}
                 {search.trim() ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200 text-xs font-semibold">
                     {loadingProducts ? (
@@ -1429,6 +1471,23 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                   <Download className="h-3.5 w-3.5" />
                   EXPORTAR EXCEL
                 </button>
+                )}
+
+                {/* Boton CREAR ETIQUETA (Task 84, pedido del dueño) — solo
+                    supremo_admin: abre el modal para crear etiquetas nuevas
+                    (nombre + color) que aparecen en el menú de etiquetado de
+                    cada fila y en los filtros clickeables. */}
+                {isSupremo && (
+                  <button
+                    id="btn-crear-etiqueta"
+                    onClick={() => setModalEtiquetaOpen(true)}
+                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    style={{ background: "linear-gradient(135deg, #8a6d2f 0%, #b08a3e 100%)" }}
+                    title="Crear etiquetas nuevas de color (solo Supremo Usuario)"
+                  >
+                    <Tag className="h-3.5 w-3.5" />
+                    CREAR ETIQUETA
+                  </button>
                 )}
 
                 {/* Boton IMPORTAR EXCEL (planilla de inventario) — solo supremo_admin */}
@@ -1799,11 +1858,62 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#DC3545" }}></span>
                   Quema Stock
                 </button>
+                {/* Etiquetas CREADAS por el supremo (Task 84): mismo filtro
+                    clickeable que las 4 fijas, con su color propio. */}
+                {etiquetasCreadas.map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    className={`leyenda-item ${labelFilter === e.id ? "filtro-activo" : ""}`}
+                    data-filtro={e.id}
+                    onClick={() => {
+                      setLabelFilter(prev => prev === e.id ? null : e.id);
+                      setPage(1);
+                    }}
+                    title={`Filtrar: ${e.nombre}`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      cursor: "pointer",
+                      padding: "4px 10px",
+                      borderRadius: "5px",
+                      border: labelFilter === e.id ? `2px solid ${e.color}` : "2px solid transparent",
+                      background: labelFilter === e.id ? `${e.color}26` : "transparent",
+                      color: labelFilter === e.id ? "#1c1917" : "#525252",
+                      fontWeight: labelFilter === e.id ? 700 : 400,
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: e.color }}></span>
+                    {e.nombre}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
           {/* Tabla estilo Excel - edición directa */}
+          {/* Estilos dinámicos de las filas con etiquetas CREADAS (Task 84):
+              mismas reglas !important que las 4 fijas (globals.css), pero
+              generadas al vuelo con el color de cada etiqueta. Solo pinta
+              filas: no toca datos. */}
+          {etiquetasCreadas.length > 0 && (
+            <style>
+              {etiquetasCreadas
+                .map(
+                  (e) => `
+tr.fila-etiquetada-${e.id} td, tr.fila-etiquetada-${e.id} > td {
+  background-color: ${e.color}26 !important;
+  border-left: 5px solid ${e.color} !important;
+}
+tr.fila-etiquetada-${e.id}:hover td {
+  background-color: ${e.color}4D !important;
+}`
+                )
+                .join("\n")}
+            </style>
+          )}
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm flex-1 min-h-0">
             <div className="overflow-auto h-full">
               <table className="admin-table border-collapse text-xs">
@@ -1970,6 +2080,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                           isDirty={isDirty}
                           modoLectura={esLectura}
                           label={productLabels[p.id] || null}
+                          etiquetasCreadas={etiquetasCreadas}
                           isLabelMenuOpen={openLabelMenu === p.id}
                           filaActiva={filaActivaId === p.id}
                           onTocarFila={() => setFilaActivaId(p.id)}
@@ -3842,6 +3953,7 @@ const ExcelRow = memo(function ExcelRow({
   isDirty,
   modoLectura,
   label,
+  etiquetasCreadas,
   isLabelMenuOpen,
   filaActiva,
   onTocarFila,
@@ -3859,6 +3971,9 @@ const ExcelRow = memo(function ExcelRow({
   // MODO SOLO LECTURA (Task 78): sin columna ACCIONES y celdas readOnly.
   modoLectura?: boolean;
   label: string | null;
+  // Etiquetas CREADAS por el supremo (Task 84): aparecen en el menú de
+  // etiquetado y pintan la fila con su propio color.
+  etiquetasCreadas: { id: string; nombre: string; color: string }[];
   isLabelMenuOpen: boolean;
   filaActiva: boolean;
   onTocarFila: () => void;
@@ -3881,7 +3996,24 @@ const ExcelRow = memo(function ExcelRow({
     { id: "dorado", color: "#FFC107", label: "Descontinuado" },
     { id: "rojo", color: "#DC3545", label: "Quema Stock" },
   ];
-  const currentStyle = label ? labelStyles[label] : null;
+  // Etiquetas CREADAS (Task 84): mismas bolitas del menú, con su nombre.
+  const coloresCreadas = etiquetasCreadas.map((e) => ({
+    id: e.id,
+    color: e.color,
+    label: e.nombre,
+  }));
+  // Estilo de la fila: fija (map de arriba) o creada (color propio de la
+  // etiqueta + clase dinámica inyectada por el panel). Las fijas NUNCA
+  // cambian; las creadas solo agregan — cero regresión.
+  const etiquetaCreada = label ? etiquetasCreadas.find((e) => e.id === label) : undefined;
+  const currentStyle = label
+    ? labelStyles[label] ?? {
+        bg: `${etiquetaCreada?.color ?? "#d6d3d1"}26`,
+        border: etiquetaCreada?.color ?? "#d6d3d1",
+        hover: `${etiquetaCreada?.color ?? "#d6d3d1"}4D`,
+        cellClass: `fila-etiquetada-${label}`,
+      }
+    : null;
 
   // ─── COSTOS EDITADOS POR EL ADMIN ───
   // Las celdas de costo que el admin editó a mano y guardó se pintan de
@@ -3921,7 +4053,7 @@ const ExcelRow = memo(function ExcelRow({
             id={`label-btn-${product.id}`}
             onClick={onToggleLabelMenu}
             className="h-7 w-7 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors"
-            style={label ? { backgroundColor: labelStyles[label].border, color: "white" } : undefined}
+            style={label ? { backgroundColor: currentStyle?.border ?? "#78716c", color: "white" } : undefined}
             title="Etiquetar producto"
           >
             <Tag className="h-3.5 w-3.5" />
@@ -4027,7 +4159,7 @@ const ExcelRow = memo(function ExcelRow({
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              {labelColors.map((lc) => (
+              {[...labelColors, ...coloresCreadas].map((lc) => (
                 <button
                   key={lc.id}
                   onClick={() => onSetLabel(lc.id)}
@@ -4587,3 +4719,234 @@ const FilterDropdown = memo(function FilterDropdown({
     </div>
   );
 });
+
+// ═══════════════════════════════════════════════════════════════
+// MODAL CREAR ETIQUETA (Task 84, pedido del dueño)
+// Solo lo abre el supremo_admin (botón CREAR ETIQUETA de la Base).
+// Crea etiquetas nuevas (nombre + color) que aparecen:
+//   - en el menú de etiquetado de cada fila (bolita de color),
+//   - en los filtros clickeables de la leyenda,
+//   - y pintan la fila con su propio color.
+// También lista las creadas con su × para borrarlas (al borrar, los
+// productos que la tenían quedan sin etiqueta — lo hace el API).
+// Las 4 fijas (verde/azul/dorado/rojo) NUNCA se tocan acá.
+// ═══════════════════════════════════════════════════════════════
+const PALETA_ETIQUETAS: string[] = [
+  "#28A745", // verde
+  "#007BFF", // azul
+  "#FFC107", // dorado
+  "#DC3545", // rojo
+  "#6F42C1", // violeta
+  "#E8590C", // naranja
+  "#0CA678", // verde agua
+  "#E64980", // rosa
+  "#17A2B8", // celeste
+  "#8B5E34", // marrón
+  "#4B5563", // gris
+  "#000000", // negro
+];
+
+function ModalCrearEtiqueta({
+  onClose,
+  creadas,
+  onCreadas,
+}: {
+  onClose: () => void;
+  creadas: EtiquetaCreada[];
+  onCreadas: (lista: EtiquetaCreada[]) => void;
+}) {
+  // El padre monta este componente SOLO cuando el modal está abierto
+  // ({modalEtiquetaOpen && ...}), así que los estados arrancan limpios en
+  // cada apertura — sin effects de reset ni estados sincrónicos.
+  const [nombre, setNombre] = useState("");
+  const [color, setColor] = useState<string>(PALETA_ETIQUETAS[4]);
+  const [ocupado, setOcupado] = useState(false);
+
+  const crear = async () => {
+    if (ocupado) return;
+    if (!nombre.trim()) {
+      toast.error("Poné un nombre para la etiqueta");
+      return;
+    }
+    setOcupado(true);
+    const toastId = toast.loading("Creando etiqueta...");
+    try {
+      const res = await fetch("/api/products/labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombre.trim(), color }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "No se pudo crear la etiqueta", { id: toastId });
+        return;
+      }
+      toast.success(`Etiqueta "${data.etiqueta.nombre}" creada`, { id: toastId });
+      onCreadas([...creadas, data.etiqueta].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      setNombre("");
+    } catch {
+      toast.error("Error de red al crear la etiqueta", { id: toastId });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const borrar = async (e: EtiquetaCreada) => {
+    if (!window.confirm(
+      `¿Borrar la etiqueta "${e.nombre}"?\n\nLos productos que la tenían quedan SIN etiqueta (igual que si se la sacaras a mano).`
+    )) return;
+    const toastId = toast.loading("Borrando etiqueta...");
+    try {
+      const res = await fetch(`/api/products/labels?id=${encodeURIComponent(e.id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "No se pudo borrar la etiqueta", { id: toastId });
+        return;
+      }
+      toast.success(`Etiqueta "${e.nombre}" borrada`, { id: toastId });
+      onCreadas(creadas.filter((x) => x.id !== e.id));
+    } catch {
+      toast.error("Error de red al borrar la etiqueta", { id: toastId });
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[99990] flex items-center justify-center p-4"
+      style={{ background: "rgba(28, 25, 23, 0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        {/* Encabezado */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white rounded-t-2xl">
+          <h3 className="font-bold text-stone-900 flex items-center gap-2 text-sm">
+            <Tag className="h-4 w-4" style={{ color: "#8a6d2f" }} />
+            CREAR ETIQUETA
+          </h3>
+          <button
+            onClick={onClose}
+            className="h-7 w-7 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors"
+            title="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* Nombre */}
+          <div>
+            <label className="text-xs font-semibold text-stone-600 block mb-1">
+              NOMBRE de la etiqueta
+            </label>
+            <input
+              value={nombre}
+              onChange={(ev) => setNombre(ev.target.value)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter") crear();
+              }}
+              maxLength={40}
+              placeholder="Ej: RESERVADO, OFERTA, FALTANTE..."
+              className="w-full h-9 px-3 rounded-lg border border-stone-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#b08a3e] focus:border-transparent"
+            />
+          </div>
+
+          {/* Color: paleta + selector libre */}
+          <div>
+            <label className="text-xs font-semibold text-stone-600 block mb-1.5">
+              COLOR
+            </label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {PALETA_ETIQUETAS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  title={c}
+                  className="h-7 w-7 rounded-full transition-transform hover:scale-110"
+                  style={{
+                    backgroundColor: c,
+                    border: color === c ? "3px solid #1c1917" : "2px solid #e7e5e4",
+                  }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={color}
+                onChange={(ev) => setColor(ev.target.value)}
+                className="h-8 w-12 rounded border border-stone-300 cursor-pointer bg-white"
+                title="Color personalizado"
+              />
+              <span className="text-xs font-mono text-stone-500">{color.toUpperCase()}</span>
+            </div>
+          </div>
+
+          {/* Vista previa */}
+          <div
+            className="rounded-lg px-3 py-2 flex items-center gap-2"
+            style={{ background: `${color}26`, borderLeft: `5px solid ${color}` }}
+          >
+            <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
+            <span className="text-sm font-semibold" style={{ color: "#1c1917" }}>
+              {nombre.trim() || "Vista previa de la etiqueta"}
+            </span>
+          </div>
+
+          {/* Botón crear */}
+          <button
+            onClick={crear}
+            disabled={ocupado}
+            className={`w-full h-10 rounded-lg text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors ${
+              ocupado ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"
+            }`}
+            style={{ background: "linear-gradient(135deg, #8a6d2f 0%, #b08a3e 100%)" }}
+          >
+            <Plus className="h-4 w-4" />
+            CREAR ETIQUETA
+          </button>
+
+          {/* Etiquetas ya creadas */}
+          <div className="pt-1">
+            <p className="text-xs font-semibold text-stone-600 mb-1.5">
+              ETIQUETAS CREADAS ({creadas.length})
+            </p>
+            {creadas.length === 0 ? (
+              <p className="text-xs text-stone-400">
+                Todavía no creaste etiquetas. Las de siempre (Seleccionado, Para Pedido,
+                Descontinuado, Quema Stock) siguen funcionando igual y no se pueden borrar.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {creadas.map((e) => (
+                  <div
+                    key={e.id}
+                    className="flex items-center justify-between gap-2 rounded-lg px-3 py-1.5"
+                    style={{ background: `${e.color}26`, borderLeft: `5px solid ${e.color}` }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: e.color }} />
+                      <span className="text-sm font-semibold text-stone-800 truncate">{e.nombre}</span>
+                    </div>
+                    <button
+                      onClick={() => borrar(e)}
+                      className="h-6 w-6 rounded-md bg-white hover:bg-rose-50 text-stone-400 hover:text-rose-600 flex items-center justify-center transition-colors shrink-0"
+                      title="Borrar etiqueta (los productos etiquetados quedan sin etiqueta)"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
