@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import ExcelJS from "exceljs";
 
 function toNumber(val: any): number | null {
@@ -62,6 +63,15 @@ export async function POST(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     if ((session.user as any)?.role !== "admin" && (session.user as any)?.role !== "supremo_admin") {
       return NextResponse.json({ error: "Solo admin o supremo_admin" }, { status: 403 });
+    }
+    // Task 82/83: usuarios de consulta (viza.compras@, filipe.campos@ — lista
+    // en src/lib/usuarios-consulta.ts) no pueden importar productos, tengan el
+    // rol que tengan (blindaje extra: un consulta con rol admin tampoco puede).
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
+      return NextResponse.json(
+        { error: "Usuario de consulta SOLO LECTURA: no puede importar productos" },
+        { status: 403 }
+      );
     }
 
     const formData = await req.formData();
