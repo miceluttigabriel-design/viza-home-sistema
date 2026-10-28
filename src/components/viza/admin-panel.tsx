@@ -357,7 +357,7 @@ const FROZEN_COLUMNS: { key: string; width: number }[] = [
   { key: "referencia", width: 130 }, // REF.FABRICA
   { key: "name", width: 400 },       // DESCRIPCION
 ];
-const FROZEN_START_LEFT = 230; // ACCIONES (120px) + COD (110px)
+const FROZEN_START_LEFT = 230; // modo normal: ACCIONES (120px) + COD (110px)
 const FROZEN_BG = "#D9B86B";   // mismo dorado del encabezado / ACCIONES / COD
 // DORADO SUPER VIVO VIBRANTE para las celdas de COSTO que el admin editó a
 // mano y guardó (se ve al instante y se distingue del dorado del padrón).
@@ -366,15 +366,22 @@ const COSTO_EDITADO_BG = "#FFD700";
 // del usuario: DESCRIPCION fija y blanca). El ENCABEZADO sigue dorado,
 // respetando el padrón de encabezados dorados.
 const FROZEN_BLANCO = new Set<string>(["name"]); // "name" = DESCRIPCION
-const frozenLeftByKey: Record<string, number> = (() => {
+// Posiciones left de las columnas fijas: se calculan desde el arranque.
+// Task 80 (ajuste visual): en MODO SOLO LECTURA la columna ACCIONES no
+// existe, así que las fijas arrancan PEGADAS al COD (110px); antes quedaban
+// en 230px (reservando los 120px de ACCIONES que no está) y GRUPO se veía
+// separada del COD. Los anchos son los mismos; solo cambia el arranque.
+function frozenLeftsDesde(start: number): Record<string, number> {
   const m: Record<string, number> = {};
-  let acc = FROZEN_START_LEFT;
+  let acc = start;
   for (const c of FROZEN_COLUMNS) {
     m[c.key] = acc;
     acc += c.width;
   }
   return m;
-})();
+}
+const frozenLeftByKey = frozenLeftsDesde(FROZEN_START_LEFT); // modo normal: ACCIONES (120px) + COD (110px)
+const frozenLeftByKeyLectura = frozenLeftsDesde(110);        // modo SOLO LECTURA: solo COD (110px)
 const frozenWidthByKey: Record<string, number> = Object.fromEntries(
   FROZEN_COLUMNS.map((c) => [c.key, c.width])
 );
@@ -1362,18 +1369,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <h2 className="text-lg font-bold text-stone-900">Gestión de productos</h2>
-                {/* Badge del MODO SOLO LECTURA (Task 78): visible solo para el
-                    usuario de COMPRAS — deja claro que puede ver y filtrar
-                    todo, pero nada de lo que ve se puede editar. */}
-                {esLectura && (
-                  <span
-                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border"
-                    style={{ background: "#fffbeb", color: "#92400e", borderColor: "#D9B86B" }}
-                    title="Podés ver y filtrar toda la base, pero no editar ninguna celda"
-                  >
-                    SOLO LECTURA · no se puede editar
-                  </span>
-                )}
                 {search.trim() ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200 text-xs font-semibold">
                     {loadingProducts ? (
@@ -1848,7 +1843,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                       // exactamente como siempre. El encabezado SIEMPRE dorado
                       // (padrón); el fondo blanco de FROZEN_BLANCO aplica solo a
                       // las celdas del cuerpo de la tabla.
-                      const frozenLeft = frozenLeftByKey[col.key];
+                      // Task 80: en MODO SOLO LECTURA las fijas arrancan pegadas
+                      // al COD (sin los 120px de ACCIONES, que no existe aquí).
+                      const frozenLeft = (esLectura ? frozenLeftByKeyLectura : frozenLeftByKey)[col.key];
                       const frozenWidth = frozenWidthByKey[col.key];
                       const esFija = frozenLeft !== undefined;
                       return (
@@ -4311,7 +4308,9 @@ const Cell = memo(function Cell({
   // Las CELDAS de FROZEN_BLANCO (DESCRIPCION) llevan fondo blanco; el resto de
   // las fijas lleva dorado. El encabezado siempre es dorado (padrón). Sin
   // entrada en FROZEN_COLUMNS queda como siempre (bg-white).
-  const frozenLeft = frozenLeftByKey[col.key];
+  // Task 80: en MODO SOLO LECTURA las fijas arrancan pegadas al COD (110px),
+  // igual que los encabezados — sin el hueco de los 120px de ACCIONES.
+  const frozenLeft = (modoLectura ? frozenLeftByKeyLectura : frozenLeftByKey)[col.key];
   const frozenWidth = frozenWidthByKey[col.key];
   const esFija = frozenLeft !== undefined;
   const fondoFija = esFija
