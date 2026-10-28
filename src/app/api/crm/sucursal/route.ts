@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { SUCURSALES_VIZA, asignarSucursal } from "@/lib/sucursal-usuario";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 // PUT /api/crm/sucursal — asigna (o quita) la sucursal de UN usuario para
 // el CRM. Solo admin / supremo_admin.
@@ -19,6 +20,15 @@ export async function PUT(req: NextRequest) {
     const role = (session.user as any)?.role;
     if (role !== "admin" && role !== "supremo_admin") {
       return NextResponse.json({ error: "Sin permiso para el CRM" }, { status: 403 });
+    }
+    // Task 82: usuarios de consulta (viza.compras@, filipe.campos@ — lista
+    // en src/lib/usuarios-consulta.ts) NO pueden asignar sucursales: el CRM
+    // para ellos es SOLO VISUALIZACIÓN (aunque su rol sea admin).
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
+      return NextResponse.json(
+        { error: "Usuario de consulta SOLO VISUALIZACIÓN: no puede asignar sucursales" },
+        { status: 403 }
+      );
     }
 
     const body = await req.json().catch(() => null);

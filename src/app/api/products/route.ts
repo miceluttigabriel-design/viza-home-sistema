@@ -2,313 +2,233 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { leerCostosEditados } from "@/lib/costo-editado";
-import { leerHashtags } from "@/lib/producto-hashtag";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
+import ExcelJS from "exceljs";
 
-// GET /api/products - lista de productos con filtros opcionales y paginación
-export async function GET(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(req.url);
-    const category = searchParams.get("category");
-    const search = searchParams.get("search");
-    const sku = searchParams.get("sku");
-    // Filtro por etiqueta de color: "verde" | "azul" | "dorado" | "rojo" | "sin"
-    // "sin" muestra productos SIN etiqueta asignada (etiquetaColor = null)
-    const etiquetaColor = searchParams.get("etiquetaColor");
-    const page = Math.max(1, Number(searchParams.get("page") || "1"));
-    const pageSize = Math.min(200, Math.max(1, Number(searchParams.get("pageSize") || "60")));
-
-    // Filtros por columna (JSON: { colKey: string[] })
-    let columnFilters: Record<string, string[]> = {};
-    const filtersParam = searchParams.get("filters");
-    if (filtersParam) {
-      try {
-        const parsed = JSON.parse(filtersParam);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          for (const [k, v] of Object.entries(parsed)) {
-            if (Array.isArray(v) && v.length > 0) {
-              columnFilters[k] = v.map(String);
-            }
-          }
-        }
-      } catch {
-        // ignore invalid JSON
-      }
-    }
-
-    const where: Record<string, unknown> = {};
-    if (category && category !== "Todas") {
-      where.category = category;
-    }
-    if (sku) {
-      where.sku = { contains: sku };
-    }
-    // Filtro por etiqueta de color o por productos editados
-    if (etiquetaColor === "sin") {
-      // Productos SIN etiqueta
-      where.etiquetaColor = null;
-    } else if (etiquetaColor === "editados") {
-      // Productos que SÍ fueron editados manualmente (tienen ultimaEdicionAt)
-      where.ultimaEdicionAt = { not: null };
-    } else if (etiquetaColor) {
-      // Productos con la etiqueta específica
-      where.etiquetaColor = etiquetaColor;
-    }
-    if (search) {
-      // CORRECCIÓN v1.1: Búsqueda CASE-INSENSITIVE (no distingue mayúsculas de minúsculas)
-      // Ahora "moto" encuentra "MOTO KENTON", "Moto", "mOtO", etc.
-      // Funciona para TODOS los usuarios (supremo, admin, colaborador).
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { sku: { contains: search, mode: "insensitive" } },
-        { brand: { contains: search, mode: "insensitive" } },
-        { subcategory: { contains: search, mode: "insensitive" } },
-        { fabricante: { contains: search, mode: "insensitive" } },
-        { tipo: { contains: search, mode: "insensitive" } },
-        { marca: { contains: search, mode: "insensitive" } },
-        { modelo: { contains: search, mode: "insensitive" } },
-        { referencia: { contains: search, mode: "insensitive" } },
-      ];
-    }
-
-    // Aplicar filtros por columna: where[col] = { in: values }
-    for (const [col, values] of Object.entries(columnFilters)) {
-      where[col] = { in: values };
-    }
-
-    // CORRECCIÓN v1.0: TODOS los usuarios (incluyendo colaboradores) pueden ver
-    // TODOS los productos en la búsqueda del panel de ventas.
-    // Antes, los colaboradores solo veían productos con showInCatalog=true,
-    // lo que hacía que no encontraran productos al buscar (ej: "DAKAR", "MOTO").
-    // Ahora, cualquier usuario autenticado ve TODOS los productos sin filtro de rol.
-    // El filtro showInCatalog se eliminó para evitar que falten productos en la búsqueda.
-    // (NO se toca la base de datos, NO se toca la lógica de roles, NO se toca el panel admin)
-
-    // Siempre paginar (incluso con búsqueda activa)
-    const total = await db.product.count({ where });
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    // Ordenamiento:
-    // - Si llega sort=stock (dir=asc|desc), ordenar por stock (flechita de la columna STOCK
-    //   en el Panel ADM) con category+name como desempate. Solo se permite "stock".
-    // - Si llega sort=name (dir=asc|desc), ordenar ALFABÉTICO por DESCRIPCION
-    //   (flechita de la columna DESCRIPCION en el Panel ADM) con sku de desempate.
-    // - Si llega sort=sku (dir=asc|desc), orden NUMÉRICO por COD (flechita de la
-    //   columna COD): se resuelve MÁS ABAJO en JS (los COD son strings y el orden
-    //   alfabético de la base no respeta el orden numérico: "10000" < "9999").
-    // - Si el filtro "editados" está activo, ordenar por ultimaEdicionAt DESC
-    //   (más reciente arriba) - IGNORAR el ordenamiento alfabético normal
-    // - En caso contrario, orden alfabético estándar (categoría + nombre)
-    const sortField = searchParams.get("sort");
-    const sortDir: "asc" | "desc" = searchParams.get("dir") === "desc" ? "desc" : "asc";
-    const orderBy = sortField === "stock"
-      ? [{ stock: sortDir }, { category: "asc" as const }, { name: "asc" as const }]
-      : sortField === "name"
-      ? [{ name: sortDir }, { sku: "asc" as const }]
-      : etiquetaColor === "editados"
-      ? [{ ultimaEdicionAt: "desc" as const }]
-      : [{ category: "asc" as const }, { name: "asc" as const }];
-
-    // ORDEN NUMÉRICO POR COD (sort=sku): se traen SOLO id+sku de TODAS las
-    // filas que coinciden con los filtros, se ordenan en JS por el número
-    // extraído del código (funciona igual en PostgreSQL y SQLite, sin SQL
-    // crudo ni casts que rompan con códigos alfanuméricos) y se pide la
-    // página completa ya en el orden correcto. Los códigos sin número van
-    // al final (ordenados por su texto). Sin paginar de más: total/pages
-    // siguen siendo los de TODO el filtro (ya calculados arriba).
-    let products;
-    if (sortField === "sku") {
-      const rowsCod = await db.product.findMany({
-        where,
-        select: { id: true, sku: true },
-      });
-      const codNumero = (s: unknown): number | null => {
-        const digitos = String(s ?? "").replace(/\D/g, "");
-        return digitos === "" ? null : Number(digitos);
-      };
-      rowsCod.sort((a, b) => {
-        const na = codNumero(a.sku);
-        const nb = codNumero(b.sku);
-        if (na === null && nb === null) return String(a.sku).localeCompare(String(b.sku));
-        if (na === null) return 1;  // sin número: al final siempre
-        if (nb === null) return -1;
-        return sortDir === "desc" ? nb - na : na - nb;
-      });
-      const pageIds = rowsCod
-        .slice((page - 1) * pageSize, page * pageSize)
-        .map((r) => r.id);
-      const filasPagina = await db.product.findMany({
-        where: { id: { in: pageIds } },
-      });
-      const porId = new Map(filasPagina.map((f) => [f.id, f]));
-      products = pageIds
-        .map((id) => porId.get(id))
-        .filter((f): f is (typeof filasPagina)[number] => !!f);
-    } else {
-      products = await db.product.findMany({
-        where,
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      });
-    }
-
-    // ─── COSTOS EDITADOS POR EL ADMIN (guardados) ───
-    // Tabla aparte AUTO-GESTIONADA (ver src/lib/costo-editado.ts): si aún no
-    // existe se crea sola y NUNCA rompe esta ruta (devuelve sin marcas y la
-    // lista de productos carga igual, con saldos y costos intactos).
-    const editadosMap = await leerCostosEditados(products.map((p) => p.id));
-
-    // ─── #HASHTAG por producto (promo del admin) ───
-    // Tabla aparte AUTO-GESTIONADA (ver src/lib/producto-hashtag.ts): si aún
-    // no existe se crea sola y NUNCA rompe esta ruta (devuelve mapa vacío y
-    // los productos salen sin hashtag, igual que antes de esta función).
-    // Cada producto sale con hashtag: {valor, fecha} | null — lo usan la
-    // tabla del Panel ADM y las búsquedas de los paneles del vendedor.
-    const hashtagsMap = await leerHashtags(products.map((p) => p.id));
-
-    return NextResponse.json({
-      products: products.map((p) => ({
-        ...p,
-        costosEditados: editadosMap.get(p.id) ?? [],
-        hashtag: hashtagsMap.get(p.id) ?? null,
-      })),
-      total,
-      page,
-      pageSize,
-      totalPages,
-    });
-  } catch (error) {
-    console.error("Error fetching products:", error);
-    return NextResponse.json({ error: "Error al obtener productos" }, { status: 500 });
-  }
+function toNumber(val: any): number | null {
+  if (val === null || val === undefined || val === "") return null;
+  const n = Number(val);
+  return isNaN(n) ? null : n;
 }
 
-// POST /api/products - crea un nuevo producto (solo admin)
+function toString(val: any): string {
+  if (val === null || val === undefined) return "";
+  return String(val).trim();
+}
+
+function recalculate(p: any): void {
+  const cambioRS = 1100;
+  const cambioUS = 6000;
+  const d = p.costBR && p.costBR > 0 ? p.costBR * cambioRS : null;
+  const f = p.costUS && p.costUS > 0 ? p.costUS * cambioUS : null;
+  p.rsNoUS = d && d > 0 ? d : f;
+  const calcCost = p.rsNoUS && p.rsNoUS > 0 ? p.rsNoUS : (p.costGs ?? 0);
+  p.usNoGs = calcCost;
+  p.subCost = calcCost;
+  p.rsToGs = d;
+  p.usToGs = f;
+  p.minusDisc = calcCost - (calcCost * (p.discountPct || 0));
+  p.plusAdd = (p.minusDisc ?? 0) + ((p.minusDisc ?? 0) * (p.addPct || 0));
+  p.plusAdd2 = (p.plusAdd ?? 0) + ((p.plusAdd ?? 0) * (p.admPct || 0));
+  p.minusDescV = (p.plusAdd2 ?? 0) - (p.valorDesc ?? 0);
+  const baseCosto = (p.minusDescV ?? 0) + (p.valorAdd ?? 0);
+  p.costProd = Math.round(baseCosto / 1000) * 1000;
+  const y = p.pct1A6 || 0;
+  const z = p.pct7A13 || 0;
+  const aa = p.pct14A30 || 0;
+  const mContado = p.marginContado || 0;
+  let lastMargin = mContado;
+  for (let i = 1; i <= 30; i++) {
+    let base: number;
+    if (i <= 6) base = y;
+    else if (i <= 13) base = z;
+    else base = aa;
+    lastMargin = lastMargin + base;
+    p[`marginC${i}`] = lastMargin;
+  }
+  const t = p.costProd ?? 0;
+  p.priceContado = Math.round((t + t * mContado) / 1000) * 1000;
+  for (let i = 1; i <= 30; i++) {
+    const margin = p[`marginC${i}`];
+    p[`price${i}`] = Math.round((t + t * margin) / 1000 / i) * 1000;
+  }
+  p.price = p.priceContado ?? 0;
+  p.cost = p.costProd ?? 0;
+}
+
+// POST /api/products/import - Importa productos desde Excel
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
+    if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     if ((session.user as any)?.role !== "admin" && (session.user as any)?.role !== "supremo_admin") {
+      return NextResponse.json({ error: "Solo admin o supremo_admin" }, { status: 403 });
+    }
+    // Task 79 + 82: usuarios de consulta (viza.compras@, filipe.campos@ —
+    // lista en src/lib/usuarios-consulta.ts) no pueden importar productos,
+    // tengan el rol que tengan (blindaje extra por si un consulta es admin).
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
       return NextResponse.json(
-        { error: "Solo el administrador puede crear productos" },
+        { error: "Usuario de consulta SOLO LECTURA: no puede importar productos" },
         { status: 403 }
       );
     }
 
-    const body = await req.json();
+    const formData = await req.formData();
+    const file = formData.get("file") as File;
+    if (!file) return NextResponse.json({ error: "No se encontro archivo" }, { status: 400 });
 
-    // Generar SKU único si no viene
-    let sku = body.sku?.trim() || `NEW-${Date.now()}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const wb = new ExcelJS.Workbook();
+    // El tipo Buffer de exceljs entra en conflicto con el de @types/node
+    // (Buffer<ArrayBuffer> vs Buffer), por eso el cast.
+    await wb.xlsx.load(buffer as any);
 
-    // Verificar que el SKU no exista
-    const existing = await db.product.findUnique({ where: { sku } });
-    if (existing) {
-      return NextResponse.json(
-        { error: `El SKU ${sku} ya existe` },
-        { status: 400 }
-      );
+    const ws = wb.getWorksheet("PRODUCTOS") || wb.worksheets[0];
+    if (!ws) return NextResponse.json({ error: "No se encontro hoja" }, { status: 400 });
+
+    // Mapeo de headers a campos
+    const headerRow = ws.getRow(1);
+    const headerMap: Record<string, number> = {};
+    for (let c = 1; c <= ws.columnCount; c++) {
+      const header = toString(headerRow.getCell(c).value).toUpperCase();
+      headerMap[header] = c;
     }
 
-    // Crear producto con campos mínimos + los que vengan del body
-    const data: any = {
-      sku,
-      name: body.name || "NUEVO PRODUCTO",
-      description: body.description || null,
-      showInCatalog: body.showInCatalog ?? false,
-      category: body.category || null,
-      subcategory: body.subcategory || null,
-      brand: body.brand || null,
-      model: body.model || null,
-      // Costos
-      costBR: body.costBR ? Number(body.costBR) : null,
-      costUS: body.costUS ? Number(body.costUS) : null,
-      costGs: body.costGs ? Number(body.costGs) : null,
-      discountPct: body.discountPct ? Number(body.discountPct) : null,
-      addPct: body.addPct ? Number(body.addPct) : null,
-      admPct: body.admPct ? Number(body.admPct) : null,
-      valorDesc: body.valorDesc ? Number(body.valorDesc) : null,
-      valorAdd: body.valorAdd ? Number(body.valorAdd) : null,
-      // Bases
-      pct1A6: body.pct1A6 ? Number(body.pct1A6) : null,
-      pct7A13: body.pct7A13 ? Number(body.pct7A13) : null,
-      pct14A30: body.pct14A30 ? Number(body.pct14A30) : null,
-      marginContado: body.marginContado ? Number(body.marginContado) : null,
-      // Datos
-      referencia: body.referencia || null,
-      codViza: sku,
-      codShow: body.codShow || null,
-      safra: body.safra || null,
-      productName: body.productName || null,
-      fabricante: body.fabricante || null,
-      subGrupo: body.subGrupo || null,
-      categoria: body.categoria || null,
-      division: body.division || null,
-      tipo: body.tipo || null,
-      marca: body.marca || null,
-      modelo: body.modelo || null,
-      obs: body.obs || null,
-      coluna1: body.coluna1 || null,
-      coluna2: body.coluna2 || null,
-      stock: body.stock ? Number(body.stock) : 0,
-      costSistema: body.costSistema ? Number(body.costSistema) : null,
-      valorTecnico: body.valorTecnico ? Number(body.valorTecnico) : null,
-      margenTecnico: body.margenTecnico ? Number(body.margenTecnico) : null,
+    const getCell = (row: ExcelJS.Row, headerName: string): any => {
+      const col = headerMap[headerName.toUpperCase()];
+      if (!col) return null;
+      const cell = row.getCell(col).value;
+      if (cell && typeof cell === "object" && "result" in cell) return (cell as any).result;
+      return cell;
     };
 
-    // Aplicar márgenes 1-30 si vienen
-    for (let i = 1; i <= 30; i++) {
-      if (body[`marginC${i}`] !== undefined) {
-        data[`marginC${i}`] = Number(body[`marginC${i}`]);
+    const results = {
+      total: 0,
+      nuevos: 0,
+      actualizados: 0,
+      errores: [] as string[],
+    };
+
+    for (let r = 2; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      const sku = toString(getCell(row, "SKU"));
+      const name = toString(getCell(row, "DESCRIPCION"));
+
+      if (!sku) {
+        results.errores.push(`Fila ${r}: SKU vacio`);
+        continue;
       }
+      if (!name) {
+        results.errores.push(`Fila ${r}: DESCRIPCION vacia`);
+        continue;
+      }
+
+      // Verificar si el producto YA existe - REGLA CRÍTICA DE NEGOCIO
+      const existing = await db.product.findUnique({ where: { sku } });
+
+      if (existing) {
+        // ════════════════════════════════════════════════════════════════
+        // PRODUCTO EXISTENTE: Actualizar SOLO campos no protegidos
+        // ════════════════════════════════════════════════════════════════
+        // REGLA DE ORO: Las ediciones manuales del admin (costos, márgenes,
+        // precios, cuotas, datos finales, etiquetas) DEBEN PERMANECER INTACTAS.
+        // Solo se actualizan desde la plantilla:
+        //   - stock (STOCK) → única excepción: siempre se sobrescribe
+        //   - referencia (REFERENCIA) → puede cambiar el código
+        //   - codShow (COD SHOW) → puede cambiar el código
+        //   - name (DESCRIPCION) → puede cambiar el nombre del producto
+        //
+        // NO se tocan (se preservan los valores actuales en BD):
+        //   - costBR, costUS, costGs, todos los costos calculados
+        //   - marginContado, marginC1..C30, todos los márgenes
+        //   - priceContado, price1..30, todas las cuotas
+        //   - pct1A6, pct7A13, pct14A30, bases de porcentaje
+        //   - safra, fabricante, subGrupo, categoria, division, tipo,
+        //     marca, modelo, valorTecnico, margenTecnico, coluna1, coluna2
+        //   - costSistema
+        //   - etiquetaColor (regla anterior: persiste siempre)
+        //   - showInCatalog (visible en catálogo de vendedores)
+        // ════════════════════════════════════════════════════════════════
+        const stockExcel = toNumber(getCell(row, "STOCK")) ?? 0;
+        const referenciaExcel = toString(getCell(row, "REFERENCIA")) || null;
+        const codShowExcel = toString(getCell(row, "COD SHOW")) || null;
+        const nameExcel = name;
+
+        await db.product.update({
+          where: { sku },
+          data: {
+            stock: stockExcel,
+            referencia: referenciaExcel,
+            codShow: codShowExcel,
+            name: nameExcel,
+            // ─────────────────────────────────────────────────────
+            // CAMPOS PROTEGIDOS - INTENCIONALMENTE NO INCLUIDOS:
+            // (Prisma.update solo modifica los campos que están en `data`)
+            // ─────────────────────────────────────────────────────
+            // costBR, costUS, costGs, discountPct, addPct, admPct,
+            // valorDesc, valorAdd, pct1A6, pct7A13, pct14A30, marginContado,
+            // safra, fabricante, subGrupo, categoria, division, tipo,
+            // marca, modelo, valorTecnico, margenTecnico, coluna1, coluna2,
+            // costSistema, etiquetaColor, showInCatalog,
+            // y todos los campos calculados: rsToGs, usToGs, rsNoUS, usNoGs,
+            // subCost, minusDisc, plusAdd, plusAdd2, minusDescV, costProd,
+            // marginC1..C30, priceContado, price1..30, price, cost
+          },
+        });
+        results.actualizados++;
+      } else {
+        // ════════════════════════════════════════════════════════════════
+        // PRODUCTO NUEVO: Insertar TODOS los campos del Excel
+        // ════════════════════════════════════════════════════════════════
+        const productData: any = {
+          sku,
+          name,
+          referencia: toString(getCell(row, "REFERENCIA")) || null,
+          codShow: toString(getCell(row, "COD SHOW")) || null,
+          costBR: toNumber(getCell(row, "COSTO R$")),
+          costUS: toNumber(getCell(row, "COSTO US$")),
+          costGs: toNumber(getCell(row, "COSTO GS")),
+          discountPct: toNumber(getCell(row, "% DESC")),
+          addPct: toNumber(getCell(row, "% ADD")),
+          admPct: toNumber(getCell(row, "GASTOS ADM")),
+          valorDesc: toNumber(getCell(row, "VALOR DESC.")),
+          valorAdd: toNumber(getCell(row, "VALOR ADD")),
+          pct1A6: toNumber(getCell(row, "1 A 6")),
+          pct7A13: toNumber(getCell(row, "7 A 13")),
+          pct14A30: toNumber(getCell(row, "14 A 30")),
+          marginContado: toNumber(getCell(row, "% CONTADO")),
+          safra: toString(getCell(row, "SAFRA")) || null,
+          obs: toString(getCell(row, "OBS")) || null,
+          fabricante: toString(getCell(row, "FABRICANTE")) || null,
+          subGrupo: toString(getCell(row, "SUB-GRUPO")) || null,
+          categoria: toString(getCell(row, "CATEGORIA")) || null,
+          division: toString(getCell(row, "DIVISION")) || null,
+          tipo: toString(getCell(row, "TIPO")) || null,
+          marca: toString(getCell(row, "MARCA")) || null,
+          modelo: toString(getCell(row, "MODELO")) || null,
+          stock: toNumber(getCell(row, "STOCK")) ?? 0,
+          showInCatalog: false,
+          // Campos legados de compatibilidad catálogo
+          codViza: sku,
+          brand: toString(getCell(row, "FABRICANTE")) || null,
+          category: toString(getCell(row, "TIPO")) || toString(getCell(row, "CATEGORIA")) || null,
+          subcategory: toString(getCell(row, "SUB-GRUPO")) || null,
+          // etiquetaColor: queda null por defecto (definido en schema)
+        };
+        recalculate(productData);
+        await db.product.create({ data: productData });
+        results.nuevos++;
+      }
+      results.total++;
     }
 
-    // Recalcular campos derivados
-    const cambioRS = 1100;
-    const cambioUS = 6000;
-    const d = data.costBR && data.costBR > 0 ? data.costBR * cambioRS : null;
-    const f = data.costUS && data.costUS > 0 ? data.costUS * cambioUS : null;
-    data.rsNoUS = d && d > 0 ? d : f;
-    const calcCost = data.rsNoUS && data.rsNoUS > 0 ? data.rsNoUS : (data.costGs ?? 0);
-    data.usNoGs = calcCost;
-    data.subCost = calcCost;
-    data.rsToGs = d;
-    data.usToGs = f;
-    data.minusDisc = calcCost - (calcCost * (data.discountPct || 0));
-    data.plusAdd = (data.minusDisc ?? 0) + ((data.minusDisc ?? 0) * (data.addPct || 0));
-    data.plusAdd2 = (data.plusAdd ?? 0) + ((data.plusAdd ?? 0) * (data.admPct || 0));
-    data.minusDescV = (data.plusAdd2 ?? 0) - (data.valorDesc ?? 0);
-    const baseCosto = (data.minusDescV ?? 0) + (data.valorAdd ?? 0);
-    data.costProd = Math.round(baseCosto / 1000) * 1000;
-    const t = data.costProd ?? 0;
-    const mContado = data.marginContado || 0;
-    data.priceContado = Math.round((t + t * mContado) / 1000) * 1000;
-    let lastMargin = mContado;
-    for (let i = 1; i <= 30; i++) {
-      let base: number;
-      if (i <= 6) base = data.pct1A6 || 0;
-      else if (i <= 13) base = data.pct7A13 || 0;
-      else base = data.pct14A30 || 0;
-      lastMargin = lastMargin + base;
-      data[`marginC${i}`] = lastMargin;
-      data[`price${i}`] = Math.round((t + t * lastMargin) / 1000 / i) * 1000;
-    }
-    data.price = data.priceContado ?? 0;
-    data.cost = data.costProd ?? 0;
-
-    const product = await db.product.create({ data });
-    return NextResponse.json({ product });
+    return NextResponse.json({
+      ok: true,
+      ...results,
+    });
   } catch (error) {
-    console.error("Error creando producto:", error);
-    return NextResponse.json(
-      { error: "Error al crear el producto" },
-      { status: 500 }
-    );
+    console.error("Error importando:", error);
+    return NextResponse.json({ error: "Error al importar" }, { status: 500 });
   }
 }
