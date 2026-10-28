@@ -4,7 +4,20 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
+import { db } from "../../../../lib/db";
+import { leerHashtags } from "../../../../lib/producto-hashtag";
+import { textoHashtagSinGs } from "../../../../lib/hashtag-formato";
 import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../lib/pdf/vizaLogo";
+
+// Task 88 (pedido del dueño): el margen adicional del contado se muestra en
+// el presupuesto como "VZH 3" (Viza Home + el número del margen, SIN el
+// símbolo %). Acepta enteros y decimales: 3 → "3", 3.5 → "3,5" (coma es-PY).
+const fmtMargenVzh = (pct: number): string => {
+  const n = Number(pct) || 0;
+  return Number.isInteger(n)
+    ? String(n)
+    : n.toLocaleString("es-PY", { maximumFractionDigits: 2 });
+};
 
 interface PdfItem {
   sku: string;
@@ -137,6 +150,8 @@ const LIGHT: RGB = [238, 243, 248];
 const ZEBRA: RGB = [246, 248, 251];
 const GOLD_LIGHT: RGB = [250, 243, 224];
 const LINE: RGB = [216, 222, 230];
+// Dorado oscuro para el texto del #HASHTAG bajo la descripción (Task 83).
+const DORADO_TXT: RGB = [138, 109, 47]; // #8a6d2f
 
 const VALIDEZ_DIAS = 10;
 const FOOTER_H = 64;
@@ -470,6 +485,32 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+    // #HASHTAG por producto (Task 83, pedido del dueño): se lee DIRECTO de
+    // la base por sku (tabla aparte ProductHashtag) y se dibuja DEBAJO de la
+    // descripción: "# 200" (el valor 200.000 de la base en miles, sin los
+    // ceros). Si la lectura falla, el PDF sale igual sin el hashtag.
+    const hashtagPorSku = new Map<string, string>();
+    try {
+      const skusHashtag = Array.from(
+        new Set(itemsConMargen.map((it) => (it.sku || "").trim()).filter(Boolean))
+      );
+      if (skusHashtag.length > 0) {
+        const prodsHashtag = await db.product.findMany({
+          where: { sku: { in: skusHashtag } },
+          select: { id: true, sku: true },
+        });
+        const idPorSku = new Map(prodsHashtag.map((p) => [p.sku, p.id]));
+        const mapaHashtags = await leerHashtags(Array.from(idPorSku.values()));
+        for (const [sku, id] of idPorSku) {
+          const h = mapaHashtags.get(id);
+          const txt = textoHashtagSinGs(h?.valor ?? null); // Task 88B: sin "GS"
+          if (txt) hashtagPorSku.set(sku, txt);
+        }
+      }
+    } catch {
+      // sin hashtag en el PDF si falla — el resto del presupuesto sale igual
+    }
+
     const colN = 25;
     const colSku = 70;
     const colCant = 50;
@@ -503,8 +544,11 @@ export async function POST(req: NextRequest) {
 
     // Filas productos (con margen aplicado al P.CONTADO si corresponde)
     itemsConMargen.forEach((it, idx) => {
-      ensureSpace(34);
-      const rowH = 30;
+      // #HASHTAG (Task 83): si el producto tiene, la fila crece 30→40 para
+      // que el hashtag entre bien abajo de la descripción sin pisar nada.
+      const hashtagTxt = hashtagPorSku.get((it.sku || "").trim()) || "";
+      const rowH = hashtagTxt ? 40 : 30;
+      ensureSpace(rowH + 4);
       if (idx % 2 === 1) {
         doc.setFillColor(...ZEBRA);
         doc.rect(margin, y, contentW, rowH, "F");
@@ -527,6 +571,14 @@ export async function POST(req: NextRequest) {
       doc.setFontSize(8.5);
       const nameLines = doc.splitTextToSize(it.name, colName - 6);
       doc.text(nameLines.slice(0, 2), xxx, y + 13);
+      // #HASHTAG bien abajo de la descripción (Task 83): "# 200" en dorado.
+      if (hashtagTxt) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(...DORADO_TXT);
+        doc.text(hashtagTxt, xxx, y + 13 + nameLines.length * 9.5 + 1.5);
+        doc.setTextColor(...DARK); // restaurar para cant./precios de la misma fila
+      }
 
       xxx += colName;
       doc.setFont("helvetica", "normal");
@@ -554,7 +606,9 @@ export async function POST(req: NextRequest) {
       // UNA SOLA FILA: el TOTAL CONTADO ya muestra el precio final (con el
       // margen incluido cuando el vendedor lo aplicó). No se duplica la misma
       // información con una segunda fila "PRECIO FINAL CONTADO".
-      const boxH = 32;
+      // Task 88 (pedido del dueño): si hay margen adicional, la caja crece
+      // (32→44) para que entre la línea "VZH 3" debajo de la etiqueta.
+      const boxH = ajusteContado ? 44 : 32;
 
       doc.setFillColor(...BLUE);
       doc.rect(totalBoxX, y, totalBoxW, boxH, "F");
@@ -574,6 +628,19 @@ export async function POST(req: NextRequest) {
         y + 20,
         { align: "right" }
       );
+      // Task 88 (pedido del dueño): el margen adicional aplicado al contado
+      // sale como "VZH 3" (Viza Home + el número, SIN el símbolo %) justo
+      // debajo de la etiqueta TOTAL CONTADO, en dorado sobre el azul. Si no
+      // hay margen, no sale nada (caja normal de siempre).
+      if (ajusteContado) {
+        doc.setFontSize(8);
+        doc.setTextColor(...GOLD);
+        doc.text(
+          `VZH ${fmtMargenVzh(body.contadoMarginPct)}`,
+          totalBoxX + 14,
+          y + 34
+        );
+      }
 
       y += boxH + 3 + 22;
     } else {

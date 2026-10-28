@@ -5,6 +5,9 @@ import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
 import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
+import { db } from "../../../../lib/db";
+import { leerHashtags } from "../../../../lib/producto-hashtag";
+import { textoHashtagSinGs } from "../../../../lib/hashtag-formato";
 const GREEN: [number, number, number] = [40, 167, 69];
 const RED: [number, number, number] = [220, 53, 69];
 
@@ -213,13 +216,41 @@ export async function POST(req: NextRequest) {
     y += 22;
 
     // Filas de productos - SIN columna SUBTOTAL
+    // #HASHTAG por producto (Task 83, pedido del dueño): se lee DIRECTO de
+    // la base por sku (tabla aparte ProductHashtag) y se dibuja DEBAJO de la
+    // descripción: "# 200" (200.000 en miles, sin los ceros). Si la
+    // lectura falla, el PDF sale igual sin el hashtag.
+    const hashtagPorSku = new Map<string, string>();
+    try {
+      const skusHashtag = Array.from(
+        new Set(body.productos.map((it) => (it.sku || "").trim()).filter(Boolean))
+      );
+      if (skusHashtag.length > 0) {
+        const prodsHashtag = await db.product.findMany({
+          where: { sku: { in: skusHashtag } },
+          select: { id: true, sku: true },
+        });
+        const idPorSku = new Map(prodsHashtag.map((p) => [p.sku, p.id]));
+        const mapaHashtags = await leerHashtags(Array.from(idPorSku.values()));
+        for (const [sku, id] of idPorSku) {
+          const h = mapaHashtags.get(id);
+          const txt = textoHashtagSinGs(h?.valor ?? null); // Task 88B: sin "GS"
+          if (txt) hashtagPorSku.set(sku, txt);
+        }
+      }
+    } catch {
+      // sin hashtag en el PDF si falla — el resto del presupuesto sale igual
+    }
     doc.setFont("helvetica", "normal");
     body.productos.forEach((it, idx) => {
       if (y > pageH - FOOTER_RESERVE) {
         doc.addPage();
         y = margin;
       }
-      const rowH = 22;
+      // #HASHTAG (Task 83): fila más alta (22→30) cuando el producto tiene
+      // hashtag para que entre bien abajo de la descripción sin pisar nada.
+      const hashtagTxt = hashtagPorSku.get((it.sku || "").trim()) || "";
+      const rowH = hashtagTxt ? 30 : 22;
       const rowBg = idx % 2 === 0 ? [255, 255, 255] : [248, 249, 250];
       doc.setFillColor(rowBg[0], rowBg[1], rowBg[2]);
       doc.rect(margin, y - 10, contentW, rowH, "F");
@@ -235,6 +266,14 @@ export async function POST(req: NextRequest) {
       const truncated = nameStr.length > maxDescChars ? nameStr.substring(0, maxDescChars) + "…" : nameStr;
       doc.setFont("helvetica", "bold");
       doc.text(truncated, colDesc, y + 4);
+      // #HASHTAG bien abajo de la descripción (Task 83): "# 200" en dorado.
+      if (hashtagTxt) {
+        doc.setFontSize(7);
+        doc.setTextColor(138, 109, 47); // #8a6d2f dorado oscuro
+        doc.text(hashtagTxt, colDesc, y + 4 + 10.5);
+        doc.setTextColor(60, 60, 60); // restaurar para el resto de la fila
+        doc.setFontSize(9);
+      }
       doc.setFont("helvetica", "normal");
 
       doc.text(String(it.quantity || 1), colQty + 30, y + 4);
