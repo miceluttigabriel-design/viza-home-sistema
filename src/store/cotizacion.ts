@@ -82,6 +82,31 @@ export interface CotizacionItem {
   // quantity/precios). Opcional: items viejos guardados antes de esta
   // versión no lo tienen y muestran "—" en el cuadrito.
   cost?: number;
+  // === #HASHTAG (promo del admin, Task 83) ===
+  // Se muestra DEBAJO de la descripción en el carrito del panel de ventas:
+  // "# 200 GS" (valor de la base en miles, sin los ceros). Viene del GET de
+  // productos (tabla aparte ProductHashtag). Opcional: items viejos y
+  // productos sin hashtag no lo tienen y no muestran nada. El PDF lo lee
+  // DIRECTO de la base por sku (no viaja en el payload).
+  hashtag?: { valor: number | null; fecha: string | null } | null;
+  // === ETIQUETA DEL PRODUCTO (Task 86, pedido del dueño) ===
+  // SOLO para pintar la bolita con el nombre de la etiqueta y el fondo de
+  // color del producto en el panel de ventas (buscador + carrito), igual
+  // que se ve en la Base. Guarda el id/nombre/color RESUELTOS al momento de
+  // agregar, para que la bolita siga visible aunque la etiqueta se borre
+  // después. Opcional: items viejos y productos sin etiqueta no lo tienen
+  // y se muestran igual que siempre. JAMÁS viaja al PDF: el payload del
+  // presupuesto mapea solo sku/name/quantity/priceContado/subtotalContado.
+  etiqueta?: EtiquetaInfo | null;
+}
+
+// Info visible de una etiqueta (las 4 fijas de la UI + las creadas por el
+// supremo en la Base). La usan el item del carrito y el listado por
+// etiqueta del panel de ventas.
+export interface EtiquetaInfo {
+  id: string;
+  nombre: string;
+  color: string; // "#RRGGBB" (color de la bolita)
 }
 
 export interface PlanCuotas {

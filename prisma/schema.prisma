@@ -256,6 +256,26 @@ model ProductHashtag {
   updatedAt DateTime @updatedAt
 }
 
+// ============================================================
+// ETIQUETAS DE COLOR CREADAS POR EL SUPREMO (Task 84)
+// Etiquetas ADICIONALES a las 4 fijas de siempre (verde, azul,
+// dorado, rojo). El supremo_admin las crea con el botón CREAR
+// ETIQUETA de la Base: nombre visible + color "#RRGGBB".
+// El producto guarda en su columna etiquetaColor (LA MISMA DE
+// SIEMPRE) el id de la etiqueta — así los filtros, la edición y
+// las importaciones siguen funcionando exactamente igual.
+// TABLA AUTO-GESTIONADA (mismo patrón que CostoEditado y
+// ProductHashtag, ver src/lib/etiquetas.ts): se crea sola en el
+// primer uso y NUNCA rompe la app.
+// ============================================================
+model Etiqueta {
+  id        String   @id @default(cuid())
+  nombre    String   @unique
+  color     String   // "#RRGGBB"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ─── SUCURSAL ASIGNADA A CADA USUARIO (CRM · ranking) ───
 // Una fila por usuario (clave = email) con la sucursal que le asigna el
 // admin. La usa el CRM: ranking de presupuestos emitidos por usuario,
@@ -278,6 +298,30 @@ model UsuarioSucursal {
   sucursal  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// TASA DE CAMBIO ACTIVA (Task 87, pedido del dueño)
+// UNA sola fila (id "ACTIVA") con el cambio R$→Gs y US$→Gs que
+// usa TODO el sistema al recalcular costos y precios. Antes
+// esas tasas vivían fijas en el código (1100 / 6000); ahora el
+// supremo las edita desde la Base (botón TASA DE CAMBIO) y las
+// aplica a la base general.
+// El modelo Product NO se toca: los costos de entrada
+// (costBR / costUS / costGs) y todos los registros quedan igual
+// que siempre — la tasa solo alimenta las fórmulas de siempre
+// (D = C * cambio, F = E * cambio, ...).
+// TABLA AUTO-GESTIONADA (mismo patrón que CostoEditado y
+// ProductHashtag, ver src/lib/tasas-cambio.ts): se crea sola en
+// el primer uso y NUNCA rompe la app; si la lectura falla, el
+// sistema vuelve a las tasas de siempre (1100 / 6000).
+// ============================================================
+model TasaCambio {
+  id             String   @id // "ACTIVA" (fila única de configuración)
+  cambioRS       Float    @default(1100) // R$ → Gs
+  cambioUS       Float    @default(6000) // US$ → Gs
+  updatedAt      DateTime @updatedAt
+  actualizadoPor String   @default("SISTEMA")
 }
 
 model Quote {

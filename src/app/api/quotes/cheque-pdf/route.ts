@@ -7,7 +7,11 @@ import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
 import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
 import { db } from "../../../../lib/db";
 import { leerHashtags } from "../../../../lib/producto-hashtag";
+<<<<<<< HEAD
 import { textoHashtagSinGs } from "../../../../lib/hashtag-formato";
+=======
+import { textoHashtag } from "../../../../lib/hashtag-formato";
+>>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
 const GREEN: [number, number, number] = [40, 167, 69];
 const RED: [number, number, number] = [220, 53, 69];
 
@@ -218,7 +222,11 @@ export async function POST(req: NextRequest) {
     // Filas de productos - SIN columna SUBTOTAL
     // #HASHTAG por producto (Task 83, pedido del dueño): se lee DIRECTO de
     // la base por sku (tabla aparte ProductHashtag) y se dibuja DEBAJO de la
+<<<<<<< HEAD
     // descripción: "# 200" (200.000 en miles, sin los ceros). Si la
+=======
+    // descripción: "# 200 GS" (200.000 en miles, sin los ceros). Si la
+>>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
     // lectura falla, el PDF sale igual sin el hashtag.
     const hashtagPorSku = new Map<string, string>();
     try {
@@ -234,7 +242,11 @@ export async function POST(req: NextRequest) {
         const mapaHashtags = await leerHashtags(Array.from(idPorSku.values()));
         for (const [sku, id] of idPorSku) {
           const h = mapaHashtags.get(id);
+<<<<<<< HEAD
           const txt = textoHashtagSinGs(h?.valor ?? null); // Task 88B: sin "GS"
+=======
+          const txt = textoHashtag(h?.valor ?? null);
+>>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
           if (txt) hashtagPorSku.set(sku, txt);
         }
       }
@@ -266,7 +278,11 @@ export async function POST(req: NextRequest) {
       const truncated = nameStr.length > maxDescChars ? nameStr.substring(0, maxDescChars) + "…" : nameStr;
       doc.setFont("helvetica", "bold");
       doc.text(truncated, colDesc, y + 4);
+<<<<<<< HEAD
       // #HASHTAG bien abajo de la descripción (Task 83): "# 200" en dorado.
+=======
+      // #HASHTAG bien abajo de la descripción (Task 83): "# 200 GS" en dorado.
+>>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
       if (hashtagTxt) {
         doc.setFontSize(7);
         doc.setTextColor(138, 109, 47); // #8a6d2f dorado oscuro

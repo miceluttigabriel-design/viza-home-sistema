@@ -32,6 +32,7 @@ import {
   safraEstaVacia,
 } from "../shared";
 import type { ValorAddRow, ProductForValorAdd } from "../shared";
+import { getTasasCambio } from "@/lib/tasas-cambio";
 
 export const maxDuration = 60;
 
@@ -79,6 +80,10 @@ export async function POST(req: NextRequest) {
 
     const { byCod } = await fetchMatchedProducts(rows);
 
+    // Task 87: tasas activas de la base para TODO el recálculo de este apply
+    // (fallback blando a 1100/6000 si aún no se configuró).
+    const tasasValorAdd = await getTasasCambio();
+
     // Construir updates: % ADD / VALOR ADD / SAFRA nuevos + cadena de
     // costos/precios recalculada (misma fórmula que la edición manual del admin)
     const updates: Array<{ id: string; sku: string; data: Record<string, number | string | null> }> = [];
@@ -104,11 +109,15 @@ export async function POST(req: NextRequest) {
         yaIgual++;
         continue;
       }
-      const { data } = buildValorAddUpdate(product, {
-        valorAdd: row.valorAdd,
-        addPct: row.addPct,
-        safra: row.safra,
-      });
+      const { data } = buildValorAddUpdate(
+        product,
+        {
+          valorAdd: row.valorAdd,
+          addPct: row.addPct,
+          safra: row.safra,
+        },
+        tasasValorAdd
+      );
       updates.push({ id: product.id, sku: product.sku, data });
     }
 

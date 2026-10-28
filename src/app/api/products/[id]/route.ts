@@ -7,11 +7,16 @@ import {
   marcarCostosEditados,
   leerColKeysProducto,
 } from "@/lib/costo-editado";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
+import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 
-// Recalcula los campos derivados según las fórmulas del Excel
-function recalculate(p: any): any {
-  const cambioRS = 1100; // $C$1 del Excel
-  const cambioUS = 6000; // $G$1 del Excel
+// Recalcula los campos derivados según las fórmulas del Excel.
+// Task 87: las tasas ya NO están fijas acá — vienen de la TasaCambio
+// activa de la base (src/lib/tasas-cambio.ts). Si nada se configuró
+// todavía, son las de siempre (1100 / 6000): mismo resultado que antes.
+function recalculate(p: any, tasas: TasasCambio = TASAS_DEFAULT): any {
+  const cambioRS = tasas.cambioRS; // $C$1 del Excel (editable desde la Base)
+  const cambioUS = tasas.cambioUS; // $G$1 del Excel (editable desde la Base)
 
   // D = C * cambioRS (si hay costo en R$)
   const d = p.costBR && p.costBR > 0 ? p.costBR * cambioRS : null;
@@ -91,10 +96,10 @@ export async function PUT(
       );
     }
 
-    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
-    // (independiente del rol que tenga): jamás puede editar celdas.
-    const emailConsulta = ((session.user as any)?.email || "").trim().toLowerCase();
-    if (emailConsulta === "viza.compras@viza.com.py") {
+    // Task 79 + 82: usuarios de consulta (viza.compras@, filipe.campos@ —
+    // lista en src/lib/usuarios-consulta.ts) son SOLO LECTURA de la base
+    // (independiente del rol que tengan): jamás pueden editar celdas.
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
       return NextResponse.json(
         { error: "Usuario de consulta SOLO LECTURA: no puede editar la base" },
         { status: 403 }
@@ -152,6 +157,8 @@ export async function PUT(
     const shouldRecalc = recalcInputs.some((k) => body[k] !== undefined);
 
     if (shouldRecalc) {
+      // Task 87: tasas activas de la base (con fallback blando a 1100/6000).
+      const tasas = await getTasasCambio();
       const current = await db.product.findUnique({ where: { id } });
       if (!current) {
         return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
@@ -167,7 +174,7 @@ export async function PUT(
         merged.costGs = current.costProd;
         data.costGs = current.costProd;
       }
-      recalculate(merged);
+      recalculate(merged, tasas);
       // Sobrescribir data con valores recalculados
       [
         "rsNoUS", "usNoGs", "rsToGs", "usToGs", "subCost",
@@ -241,10 +248,10 @@ export async function DELETE(
       );
     }
 
-    // Task 79: viza.compras@viza.com.py es SOLO LECTURA de la base
-    // (independiente del rol que tenga): jamás puede eliminar productos.
-    const emailConsultaBaja = ((session.user as any)?.email || "").trim().toLowerCase();
-    if (emailConsultaBaja === "viza.compras@viza.com.py") {
+    // Task 79 + 82: usuarios de consulta (viza.compras@, filipe.campos@ —
+    // lista en src/lib/usuarios-consulta.ts) son SOLO LECTURA de la base
+    // (independiente del rol que tengan): jamás pueden eliminar productos.
+    if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
       return NextResponse.json(
         { error: "Usuario de consulta SOLO LECTURA: no puede eliminar productos" },
         { status: 403 }

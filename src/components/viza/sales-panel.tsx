@@ -16,10 +16,12 @@ import {
   Save,
   Calendar,
   Clock,
+  Coins,
   Gift,
   AlertTriangle,
   KeyRound,
   BarChart3,
+  Tag,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -27,9 +29,11 @@ import {
   useCotizacionStore,
   getItemPriceN,
   type CotizacionItem,
+  type EtiquetaInfo,
   type PlanCuotas,
   type TipoEntrega,
 } from "@/store/cotizacion";
+import { textoHashtag } from "@/lib/hashtag-formato";
 import { formatPYG } from "@/lib/format";
 import { PlanSafra } from "./plan-safra";
 import { PlanCheque } from "./plan-cheque";
@@ -59,6 +63,43 @@ const DORADO = "#D9B86B";
 const DORADO_OSCURO = "#b89853";
 const DORADO_CLARO = "#e5cb8a";
 const CREMA = "#faf6ed";
+
+// === ETIQUETAS (Task 86, pedido del dueño) ===
+// Las 4 etiquetas fijas de la Base (MISMOS colores que pinta el Panel ADM
+// en globals.css "fila-etiquetada-*") + las creadas por el supremo (se
+// cargan de GET /api/products/labels, el mismo endpoint que ya usa la
+// Base). En el panel de ventas las etiquetas son SOLO LECTURA: sirven
+// para identificar el producto de un vistazo (bolita + nombre) y para el
+// listado por etiqueta. Acá NO se etiqueta nada y NO se toca la base.
+const ETIQUETAS_FIJAS: EtiquetaInfo[] = [
+  { id: "verde", color: "#28A745", nombre: "Seleccionado" },
+  { id: "azul", color: "#007BFF", nombre: "Para Pedido" },
+  { id: "dorado", color: "#FFC107", nombre: "Descontinuado" },
+  { id: "rojo", color: "#DC3545", nombre: "Quema Stock" },
+];
+
+// Resuelve el id guardado en products.etiquetaColor a la info visible de
+// la etiqueta (fija o creada). Devuelve null si no corresponde a ninguna
+// (producto sin etiqueta, o etiqueta borrada) → se muestra como siempre.
+// Nunca rompe: es solo lectura de arrays en memoria.
+function etiquetaDeId(id: unknown, creadas: EtiquetaInfo[]): EtiquetaInfo | null {
+  if (typeof id !== "string" || !id) return null;
+  return ETIQUETAS_FIJAS.find((e) => e.id === id) ?? creadas.find((e) => e.id === id) ?? null;
+}
+
+// Estilo de fondo de un producto etiquetado: MISMOS colores que la Base.
+// Fondo + franja izquierda de 5px (idéntico a las filas del Panel ADM);
+// para las creadas, el color propio con transparencia (mismo truco
+// color+"26" del admin-panel). SOLO presentación en pantalla: el PDF del
+// presupuesto arma sus items con campos explícitos (sku/name/quantity/
+// priceContado/subtotalContado) y JAMÁS recibe nada de esto.
+function estiloFilaEtiqueta(et: EtiquetaInfo): { backgroundColor: string; borderLeft: string } {
+  if (et.id === "verde") return { backgroundColor: "#A8E6A3", borderLeft: "5px solid #28A745" };
+  if (et.id === "azul") return { backgroundColor: "#90CAF9", borderLeft: "5px solid #007BFF" };
+  if (et.id === "dorado") return { backgroundColor: "#FFE082", borderLeft: "5px solid #FFC107" };
+  if (et.id === "rojo") return { backgroundColor: "#EF9A9A", borderLeft: "5px solid #DC3545" };
+  return { backgroundColor: `${et.color}26`, borderLeft: `5px solid ${et.color}` };
+}
 
 // === HELPERS - Entrega inicial (con/sin entrega) ===
 
@@ -137,10 +178,50 @@ function generarFechaCuota(fechaInicio: string, numeroCuota: number): string {
 // Fecha máxima permitida (hoy + 60 días) en formato YYYY-MM-DD para input[type=date].
 // REGLA DE NEGOCIO: El plazo máximo SIN ENTREGA INICIAL es de 60 días.
 // 0-30 días: sin recargo / 31-60 días: +3% sobre precio contado.
+// CORRECCIÓN (reporte ventas.ana@): antes usaba toISOString() que convierte a
+// UTC; después de las 21:00 de Paraguay (UTC-3) devolvía un día de más. Ahora
+// se formatea en hora LOCAL (misma técnica de calcularDiasDiferidos).
 function getMaxFechaInicio(): string {
   const d = new Date();
   d.setDate(d.getDate() + 60);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dia}`;
+}
+
+// Fecha mínima permitida (HOY) en formato YYYY-MM-DD para input[type=date].
+// Misma corrección UTC: toISOString() después de las 21:00 de Paraguay
+// devolvía MAÑANA como mínimo, y el calendario marcaba "hoy" como inválido.
+function getMinFechaInicio(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dia}`;
+}
+
+// Convierte el valor interno del input date ("YYYY-MM-DD") a texto largo e
+// INEQUIVOCO en español: "sábado 05 de diciembre de 2026".
+// MOTIVO (reporte ventas.ana@): el input date nativo muestra la fecha según
+// el IDIOMA del navegador. En un navegador configurado en inglés (MM/DD/YYYY),
+// "05/12/2026" es 12 de MAYO, no 5 de diciembre — el vendedor cree que eligió
+// diciembre y el sistema le rechaza la fecha por "anterior a hoy". Con el mes
+// escrito en palabras la confusión desaparece. Se formatea a mano (sin
+// toLocaleDateString) por el mismo motivo UTC de las funciones de arriba.
+const DIAS_SEMANA_ES = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+function formatearFechaLarga(fechaISO: string): string {
+  if (!fechaISO || fechaISO.length < 10) return "";
+  const [añoStr, mesStr, diaStr] = fechaISO.split("-");
+  const fecha = new Date(
+    parseInt(añoStr, 10),
+    parseInt(mesStr, 10) - 1, // 0-indexed
+    parseInt(diaStr, 10)
+  );
+  if (isNaN(fecha.getTime())) return "";
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${DIAS_SEMANA_ES[fecha.getDay()]} ${dia} de ${MESES_ES[fecha.getMonth()]} de ${fecha.getFullYear()}`;
 }
 
 interface Product {
@@ -163,9 +244,11 @@ interface SalesPanelProps {
   onGoAdmin?: () => void;
   onGoGestion?: () => void;
   isSupremo?: boolean;
-  // Task 78 (pedido del dueño): SOLO llega para viza.compras@viza.com.py
-  // (ENC. COMPRAS). Le habilita el botón VER BASE: puede ver TODA la base
-  // de productos con filtros, pero SOLO LECTURA (ninguna celda editable).
+  // Task 78 + 82 (pedido del dueño): SOLO llega para los usuarios de consulta
+  // (viza.compras@viza.com.py y filipe.campos@viza.com.py — lista en
+  // src/lib/usuarios-consulta.ts). Les habilita el botón VER BASE: pueden ver
+  // TODA la base de productos con filtros, pero SOLO LECTURA (ninguna celda
+  // editable).
   onGoBase?: () => void;
 }
 
@@ -224,6 +307,39 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
     ENCARGADOS_SUCURSAL[user.email.trim().toLowerCase()] ?? null;
   const esEncargadoCrm = !!sucursalDelEncargado && !isAdmin;
 
+  // ─── TASA DE CAMBIO — MOSTRADOR (Task 87B, pedido del dueño) ───
+  // Chip SOLO LECTURA en el header del panel de ventas: todos lo ven
+  // (vendedores, admins, consulta) y NADIE edita desde acá — el único lugar
+  // para editar sigue siendo el botón TASA DE CAMBIO de la Base (Supremo y
+  // viza@viza.com.py, lista en src/lib/permisos-cambio.ts).
+  // Se lee de /api/config-cambio cada vez que este panel se abre: si la tasa
+  // se actualiza en la Base, al volver a Ventas ya muestra el valor nuevo
+  // (page.tsx remonta este panel al cambiar de vista). Si la lectura falla,
+  // quedan las de siempre (1100/6000) y nada se rompe.
+  const [tasasCambioMostrador, setTasasCambioMostrador] = useState({ cambioRS: 1100, cambioUS: 6000 });
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/config-cambio");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (
+          vivo &&
+          typeof data?.cambioRS === "number" && data.cambioRS > 0 &&
+          typeof data?.cambioUS === "number" && data.cambioUS > 0
+        ) {
+          setTasasCambioMostrador({ cambioRS: data.cambioRS, cambioUS: data.cambioUS });
+        }
+      } catch {
+        // tasas de siempre — el panel de ventas funciona igual que siempre
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -242,6 +358,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
   // Filtro por TIPO DE PLAN del CRM (Task 78): TODOS por defecto = igual que
   // siempre; con un plan elegido el ranking cuenta solo ESE plan.
   const [crmPlanSuc, setCrmPlanSuc] = useState<string>("TODOS");
+  // === ETIQUETAS (Task 86) ===
+  // Creadas por el supremo: SOLO LECTURA, se cargan 1 vez al montar para
+  // pintar bolitas/fondos y el listado por etiqueta. Si falla (o todavía
+  // no hay ninguna) quedan las 4 fijas y todo sigue funcionando igual.
+  const [etiquetasCreadas, setEtiquetasCreadas] = useState<EtiquetaInfo[]>([]);
+  // Listado por etiqueta: etiqueta elegida + sus productos + paginado.
+  const [etiquetaSel, setEtiquetaSel] = useState<string>("");
+  const [productosEtiqueta, setProductosEtiqueta] = useState<Product[]>([]);
+  const [cargandoEtiqueta, setCargandoEtiqueta] = useState(false);
+  const [etiquetaPage, setEtiquetaPage] = useState(1);
+  const [etiquetaTotal, setEtiquetaTotal] = useState(0);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -373,6 +500,64 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Cargar etiquetas creadas 1 vez al montar (Task 86). El fetch es
+  // asíncrono: el setState corre tras el await, nunca de forma sincrónica
+  // dentro del effect. Si falla, quedan las 4 fijas y nada se rompe.
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/products/labels")
+      .then((r) => (r.ok ? r.json() : { creadas: [] }))
+      .then((d) => {
+        if (vivo && Array.isArray(d?.creadas)) setEtiquetasCreadas(d.creadas);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // Cargar productos de una etiqueta (Task 86). El API de productos ya
+  // soporta el filtro etiquetaColor (el mismo que usa la Base). Paginado
+  // simple: la 1ª página reemplaza la lista; "Mostrar más" acumula.
+  const cargarPorEtiqueta = useCallback(async (id: string, page: number, acumular: boolean) => {
+    if (!id) {
+      setProductosEtiqueta([]);
+      setEtiquetaTotal(0);
+      return;
+    }
+    setCargandoEtiqueta(true);
+    try {
+      const res = await fetch(
+        `/api/products?etiquetaColor=${encodeURIComponent(id)}&pageSize=100&page=${page}`
+      );
+      const data = await res.json();
+      const nuevos: Product[] = data.products || [];
+      setProductosEtiqueta((prev) => (acumular ? [...prev, ...nuevos] : nuevos));
+      setEtiquetaTotal(typeof data.total === "number" ? data.total : nuevos.length);
+      setEtiquetaPage(page);
+    } catch {
+      if (!acumular) {
+        setProductosEtiqueta([]);
+        setEtiquetaTotal(0);
+      }
+    } finally {
+      setCargandoEtiqueta(false);
+    }
+  }, []);
+
+  // Tocar un chip: si ya estaba activo se apaga (lista limpia); si no, se
+  // elige y carga su listado.
+  const elegirEtiqueta = (id: string) => {
+    if (etiquetaSel === id) {
+      setEtiquetaSel("");
+      setProductosEtiqueta([]);
+      setEtiquetaTotal(0);
+      return;
+    }
+    setEtiquetaSel(id);
+    cargarPorEtiqueta(id, 1, false);
+  };
+
   // Reset de cálculo previo cuando cambian los parámetros de entrega.
   // Se invoca desde los handlers de UI (onChange), no en effects.
   const resetCalculoEntrega = () => {
@@ -453,6 +638,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
       // Costo UNITARIO de la BASE: SOLO para el cuadrito interno del vendedor.
       // Nunca viaja en el payload de ningún PDF ni se guarda en la BD.
       cost: extractCosto(product),
+      // #HASHTAG (promo del admin, Task 83): se muestra bajo la descripción
+      // en el carrito ("# 200 GS"). El PDF lo lee directo de la base por sku.
+      hashtag: (product as any).hashtag ?? null,
+      // Etiqueta resuelta (Task 86): SOLO presentación en el panel de ventas
+      // (bolita + nombre + fondo). El payload del PDF mapea campos explícitos
+      // → jamás viaja al presupuesto ni se guarda en la BD.
+      etiqueta: etiquetaDeId(product.etiquetaColor, etiquetasCreadas),
       quantity: 1,
     };
     addItem(item);
@@ -523,6 +715,14 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
     arr.some((p2, j) => p2.cuotas === p.cuotas && j !== i)
   );
 
+  // Aviso legible de la fecha de inicio SIN ENTREGA (debajo del input date).
+  // Negativa = fecha pasada (rojo). También alimenta el toast de error.
+  const fechaInicioLegible = formatearFechaLarga(fechaInicioPago);
+  const fechaInicioPasada =
+    fechaInicioPago !== null &&
+    calcularDiasDiferidos(fechaInicioPago) !== null &&
+    (calcularDiasDiferidos(fechaInicioPago) as number) < 0;
+
   const handleCalcular = () => {
     if (items.length === 0) {
       toast.error("Agregá al menos un producto antes de calcular");
@@ -581,7 +781,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
         return;
       }
       if (dias < 0) {
-        toast.error("La fecha de inicio no puede ser anterior a hoy");
+        // Con la fecha en palabras (ej: "lunes 12 de mayo de 2026") el vendedor
+        // detecta al instante si su navegador leyó la fecha en otro formato.
+        toast.error(
+          `La fecha de inicio no puede ser anterior a hoy (fecha elegida: ${fechaInicioLegible || fechaInicioPago})`
+        );
         return;
       }
       const margen = calcularMargenPorcentaje(dias);
@@ -1034,8 +1238,25 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
             </button>
           </div>
 
-          {/* LADO DERECHO: Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión - TODO JUNTO EN UN BLOQUE */}
+          {/* LADO DERECHO: MOSTRADOR tasa de cambio + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto lg:ml-0">
+            {/* Task 87B (pedido del dueño): MOSTRADOR de la tasa de cambio en
+                el panel de ventas. SOLO LECTURA: es un span, no un botón —
+                nadie edita desde acá. Se actualiza SOLO: se lee de la base
+                cada vez que el panel se abre, así si se actualiza en la Base,
+                acá ya aparece el valor nuevo. */}
+            <span
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.94)",
+                color: "#92400e",
+                border: "1px solid rgba(217,184,107,0.85)",
+              }}
+              title="Tasa de cambio activa: el sistema la usa para convertir costos cargados en Real y en Dólar a Guaraníes. Se edita desde la BASE (botón TASA DE CAMBIO) y acá se actualiza sola."
+            >
+              <Coins className="h-3.5 w-3.5" />
+              CAMBIO: R$ {tasasCambioMostrador.cambioRS.toLocaleString("es-PY")} · US$ {tasasCambioMostrador.cambioUS.toLocaleString("es-PY")}
+            </span>
             <div
               className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 cursor-default"
               style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
@@ -1358,11 +1579,14 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
                     <div className="px-3 py-2 text-[11px] font-semibold uppercase text-stone-400 bg-stone-50 border-b border-stone-100">
                       {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""} · Click para agregar
                     </div>
-                    {searchResults.map((p) => (
+                    {searchResults.map((p) => {
+                      const et = etiquetaDeId(p.etiquetaColor, etiquetasCreadas);
+                      return (
                       <button
                         key={p.id}
                         onClick={() => handleAddProduct(p)}
                         className="w-full text-left p-3 hover:bg-rose-50 border-b border-stone-100 last:border-0 flex items-center justify-between gap-3 transition-colors"
+                        style={et ? estiloFilaEtiqueta(et) : undefined}
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-stone-900 text-sm line-clamp-1">{p.name}</p>
@@ -1370,6 +1594,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
                             SKU: {p.sku}
                             {p.priceContado ? ` · Contado: ${formatPYG(p.priceContado)}` : ""}
                           </p>
+                          {/* Bolinha + nombre de la etiqueta (Task 86): SOLO en
+                              pantalla — el PDF del presupuesto jamás recibe esto. */}
+                          {et ? (
+                            <p className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5">
+                              <span
+                                className="h-2 w-2 rounded-full inline-block shrink-0"
+                                style={{ backgroundColor: et.color }}
+                              />
+                              {et.nombre}
+                            </p>
+                          ) : null}
                           {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026" */}
                           {p.hashtag?.valor ? (
                             <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>
@@ -1384,7 +1619,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
                           </span>
                         </div>
                       </button>
-                    ))}
+                      );
+                    })}
                   </>
                 )}
               </div>
@@ -1411,6 +1647,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
                   key={item.productId}
                   item={item}
                   index={idx + 1}
+                  etiqueta={item.etiqueta ?? null}
                   onRemove={() => {
                     removeItem(item.productId);
                     setCalcDone(false);
@@ -1440,6 +1677,99 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
               cost: it.cost,
             }))}
           />
+        </Section>
+
+        {/* 2.4. PRODUCTOS POR ETIQUETA (Task 86, pedido del dueño): listado
+            intuitivo de los productos de CADA etiqueta por separado. Toca un
+            chip → lista sus productos → click en un producto lo agrega a la
+            cotización (mismo flujo del buscador). SOLO LECTURA de la base:
+            acá no se etiqueta ni se edita nada. Los fondos usan los MISMOS
+            colores que la Base, pero el PDF del presupuesto jamás los recibe
+            (su payload mapea campos explícitos). */}
+        <Section title="PRODUCTOS POR ETIQUETA" icon={<Tag className="h-4 w-4" />}>
+          <p className="text-[11px] text-stone-500 mb-3">
+            Tocá una etiqueta para ver sus productos y agregarlos a la cotización.
+          </p>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {[...ETIQUETAS_FIJAS, ...etiquetasCreadas].map((et) => {
+              const activa = etiquetaSel === et.id;
+              return (
+                <button
+                  key={et.id}
+                  onClick={() => elegirEtiqueta(et.id)}
+                  className="h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  style={{
+                    borderColor: et.color,
+                    backgroundColor: activa ? et.color : "transparent",
+                    color: activa ? "#ffffff" : et.color,
+                  }}
+                  title={`Ver productos con la etiqueta ${et.nombre}`}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full inline-block shrink-0"
+                    style={{ backgroundColor: activa ? "#ffffff" : et.color }}
+                  />
+                  {et.nombre}
+                </button>
+              );
+            })}
+          </div>
+          {cargandoEtiqueta ? (
+            <div className="p-4 text-sm text-stone-500 text-center">Buscando productos...</div>
+          ) : !etiquetaSel ? (
+            <div className="p-3 text-xs text-stone-400 text-center rounded-lg border border-dashed border-stone-200">
+              Elegí una etiqueta de arriba para ver sus productos
+            </div>
+          ) : productosEtiqueta.length === 0 ? (
+            <div className="p-4 text-sm text-stone-500 text-center">
+              No hay productos con esta etiqueta
+            </div>
+          ) : (
+            <>
+              <div className="text-[11px] font-semibold uppercase text-stone-400 mb-2">
+                {etiquetaTotal} producto{etiquetaTotal !== 1 ? "s" : ""} con esta etiqueta
+              </div>
+              <div className="max-h-80 overflow-y-auto rounded-xl border border-stone-200 divide-y divide-stone-100">
+                {productosEtiqueta.map((p) => {
+                  const et = etiquetaDeId(p.etiquetaColor, etiquetasCreadas);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => handleAddProduct(p)}
+                      className="w-full text-left p-3 flex items-center justify-between gap-3 transition-colors hover:brightness-95"
+                      style={et ? estiloFilaEtiqueta(et) : undefined}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-stone-900 text-sm line-clamp-1">{p.name}</p>
+                        <p className="text-xs text-stone-600 mt-0.5">
+                          SKU: {p.sku}
+                          {typeof p.stock === "number" ? ` · Stock: ${p.stock}` : ""}
+                          {p.priceContado ? ` · Contado: ${formatPYG(p.priceContado)}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-bold text-rose-600 text-sm whitespace-nowrap">
+                          {p.priceContado ? formatPYG(p.priceContado) : "—"}
+                        </span>
+                        <span className="h-7 px-2 rounded-lg bg-stone-900 text-white text-[11px] font-bold flex items-center gap-1">
+                          <Plus className="h-3 w-3" />
+                          Agregar
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {productosEtiqueta.length < etiquetaTotal ? (
+                <button
+                  onClick={() => cargarPorEtiqueta(etiquetaSel, etiquetaPage + 1, true)}
+                  className="w-full mt-2 h-10 rounded-xl border-2 border-dashed border-stone-300 hover:border-rose-400 hover:bg-rose-50 text-stone-600 hover:text-rose-600 font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+                >
+                  Mostrar más
+                </button>
+              ) : null}
+            </>
+          )}
         </Section>
 
         {/* 2.5. DESCUENTO POR CASCO (AUTOMÁTICO - solo se muestra si hay casco en el carrito) */}
@@ -1748,7 +2078,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
                   <input
                     type="date"
                     value={fechaInicioPago}
-                    min={new Date().toISOString().slice(0, 10)}
+                    min={getMinFechaInicio()}
                     max={getMaxFechaInicio()}
                     onChange={(e) => {
                       setFechaInicioPago(e.target.value);
@@ -1756,6 +2086,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
                     }}
                     className="w-full sm:w-56 h-12 px-3 rounded-lg border-2 border-stone-200 bg-white text-sm font-semibold focus:border-amber-400 focus:ring-4 focus:ring-amber-100 outline-none tabular-nums"
                   />
+                  {/* Confirmación legible de la fecha elegida (evita la trampa
+                      MM/DD de los navegadores en inglés: 05/12/2026 puede ser
+                      12 de mayo). Rojo si la fecha ya pasó. */}
+                  {fechaInicioLegible && (
+                    <p
+                      className={`mt-1 text-[11px] font-semibold ${
+                        fechaInicioPasada ? "text-rose-600" : "text-emerald-700"
+                      }`}
+                    >
+                      {fechaInicioPasada
+                        ? `ATENCIÓN: la fecha elegida (${fechaInicioLegible}) ya pasó. Elegí una fecha de hoy en adelante.`
+                        : `Fecha elegida: ${fechaInicioLegible}`}
+                    </p>
+                  )}
                 </div>
                 <div className="text-[11px] text-stone-500 leading-relaxed sm:max-w-xs">
                   Las cuotas siguientes se vencen el mismo día de cada mes a
@@ -2093,19 +2437,45 @@ function Field({
 function ProductItemRow({
   item,
   index,
+  etiqueta,
   onRemove,
   onQuantityChange,
 }: {
   item: CotizacionItem;
   index: number;
+  // Etiqueta del producto (Task 86): viaja DENTRO del item (opcional).
+  // Solo pinta bolita + nombre + fondo en pantalla; el PDF del presupuesto
+  // arma sus items con campos explícitos y jamás la recibe.
+  etiqueta?: EtiquetaInfo | null;
   onRemove: () => void;
   onQuantityChange: (q: number) => void;
 }) {
+  const estiloEtiqueta = etiqueta ? estiloFilaEtiqueta(etiqueta) : null;
   return (
-    <div className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 border border-stone-200 hover:border-stone-300 transition-colors">
+    <div
+      className="flex items-start gap-3 p-3 rounded-xl bg-stone-50 border border-stone-200 hover:border-stone-300 transition-colors"
+      style={estiloEtiqueta ?? undefined}
+    >
       <div className="h-7 w-7 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center text-xs font-bold shrink-0">{index}</div>
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-sm text-stone-900 line-clamp-2 leading-snug">{item.name}</p>
+        {/* Bolinha + nombre de la etiqueta (Task 86): SOLO en pantalla. */}
+        {etiqueta ? (
+          <p className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5">
+            <span
+              className="h-2 w-2 rounded-full inline-block shrink-0"
+              style={{ backgroundColor: etiqueta.color }}
+            />
+            {etiqueta.nombre}
+          </p>
+        ) : null}
+        {/* #HASHTAG (Task 83, pedido del dueño): bajo la descripción del
+            producto agregado, en miles sin los ceros (200.000 → "# 200 GS"). */}
+        {item.hashtag?.valor ? (
+          <p className="text-[11px] font-bold mt-0.5" style={{ color: "#8a6d2f" }}>
+            {textoHashtag(item.hashtag.valor)}
+          </p>
+        ) : null}
         <p className="text-xs text-stone-500 mt-0.5">
           SKU: <span className="font-mono">{item.sku}</span> · Contado:{" "}
           <span className="font-semibold">{formatPYG(item.priceContado)}</span> c/u

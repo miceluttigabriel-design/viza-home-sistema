@@ -28,6 +28,7 @@
 
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
+import { TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -226,9 +227,10 @@ export async function fetchMatchedProducts(rows: ValorAddRow[]) {
 // MISMA función que PUT /api/products/[id] (recalculate): así importar
 // % ADD / VALOR ADD produce exactamente el mismo resultado que editarlos
 // a mano en la tabla.
-function recalculate(p: any): void {
-  const cambioRS = 1100; // $C$1 del Excel
-  const cambioUS = 6000; // $G$1 del Excel
+// Task 87: tasas por parámetro (activas de la base; antes fijas 1100/6000).
+function recalculate(p: any, tasas: TasasCambio = TASAS_DEFAULT): void {
+  const cambioRS = tasas.cambioRS; // $C$1 del Excel (editable desde la Base)
+  const cambioUS = tasas.cambioUS; // $G$1 del Excel (editable desde la Base)
 
   // D = C * cambioRS (si hay costo en R$)
   const d = p.costBR && p.costBR > 0 ? p.costBR * cambioRS : null;
@@ -304,7 +306,8 @@ function recalculate(p: any): void {
 // + los valores nuevos para la vista previa.
 export function buildValorAddUpdate(
   product: ProductForValorAdd,
-  valores: { valorAdd: number | null; addPct: number | null; safra: string | null }
+  valores: { valorAdd: number | null; addPct: number | null; safra: string | null },
+  tasas?: TasasCambio
 ): {
   data: Record<string, number | string | null>;
   valorAddNuevo: number | null;
@@ -325,7 +328,7 @@ export function buildValorAddUpdate(
   if (sinCostoEntrada && (product.costProd ?? 0) > 0) {
     merged.costGs = product.costProd;
   }
-  recalculate(merged);
+  recalculate(merged, tasas ?? TASAS_DEFAULT);
 
   const data: Record<string, number | string | null> = {};
   if (valores.valorAdd !== null) data.valorAdd = valores.valorAdd;

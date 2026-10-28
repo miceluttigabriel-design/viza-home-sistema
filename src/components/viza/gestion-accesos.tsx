@@ -276,6 +276,8 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
   const [loadingHistorial, setLoadingHistorial] = useState(false);
   const [resetando, setResetando] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  // Task 82: guarda el id del usuario cuyo TIPO se está cambiando (spinner).
+  const [cambiandoRol, setCambiandoRol] = useState<string | null>(null);
   // Estado para polling en tiempo real
   const [destacadosIds, setDestacadosIds] = useState<Set<string>>(new Set());
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null);
@@ -498,6 +500,44 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
       toast.error(e.message);
     } finally {
       setToggling(null);
+    }
+  };
+
+  // Task 82 (pedido del dueño): cambiar el TIPO DE USUARIO de un usuario
+  // existente (COMÚN ↔ ADMIN) desde la propia tabla. Antes solo se podía
+  // elegir el tipo al CREAR el usuario. Solo SUPREMO (esta pantalla ya es
+  // solo suya). Caso de uso: filipe.campos@viza.com.py pasa de COMÚN a
+  // ADMIN — sigue sin poder editar la base (modo lectura por email) pero
+  // su etiqueta es ADM como pidió el dueño.
+  const cambiarRol = async (u: Usuario, nuevoRol: string) => {
+    const rolAnterior = u.role;
+    if (nuevoRol === rolAnterior) return;
+    const etiqueta = (r: string) => (r === "admin" ? "ADMIN" : "COMÚN");
+    if (!window.confirm(`¿Confirmás cambiar el TIPO de ${u.email} de ${etiqueta(rolAnterior)} a ${etiqueta(nuevoRol)}?`)) {
+      await cargar(true); // re-render: el select vuelve a su valor real
+      return;
+    }
+    setCambiandoRol(u.id);
+    try {
+      const res = await fetch(`/api/admin/usuarios/${u.id}/cambiar-rol`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: nuevoRol }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Error al cambiar tipo");
+      }
+      toast.success(`Tipo de usuario actualizado (${etiqueta(nuevoRol)}): ${u.email}`, {
+        description: "La etiqueta cambia al instante; el usuario ve su nuevo tipo al volver a iniciar sesión",
+        duration: 7000,
+      });
+      await cargar(true);
+    } catch (e: any) {
+      toast.error(e.message);
+      await cargar(true);
+    } finally {
+      setCambiandoRol(null);
     }
   };
 
@@ -1066,11 +1106,27 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
                             {sectorDe(u)}
                           </span>
                         </td>
-                        {/* TIPO DE USUARIO al lado del sector: Supremo / Admin / VIP / Común. */}
+                        {/* TIPO DE USUARIO al lado del sector: Supremo / Admin / VIP / Común.
+                            Task 82: para usuarios NO supremo el tipo es un SELECT — el dueño
+                            (SUPREMO) puede cambiar COMÚN ↔ ADMIN directo acá, sin tocar la
+                            base. Los supremos quedan con la etiqueta fija (nadie toca su tipo). */}
                         <td className="px-3 py-2.5">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}>
-                            {rb.label}
-                          </span>
+                          {u.role === "supremo_admin" ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}>
+                              {rb.label}
+                            </span>
+                          ) : (
+                            <select
+                              value={u.role === "admin" ? "admin" : "colaborador"}
+                              onChange={(e) => cambiarRol(u, e.target.value)}
+                              disabled={cambiandoRol === u.id}
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide outline-none cursor-pointer disabled:opacity-50 ${rb.cls}`}
+                              title="Cambiar tipo de usuario (COMÚN ↔ ADMIN). Solo SUPREMO."
+                            >
+                              <option value="colaborador">COMÚN</option>
+                              <option value="admin">ADMIN</option>
+                            </select>
+                          )}
                         </td>
                         <td className="px-3 py-2.5">
                           {u.active ? (

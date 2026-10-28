@@ -275,12 +275,10 @@ export function PlanSafra() {
       toast.error("⚠️ El valor del casco no puede ser mayor al total de productos.");
       return;
     }
-    if (!cumple50) {
-      toast.error(
-        `No cumple la regla del 50% en 6 meses. Faltan Gs ${faltanPara50.toLocaleString()}`
-      );
-      return;
-    }
+    // REGLA DEL 50% ELIMINADA (Task 82, pedido del dueño): el plan Safra se
+    // calcula TODO AUTOMÁTICO (entrada, refuerzos y pago final con la misma
+    // lógica) y NUNCA bloquea la generación del presupuesto. Solo quedan las
+    // validaciones de integridad: cliente, meses 1-18, casco y saldo en 0.
     if (!cuadra) {
       toast.error(
         `El saldo final debe ser 0. Saldo actual: Gs ${saldoFinal.toLocaleString()}`
@@ -379,7 +377,7 @@ export function PlanSafra() {
     }
   };
 
-  // Cronograma se valida en tiempo real (cumple50 y cuadra).
+  // Cronograma se valida en tiempo real (cuadra y meses 1-18).
 
   return (
     <div className="space-y-5">
@@ -939,31 +937,16 @@ export function PlanSafra() {
       )}
 
       {/* === AVISOS DE BLOQUEO VISIBLES ===
-          Antes el botón GENERAR PRESUPUESTO quedaba gris (disabled) sin
-          ninguna explicación en pantalla cuando el plan no cumplía la regla
-          del 50% o no cuadraba: el vendedor completaba cliente y refuerzos y
-          el botón "no hacía nada". Ahora el motivo se muestra SIEMPRE aquí,
-          con los números exactos y cómo resolverlo. No cambia ninguna
-          validación: solo hace visible lo que ya bloqueaba. */}
-      {productos.length > 0 && (!cumple50 || !cuadra || refuerzos.some((r) => r.mes > 18 || r.mes < 1)) && (
+          Evita el botón GENERAR PRESUPUESTO "gris sin explicación": si el
+          plan no cuadra (saldo final distinto de 0) o hay refuerzos con fecha
+          fuera del rango 1-18, el motivo se muestra SIEMPRE aquí, con los
+          números exactos y cómo resolverlo. No cambia ninguna validación:
+          solo hace visible lo que ya bloqueaba.
+          REGLA DEL 50% ELIMINADA (Task 82, pedido del dueño): ya no bloquea
+          ni avisa — el plan se calcula todo automático y no exige pagos
+          mínimos en los primeros 6 meses. */}
+      {productos.length > 0 && (!cuadra || refuerzos.some((r) => r.mes > 18 || r.mes < 1)) && (
         <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 sm:p-4 space-y-2">
-          {!cumple50 && (
-            <div>
-              <p className="text-xs font-bold text-amber-800">
-                ⚠️ REGLA DEL 50% — el botón GENERAR PRESUPUESTO sigue bloqueado:
-              </p>
-              <p className="text-xs text-amber-800 mt-1">
-                Entre la ENTRADA y los refuerzos de los meses 1 a 6 el cliente debe pagar
-                al menos Gs {Math.ceil(totalContado * 0.5).toLocaleString("es-PY")} (50% del plan).
-                Pagado hasta el mes 6: Gs {Math.round(totalPagado6Meses).toLocaleString("es-PY")}
-                {faltanPara50 > 0 && ` — faltan Gs ${faltanPara50.toLocaleString("es-PY")}`}.
-              </p>
-              <p className="text-xs text-amber-700 mt-1">
-                Solución: agregá refuerzos con fecha dentro de los primeros 6 meses
-                (o subí el valor de la entrada).
-              </p>
-            </div>
-          )}
           {!cuadra && (
             <p className="text-xs font-bold text-rose-700">
               ⚠️ El plan no cuadra: saldo final Gs {saldoFinal.toLocaleString("es-PY")}.
@@ -1010,7 +993,7 @@ export function PlanSafra() {
         {/* GENERAR PDF */}
         <button
           onClick={handleGenerarPDF}
-          disabled={generatingPdf || productos.length === 0 || !cumple50 || !cuadra || !clienteNombre.trim() || refuerzos.some(r => r.mes > 18 || r.mes < 1)}
+          disabled={generatingPdf || productos.length === 0 || !cuadra || !clienteNombre.trim() || refuerzos.some(r => r.mes > 18 || r.mes < 1)}
           className="h-14 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:brightness-110"
           style={{
             backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,

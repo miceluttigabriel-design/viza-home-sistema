@@ -17,6 +17,7 @@ import {
   safraEstaVacia,
 } from "../shared";
 import type { ValorAddRow, ProductForValorAdd } from "../shared";
+import { getTasasCambio } from "@/lib/tasas-cambio";
 
 // ¿La fila ya está aplicada en el producto? Un campo null en la fila significa
 // "no trae ese valor" → ese campo no participa de la comparación. SAFRA: como
@@ -61,6 +62,10 @@ export async function POST(req: NextRequest) {
     }
 
     const { byCod } = await fetchMatchedProducts(rows);
+
+    // Task 87: tasas activas de la base para el recálculo de la vista previa
+    // (fallback blando a 1100/6000 si aún no se configuró).
+    const tasasValorAdd = await getTasasCambio();
 
     const cambios: Array<{
       sku: string;
@@ -110,11 +115,15 @@ export async function POST(req: NextRequest) {
           safraNuevo,
           costProdNuevo,
           priceNuevo: precioNuevo,
-        } = buildValorAddUpdate(product, {
-          valorAdd: row.valorAdd,
-          addPct: row.addPct,
-          safra: row.safra,
-        });
+        } = buildValorAddUpdate(
+          product,
+          {
+            valorAdd: row.valorAdd,
+            addPct: row.addPct,
+            safra: row.safra,
+          },
+          tasasValorAdd
+        );
         cambios.push({
           sku: product.sku,
           name: product.name,

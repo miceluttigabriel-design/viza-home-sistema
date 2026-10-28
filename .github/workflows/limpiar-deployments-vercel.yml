@@ -1,0 +1,26 @@
+name: Limpieza automatica de deployments (Vercel)
+
+on:
+  schedule:
+    # Lunes 14:00 UTC = 11:00 hora Uruguay. Corre una vez por semana.
+    - cron: '0 14 * * 1'
+  # Permite correrlo a mano: GitHub -> Actions -> Run workflow
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  limpiar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Bajar el repo (para leer el script)
+        uses: actions/checkout@v4
+
+      - name: Borrar deployments viejos de Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        run: node .github/scripts/limpiar-vercel-deployments.mjs
