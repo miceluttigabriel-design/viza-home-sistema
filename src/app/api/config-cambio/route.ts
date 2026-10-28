@@ -6,8 +6,10 @@
 //   nadie aplicó un cambio, devuelve las tasas de siempre (1100/6000).
 //
 // POST /api/config-cambio
-//   Solo admin o supremo_admin (NUNCA usuarios de consulta): guarda las
-//   tasas nuevas y APLICA el cambio a la base general:
+//   SOLO supremo_admin y el email viza@viza.com.py (Task 87B, pedido del
+//   dueño: "viza@viza.com.py también va poder editar la tasa de cambio pero
+//   solo el") — y NUNCA usuarios de consulta: guarda las tasas nuevas y
+//   APLICA el cambio a la base general:
 //     · Recalcula TODOS los productos cuyo costo fue cargado en R$
 //       (costBR > 0) o en US$ (costUS > 0), con las MISMAS fórmulas del
 //       Excel que usa la edición manual (PUT /api/products/[id]).
@@ -26,6 +28,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
+import { puedeEditarTasaCambio } from "@/lib/permisos-cambio";
 import {
   getTasasCambioConMeta,
   guardarTasasCambio,
@@ -145,13 +148,17 @@ export async function POST(req: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
-    if ((session.user as any)?.role !== "admin" && (session.user as any)?.role !== "supremo_admin") {
+    // Task 87B (pedido del dueño): puede editar la tasa SOLO el supremo_admin
+    // y el email viza@viza.com.py (lista única en src/lib/permisos-cambio.ts,
+    // la misma que usa la UI — UI y backend deciden SIEMPRE lo mismo).
+    if (!puedeEditarTasaCambio((session.user as any)?.role, (session.user as any)?.email)) {
       return NextResponse.json(
-        { error: "Solo el administrador puede cambiar la tasa de cambio" },
+        { error: "Solo el Supremo Admin o viza@viza.com.py pueden cambiar la tasa de cambio" },
         { status: 403 }
       );
     }
-    // Task 79 + 82: usuarios de consulta SOLO LECTURA jamás modifican la base.
+    // Task 79 + 82: usuarios de consulta SOLO LECTURA jamás modifican la base
+    // (manda encima de todo, aunque el email estuviera en la lista de editores).
     if (esEmailSoloLectura(((session.user as any)?.email || ""))) {
       return NextResponse.json(
         { error: "Usuario de consulta SOLO LECTURA: no puede cambiar la tasa" },

@@ -16,6 +16,7 @@ import {
   Save,
   Calendar,
   Clock,
+  Coins,
   Gift,
   AlertTriangle,
   KeyRound,
@@ -305,6 +306,39 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
   const sucursalDelEncargado =
     ENCARGADOS_SUCURSAL[user.email.trim().toLowerCase()] ?? null;
   const esEncargadoCrm = !!sucursalDelEncargado && !isAdmin;
+
+  // ─── TASA DE CAMBIO — MOSTRADOR (Task 87B, pedido del dueño) ───
+  // Chip SOLO LECTURA en el header del panel de ventas: todos lo ven
+  // (vendedores, admins, consulta) y NADIE edita desde acá — el único lugar
+  // para editar sigue siendo el botón TASA DE CAMBIO de la Base (Supremo y
+  // viza@viza.com.py, lista en src/lib/permisos-cambio.ts).
+  // Se lee de /api/config-cambio cada vez que este panel se abre: si la tasa
+  // se actualiza en la Base, al volver a Ventas ya muestra el valor nuevo
+  // (page.tsx remonta este panel al cambiar de vista). Si la lectura falla,
+  // quedan las de siempre (1100/6000) y nada se rompe.
+  const [tasasCambioMostrador, setTasasCambioMostrador] = useState({ cambioRS: 1100, cambioUS: 6000 });
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/config-cambio");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (
+          vivo &&
+          typeof data?.cambioRS === "number" && data.cambioRS > 0 &&
+          typeof data?.cambioUS === "number" && data.cambioUS > 0
+        ) {
+          setTasasCambioMostrador({ cambioRS: data.cambioRS, cambioUS: data.cambioUS });
+        }
+      } catch {
+        // tasas de siempre — el panel de ventas funciona igual que siempre
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -1204,8 +1238,25 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
             </button>
           </div>
 
-          {/* LADO DERECHO: Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión - TODO JUNTO EN UN BLOQUE */}
+          {/* LADO DERECHO: MOSTRADOR tasa de cambio + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto lg:ml-0">
+            {/* Task 87B (pedido del dueño): MOSTRADOR de la tasa de cambio en
+                el panel de ventas. SOLO LECTURA: es un span, no un botón —
+                nadie edita desde acá. Se actualiza SOLO: se lee de la base
+                cada vez que el panel se abre, así si se actualiza en la Base,
+                acá ya aparece el valor nuevo. */}
+            <span
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.94)",
+                color: "#92400e",
+                border: "1px solid rgba(217,184,107,0.85)",
+              }}
+              title="Tasa de cambio activa: el sistema la usa para convertir costos cargados en Real y en Dólar a Guaraníes. Se edita desde la BASE (botón TASA DE CAMBIO) y acá se actualiza sola."
+            >
+              <Coins className="h-3.5 w-3.5" />
+              CAMBIO: R$ {tasasCambioMostrador.cambioRS.toLocaleString("es-PY")} · US$ {tasasCambioMostrador.cambioUS.toLocaleString("es-PY")}
+            </span>
             <div
               className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 cursor-default"
               style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}

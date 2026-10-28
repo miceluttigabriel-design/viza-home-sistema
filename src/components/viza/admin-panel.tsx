@@ -34,6 +34,7 @@ import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import { formatPYG } from "@/lib/format";
 import type { EtiquetaCreada } from "@/lib/etiquetas";
+import { puedeEditarTasaCambio } from "@/lib/permisos-cambio";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 
 // Formatea una fracción decimal de porcentaje (0.25 = 25%) igual que la tabla
@@ -461,7 +462,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
   // fijas en 1100/6000). Se cargan UNA VEZ al montar la Base y se usan:
   //   · para el recálculo EN VIVO de la tabla (recalcLive),
   //   · para mostrarlas en el chip de la barra (informativo, todos),
-  //   · para precargar el modal TASA DE CAMBIO (solo Supremo).
+  //   · para precargar el modal TASA DE CAMBIO (Task 87B: solo Supremo y
+  //     viza@viza.com.py — lista única en src/lib/permisos-cambio.ts).
   // Si la lectura falla, quedan las de siempre y nada se rompe.
   const [tasasCambio, setTasasCambio] = useState<{ cambioRS: number; cambioUS: number }>(TASAS_FRONT_DEFAULT);
   const [modalTasaOpen, setModalTasaOpen] = useState(false);
@@ -1479,7 +1481,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                 {/* Chip TASA DE CAMBIO ACTIVA (Task 87, pedido del dueño) —
                     informativo, visible para todos en la Base: muestra el
                     cambio R$→Gs y US$→Gs que el sistema usa HOY al recalcular
-                    costos. Editable solo por el Supremo (botón de al lado). */}
+                    costos. Editable solo por el Supremo y viza@viza.com.py
+                    (botón de al lado, Task 87B). */}
                 <span
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200 text-xs font-semibold"
                   title="Tasa de cambio activa: el sistema la usa para convertir costos cargados en Real y en Dólar a Guaraníes"
@@ -1487,12 +1490,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                   <Coins className="h-3.5 w-3.5" />
                   CAMBIO: R$ {tasasCambio.cambioRS.toLocaleString("es-PY")} · US$ {tasasCambio.cambioUS.toLocaleString("es-PY")}
                 </span>
-                {/* Botón TASA DE CAMBIO (Task 87, pedido del dueño) — solo
-                    supremo_admin: abre el modal para editar el cambio R$→Gs y
+                {/* Botón TASA DE CAMBIO (Task 87, pedido del dueño) — Task
+                    87B: SOLO supremo_admin y el email viza@viza.com.py (lista
+                    única en src/lib/permisos-cambio.ts, la misma que valida el
+                    backend). Abre el modal para editar el cambio R$→Gs y
                     US$→Gs y APLICARLO a la base general (recalcula costos y
                     precios de los productos cargados en R$ o US$ con las
                     mismas fórmulas de siempre). */}
-                {isSupremo && !esLectura && (
+                {puedeEditarTasaCambio(user.role, user.email) && !esLectura && (
                   <button
                     id="btn-tasa-cambio"
                     onClick={() => setModalTasaOpen(true)}
@@ -5031,7 +5036,8 @@ function ModalCrearEtiqueta({
 }
 
 // ─── MODAL TASA DE CAMBIO (Task 87, pedido del dueño) ───
-// Solo supremo_admin (el botón de la toolbar solo se muestra para él).
+// Solo supremo_admin y viza@viza.com.py (Task 87B — el botón de la toolbar
+// solo se muestra para ellos y el backend valida la MISMA lista).
 // Dos pasos adentro del modal:
 //   1) EDITAR: el Supremo pone el cambio R$→Gs y US$→Gs y aprieta
 //      "APLICAR A LA BASE GENERAL".
