@@ -6,11 +6,7 @@ import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
 import { db } from "../../../../lib/db";
 import { leerHashtags } from "../../../../lib/producto-hashtag";
-<<<<<<< HEAD
 import { textoHashtagSinGs } from "../../../../lib/hashtag-formato";
-=======
-import { textoHashtag } from "../../../../lib/hashtag-formato";
->>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
 import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../lib/pdf/vizaLogo";
 
 // Task 88 (pedido del dueño): el margen adicional del contado se muestra en
@@ -491,11 +487,7 @@ export async function POST(req: NextRequest) {
     }
     // #HASHTAG por producto (Task 83, pedido del dueño): se lee DIRECTO de
     // la base por sku (tabla aparte ProductHashtag) y se dibuja DEBAJO de la
-<<<<<<< HEAD
     // descripción: "# 200" (el valor 200.000 de la base en miles, sin los
-=======
-    // descripción: "# 200 GS" (el valor 200.000 de la base en miles, sin los
->>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
     // ceros). Si la lectura falla, el PDF sale igual sin el hashtag.
     const hashtagPorSku = new Map<string, string>();
     try {
@@ -511,11 +503,7 @@ export async function POST(req: NextRequest) {
         const mapaHashtags = await leerHashtags(Array.from(idPorSku.values()));
         for (const [sku, id] of idPorSku) {
           const h = mapaHashtags.get(id);
-<<<<<<< HEAD
           const txt = textoHashtagSinGs(h?.valor ?? null); // Task 88B: sin "GS"
-=======
-          const txt = textoHashtag(h?.valor ?? null);
->>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
           if (txt) hashtagPorSku.set(sku, txt);
         }
       }
@@ -583,11 +571,7 @@ export async function POST(req: NextRequest) {
       doc.setFontSize(8.5);
       const nameLines = doc.splitTextToSize(it.name, colName - 6);
       doc.text(nameLines.slice(0, 2), xxx, y + 13);
-<<<<<<< HEAD
       // #HASHTAG bien abajo de la descripción (Task 83): "# 200" en dorado.
-=======
-      // #HASHTAG bien abajo de la descripción (Task 83): "# 200 GS" en dorado.
->>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
       if (hashtagTxt) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(7);

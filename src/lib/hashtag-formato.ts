@@ -23,7 +23,6 @@ export function textoHashtag(valor: number | null | undefined): string {
   if (!miles) return "";
   return `# ${miles} GS`;
 }
-<<<<<<< HEAD
 
 // 200000 → "# 200" (SIN el "GS") · sin valor → "" (no se muestra nada)
 // Task 88B (pedido del dueño): en los PRESUPUESTOS (PDFs que le llegan al
@@ -34,5 +33,3 @@ export function textoHashtagSinGs(valor: number | null | undefined): string {
   if (!miles) return "";
   return `# ${miles}`;
 }
-=======
->>>>>>> 3de7421f31d597e850acfe5b93b741e97b4f14eb
