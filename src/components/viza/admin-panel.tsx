@@ -1975,7 +1975,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
                           isLabelMenuOpen={openLabelMenu === p.id}
                           filaActiva={filaActivaId === p.id}
                           onTocarFila={() => setFilaActivaId(p.id)}
-                          onToggleLabelMenu={() => setOpenLabelMenu(openLabelMenu === p.id ? null : p.id)}
+                          onToggleLabelMenu={() => {
+                            // SOLO LECTURA (Task 79): el menú de etiquetas de
+                            // color no se abre JAMÁS (defensa extra; el botón
+                            // que lo dispara ni siquiera se renderiza aquí).
+                            if (esLectura) return;
+                            setOpenLabelMenu(openLabelMenu === p.id ? null : p.id);
+                          }}
                           onSetLabel={async (color: string | null) => {
                             // Modo SOLO LECTURA (Task 78): la etiqueta de color
                             // tampoco se puede cambiar (el botón ya no existe).
