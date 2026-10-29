@@ -37,6 +37,42 @@ function normalizeHeader(s: any): string {
 }
 
 /**
+ * Normalización FLEXIBLE para matchear abreviaturas del ERP:
+ * además de lo que hace normalizeHeader, convierte los puntos en espacios
+ * ("UNIT." → "UNIT") y colapsa espacios múltiples.
+ *   "Costo Unit. Ult. Compra"     → "COSTO UNIT ULT COMPRA"
+ *   "COSTO UNIT. ULTIMA COMPRA"   → "COSTO UNIT ULTIMA COMPRA"
+ */
+function normalizeHeaderLoose(s: any): string {
+  return normalizeHeader(s)
+    .replace(/\./g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Match por PREFIJO de palabra (para aceptar abreviaturas del ERP).
+ * Regla conservadora: misma cantidad de palabras y cada par de palabras
+ * coincide igual o una es prefijo de la otra (mínimo 3 letras).
+ *   "COSTO UNIT ULTIMA COMPRA" SÍ coincide con "COSTO UNIT ULT COMPRA"
+ *     (ULT es prefijo de ULTIMA).
+ *   "COSTO UNIT ULTIMA COMPRA" NO coincide con "COSTO PROM ULT COMPRA"
+ *     (UNIT y PROM no coinciden) ni con "COSTO UNIT ULTIMA COMPRA GS"
+ *     (distinta cantidad de palabras).
+ */
+function headerCoincidePorPrefijo(needle: string, hay: string): boolean {
+  const nTok = needle.split(" ");
+  const hTok = hay.split(" ");
+  if (nTok.length !== hTok.length) return false;
+  return nTok.every((n, i) => {
+    const h = hTok[i];
+    if (n === h) return true;
+    const [corta, larga] = n.length <= h.length ? [n, h] : [h, n];
+    return corta.length >= 3 && larga.startsWith(corta);
+  });
+}
+
+/**
  * Limpia un Codigo del Excel que puede venir con coma como separador de miles.
  * Ej: "1,747" → "1747", "12,240" → "12240", "301" → "301".
  */
@@ -125,14 +161,43 @@ export async function POST(req: NextRequest) {
     // Usamos normalizeHeader para que "Descripción" (con acento) → "DESCRIPCION"
     // y el lookup en getCell tambien normalice → siempre matchea.
     const headerRow = ws.getRow(1);
+    // Mapa EXACTO (comportamiento de siempre, intacto) + lista FLEXIBLE
+    // (sin puntos) para aceptar abreviaturas como "Costo Unit. Ult. Compra".
     const headerMap: Record<string, number> = {};
+    const headersList: Array<{ loose: string; col: number }> = [];
     for (let c = 1; c <= ws.columnCount; c++) {
-      const header = normalizeHeader(headerRow.getCell(c).value);
-      if (header) headerMap[header] = c;
+      const raw = headerRow.getCell(c).value;
+      const header = normalizeHeader(raw);
+      if (header) {
+        headerMap[header] = c;
+        const loose = normalizeHeaderLoose(raw);
+        if (loose) headersList.push({ loose, col: c });
+      }
     }
 
+    // Resolvedor de columnas en 3 pasos (de más preciso a más flexible):
+    //   1) EXACTO: igual que siempre (headerMap). Si la planilla trae
+    //      "COSTO UNIT. ULTIMA COMPRA" matchea igual que antes → cero cambios.
+    //   2) SIN PUNTOS: "COSTO UNIT ULTIMA COMPRA" (por si el Excel varía puntos
+    //      o espacios de más).
+    //   3) ABREVIATURA por prefijo de palabra: "Costo Unit. Ult. Compra" (como
+    //      viene en la planilla real del ERP) matchea "COSTO UNIT. ULTIMA
+    //      COMPRA" porque ULT es prefijo de ULTIMA (misma cantidad de palabras).
+    const resolveColumn = (headerName: string): number | null => {
+      const exacto = headerMap[normalizeHeader(headerName)];
+      if (exacto) return exacto;
+      const needle = normalizeHeaderLoose(headerName);
+      for (const h of headersList) {
+        if (h.loose === needle) return h.col;
+      }
+      for (const h of headersList) {
+        if (headerCoincidePorPrefijo(needle, h.loose)) return h.col;
+      }
+      return null;
+    };
+
     // Validar que tenga por lo menos las columnas clave
-    const colCodigo = headerMap["CODIGO"];
+    const colCodigo = resolveColumn("CODIGO");
     if (!colCodigo) {
       return NextResponse.json(
         {
@@ -143,9 +208,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Helper para obtener valor de celda por nombre de header (normaliza para match)
+    // Helper para obtener valor de celda por nombre de header (normaliza para
+    // match y acepta variantes/abreviaturas vía resolveColumn)
     const getCell = (row: ExcelJS.Row, headerName: string): any => {
-      const col = headerMap[normalizeHeader(headerName)];
+      const col = resolveColumn(headerName);
       if (!col) return null;
       const cell = row.getCell(col).value;
       // Si es celda con fórmula, tomar el resultado
@@ -173,6 +239,18 @@ export async function POST(req: NextRequest) {
 
     const errores: string[] = [];
     let totalFilas = 0;
+
+    // AVISO visible en la vista previa: si la columna de costo no se encontró
+    // con NINGUNA de las variantes aceptadas, avisarlo CLARO antes de aplicar.
+    // Así nunca vuelve a pasar en silencio (caso real: la planilla del ERP
+    // trae "Costo Unit. Ult. Compra" abreviado y el sistema buscaba el nombre
+    // completo "COSTO UNIT. ULTIMA COMPRA" → el costo de ningún producto se
+    // habría leído). Con este aviso el usuario lo ve ANTES de confirmar.
+    if (!resolveColumn("COSTO UNIT. ULTIMA COMPRA")) {
+      errores.push(
+        'AVISO: no se encontró la columna de costo en el Excel (se busca "COSTO UNIT. ULTIMA COMPRA", también se acepta abreviada como "Costo Unit. Ult. Compra"). Los costos NO se leerán de esta planilla; solo se actualizará el stock.'
+      );
+    }
 
     for (let r = 2; r <= ws.rowCount; r++) {
       const row = ws.getRow(r);
