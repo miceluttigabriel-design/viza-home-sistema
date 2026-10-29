@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { leerCapacidades } from "@/lib/producto-capacidad";
 
 // GET /api/products/export - Exporta TODOS los productos con TODAS las columnas (103 columnas)
 // Genera CSV que abre en Excel - SIN librerias externas
@@ -27,6 +28,11 @@ export async function GET() {
       skip += batchSize;
       hasMore = batch.length === batchSize;
     }
+
+    // Task 97: CAPACIDAD de cada producto (tabla aparte ProductCapacidad,
+    // mismo patrón que #HASHTAG). Si la tabla aún no existe, el mapa viene
+    // vacío y la columna CAPACIDAD sale vacía — el export nunca se rompe.
+    const capacidadesMap = await leerCapacidades(allProducts.map((p) => p.id));
 
     // Helper para sanitizar valores CSV
     function csvVal(val: any): string {
@@ -111,6 +117,10 @@ export async function GET() {
       { header: "TIPO", fn: (p: any) => csvVal(p.tipo) },
       { header: "MARCA", fn: (p: any) => csvVal(p.marca) },
       { header: "MODELO", fn: (p: any) => csvVal(p.modelo) },
+      // Task 97: CAPACIDAD nueva, detrás de MODELO (mismo orden que la tabla
+      // del Panel ADM). El import de productos la lee para productos NUEVOS,
+      // así el round-trip export → import conserva el dato.
+      { header: "CAPACIDAD", fn: (p: any) => csvVal(capacidadesMap.get(p.id) ?? "") },
       { header: "VALOR TECNICO", fn: (p: any) => numVal(p.valorTecnico) },
       { header: "MARGEN TECNICO", fn: (p: any) => numVal(p.margenTecnico) },
       { header: "COLUNA1", fn: (p: any) => csvVal(p.coluna1) },

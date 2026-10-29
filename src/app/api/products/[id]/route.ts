@@ -9,6 +9,8 @@ import {
 } from "@/lib/costo-editado";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
+import { calcularValorMayorista } from "@/lib/margen-mayorista";
+import { guardarCapacidad } from "@/lib/producto-capacidad";
 
 // Recalcula los campos derivados según las fórmulas del Excel.
 // Task 87: las tasas ya NO están fijas acá — vienen de la TasaCambio
@@ -156,10 +158,13 @@ export async function PUT(
     ];
     const shouldRecalc = recalcInputs.some((k) => body[k] !== undefined);
 
+    // Producto actual (se usa para el recálculo y para el % MAYORISTA
+    // automático de la Task 97; una sola lectura para ambas cosas).
+    let current: Awaited<ReturnType<typeof db.product.findUnique>> = null;
     if (shouldRecalc) {
       // Task 87: tasas activas de la base (con fallback blando a 1100/6000).
       const tasas = await getTasasCambio();
-      const current = await db.product.findUnique({ where: { id } });
+      current = await db.product.findUnique({ where: { id } });
       if (!current) {
         return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
       }
@@ -185,6 +190,50 @@ export async function PUT(
       ].forEach((k) => {
         data[k] = merged[k];
       });
+    }
+
+    // ─── % MAYORISTA AUTOMÁTICO → VALOR MAYORISTA (Task 97, pedido del dueño) ───
+    // "% AUTOMATICA NO MAYORISTA PARA REFLETIR EN VALOR DE MAYORISTA ...
+    //  % PARA AIRES SERIA EMCIMA DE (COSTO GS) Y % PARA DEMAS PRODUCTOS
+    //  EM CIMA DE (COSTO PROD.) ambos ao agregar en MARGEN MAYORISTA ya
+    //  nos traria automaticamente el VALOR MAYORISTA".
+    // Se recalcula cuando el admin toca el % (margenTecnico) o cualquier
+    // costo que afecta la base. MISMA fórmula de la planilla LISTA VIZA
+    // HOME (columna CV):  VALOR = CostoBase * (1 + %)
+    //   · AIRES → base COSTO GS  · DEMÁS productos → base COSTO PROD.
+    // Si el body trae valorTecnico explícito, se RESPETA tal cual (valor a
+    // mano del admin, regla de la casa). Sin margen cargada (o margen 0)
+    // el VALOR no se toca: queda el que ya tenía.
+    const tocaMargenMayorista = body.margenTecnico !== undefined;
+    if (body.valorTecnico === undefined && (tocaMargenMayorista || shouldRecalc)) {
+      const cur = current ?? (await db.product.findUnique({ where: { id } }));
+      if (cur) {
+        const mergedTecnico = { ...cur, ...data } as any;
+        const valorAuto = calcularValorMayorista(
+          mergedTecnico,
+          mergedTecnico.margenTecnico
+        );
+        if (valorAuto !== null) data.valorTecnico = valorAuto;
+      }
+    }
+
+    // ─── CAPACIDAD (Task 97, columna nueva de la Base) ───
+    // Vive en tabla APARTE (ProductCapacidad, mismo patrón que #HASHTAG —
+    // lección de la casa: columnas nuevas en Product rompen sin db push).
+    // Si el body la trae (celda editada en la tabla), se guarda; si falla,
+    // el guardado del producto NO se rompe por esto.
+    let capacidadSalida: string | null | undefined;
+    if (body.capacidad !== undefined) {
+      const valorCap =
+        body.capacidad === null || body.capacidad === ""
+          ? null
+          : String(body.capacidad).trim();
+      try {
+        await guardarCapacidad(id, valorCap);
+      } catch {
+        // la capacidad es un extra: jamás frena el guardado principal
+      }
+      capacidadSalida = valorCap;
     }
 
     // ─── COSTO EDITADO Y GUARDADO (regla del usuario) ───
@@ -221,7 +270,14 @@ export async function PUT(
     // INSTANTE después de guardar (el panel hace {...p, ...res}).
     const costosEditados = await leerColKeysProducto(id);
 
-    return NextResponse.json({ product: { ...updated, costosEditados } });
+    // Task 97: devolver también la capacidad guardada (si esta edición la
+    // tocó) para que la celda quede actualizada al instante.
+    const productSalida: any = { ...updated, costosEditados };
+    if (capacidadSalida !== undefined) {
+      productSalida.capacidad = capacidadSalida;
+    }
+
+    return NextResponse.json({ product: productSalida });
   } catch (error) {
     console.error("Error actualizando producto:", error);
     return NextResponse.json(

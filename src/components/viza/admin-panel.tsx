@@ -35,6 +35,7 @@ import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import { formatPYG } from "@/lib/format";
 import { hashtagCeldaRoja, hoyParaguay } from "@/lib/hashtag-formato";
+import { calcularValorMayorista, esProductoAire } from "@/lib/margen-mayorista";
 import type { EtiquetaCreada } from "@/lib/etiquetas";
 import { puedeEditarTasaCambio } from "@/lib/permisos-cambio";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
@@ -131,6 +132,9 @@ interface Product {
   modelo: string | null;
   valorTecnico: number | null;
   margenTecnico: number | null;
+  // Task 97: CAPACIDAD (columna nueva; vive en tabla aparte ProductCapacidad
+  // y llega fusionada desde GET /api/products, igual que el hashtag)
+  capacidad?: string | null;
   coluna1: string | null;
   coluna2: string | null;
   stock: number;
@@ -252,17 +256,21 @@ interface ColDef {
 }
 
 const COLUMNS: ColDef[] = [
-  // Orden de columnas a pedido del usuario (despues del COD fijo):
-  // GRUPO > SUB-GRUPO > PROVEDOR > MARCA > MODELO > REF.FABRICA > DESCRIPCION.
-  // Solo cambia la POSICION visual; keys/campos/datos/Excel intactos.
+  // Orden de columnas a pedido del usuario (Task 97, despues del COD fijo):
+  //   COD > PROVEDOR > GRUPO > SUBGRUPO > MARCA > TIPO PRODUCTO > MODELO >
+  //   > CAPACIDAD > REF.FABRICA > DESCRIPCION
+  // Cambios de esta tarea: PROVEDOR pasó al frente (antes iba detrás de
+  // SUB-GRUPO); TIPO PRODUCTO y CAPACIDAD son las DOS columnas NUEVAS
+  // ("hay que crear mas dos tanbien"); el resto queda igual. Solo cambia
+  // la POSICION visual; keys/campos/datos/Excel intactos.
+  // Renombre visual (pedido del usuario): se muestra PROVEDOR; el campo/key
+  // "fabricante" queda intacto (datos, filtro, API, import y export sin cambios).
+  { key: "fabricante", label: "PROVEDOR", type: "text", group: "DATOS FINALES" },
   // GRUPO: en la base es el campo "categoria" (col CQ "CATEGORIA" de la
   // planilla), el mismo que ya usan el export Excel y la importación de
   // productos. Se muestra (como GRUPO) y es editable en esta tabla; el botón
   // IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO la llena desde la planilla.
   { key: "categoria", label: "GRUPO", type: "text", group: "DATOS FINALES" },
-  // Columnas DIVISION, TIPO y PRODUCTO ocultas de esta tabla a pedido del
-  // usuario (los datos siguen en la base). MODELO fue restaurada a pedido
-  // del usuario (se ve detrás de MARCA, ver abajo).
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
   // FABRICANTE y MARCA restauradas a pedido del usuario: los campos ya
   // existían en la base de datos y en import/export Excel; ahora también se
@@ -270,10 +278,14 @@ const COLUMNS: ColDef[] = [
   // global ya lo soportaban). MARCA es la columna MARCA del Excel: el botón
   // IMPORTAR FABRICANTES, MARCAS, GRUPO Y MODELO escribe aquí las marcas de
   // la planilla.
-  // Renombre visual (pedido del usuario): se muestra PROVEDOR; el campo/key
-  // "fabricante" queda intacto (datos, filtro, API, import y export sin cambios).
-  { key: "fabricante", label: "PROVEDOR", type: "text", group: "DATOS FINALES" },
   { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
+  // TIPO PRODUCTO (NUEVA en la tabla, Task 97): el campo "tipo" ya existía
+  // en la base (col CS "Tipo" de la planilla) y en import/export Excel;
+  // estaba OCULTA en esta tabla desde el pedido viejo de orden de columnas
+  // ("Columnas DIVISION, TIPO y PRODUCTO ocultas") — el dueño la vuelve a
+  // querer, con el nombre TIPO PRODUCTO, entre MARCA y MODELO. Editable,
+  // filtrable y buscable como cualquier columna de texto.
+  { key: "tipo", label: "TIPO PRODUCTO", type: "text", group: "DATOS FINALES" },
   // MODELO restaurada a pedido del usuario: el campo ya existía en la base
   // (encabezado "MODELO" de la planilla, columna justo detrás de MARCA), en
   // la importación de productos y en el export Excel; ahora también se
@@ -281,6 +293,15 @@ const COLUMNS: ColDef[] = [
   // la planilla. Como está dentro del bloque de columnas fijas, se congela
   // junto a ellas (ver FROZEN_COLUMNS).
   { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
+  // CAPACIDAD (NUEVA, Task 97): la segunda de las dos columnas nuevas del
+  // pedido ("hay que crear mas dos tanbien"). Dato de texto libre que NO
+  // existía ni en la planilla ni en la base (las capacidades hoy viven
+  // dentro de la DESCRIPCION: "12.000 BTU", "650M3H", "90CM"...). El admin
+  // la llena a mano. Vive en la tabla APARTE ProductCapacidad (mismo
+  // patrón que #HASHTAG: se activa sola, jamás toca el modelo Product ni
+  // rompe nada sin db push) y llega fusionada desde GET /api/products.
+  // Editable, filtrable y buscable como cualquier columna de texto.
+  { key: "capacidad", label: "CAPACIDAD", type: "text", group: "DATOS FINALES" },
   // Renombre visual (pedido del usuario): se muestra REF.FABRICA; el campo/key
   // "referencia" queda intacto (datos, filtro, import y export sin cambios).
   { key: "referencia", label: "REF.FABRICA", type: "text", group: "DATOS" },
@@ -329,7 +350,14 @@ const COLUMNS: ColDef[] = [
   // MARGEN MAYORISTA, y VALOR TECNICO ahora se muestra como VALOR MAYORISTA.
   // Solo cambia el NOMBRE de la columna en pantalla; los keys "margenTecnico" y
   // "valorTecnico", los datos, el import y el export Excel quedan intactos.
-  { key: "margenTecnico", label: "MARGEN MAYORISTA", type: "num", group: "DATOS FINALES" },
+  //
+  // Task 97: MARGEN MAYORISTA pasa de "num" a "pct" — ahora se ESCRIBE y se
+  // VE como porcentaje (teclea 5 = 5%, se guarda 0.05 igual que % CONTADO y
+  // % DESC; la base ya guarda fracciones: la planilla trae 0.05 en
+  // "Margen P/Tecnico"). Al escribir el %, el VALOR MAYORISTA se llena SOLO
+  // (ver handleChange: AIRES sobre COSTO GS, demas sobre COSTO PROD.,
+  // misma fórmula de la planilla — ver src/lib/margen-mayorista.ts).
+  { key: "margenTecnico", label: "MARGEN MAYORISTA", type: "pct", group: "DATOS FINALES" },
   { key: "marginContado", label: "% CONTADO", type: "pct", group: "MARGENES" },
   { key: "safra", label: "SAFRA", type: "num", group: "DATOS FINALES" },
   { key: "valorTecnico", label: "VALOR MAYORISTA", type: "num", group: "DATOS FINALES" },
@@ -361,11 +389,13 @@ const COLUMNS: ColDef[] = [
 // posicion left de cada una (arranque: ACCIONES 120px + COD 110px = 230px).
 // Para revertir el experimento: dejar el array VACIO ([]).
 const FROZEN_COLUMNS: { key: string; width: number }[] = [
+  { key: "fabricante", width: 130 }, // PROVEDOR (Task 97: pasó al frente)
   { key: "categoria", width: 100 },  // GRUPO
   { key: "subGrupo", width: 120 },   // SUB-GRUPO
-  { key: "fabricante", width: 130 }, // PROVEDOR
   { key: "marca", width: 100 },      // MARCA
+  { key: "tipo", width: 120 },       // TIPO PRODUCTO (nueva, Task 97)
   { key: "modelo", width: 130 },     // MODELO (restaurada a pedido del usuario)
+  { key: "capacidad", width: 100 },  // CAPACIDAD (nueva, Task 97)
   { key: "referencia", width: 130 }, // REF.FABRICA
   { key: "name", width: 400 },       // DESCRIPCION
 ];
@@ -884,6 +914,75 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
     setDirty((d) => {
       const existing = d[productId] || {};
       return { ...d, [productId]: { ...existing, [key]: value } };
+    });
+
+    // ─── % MAYORISTA AUTOMÁTICO → VALOR MAYORISTA (Task 97, pedido del dueño) ───
+    // "% AUTOMATICA NO MAYORISTA PARA REFLETIR EN VALOR DE MAYORISTA ...
+    //  % PARA AIRES SERIA EMCIMA DE (COSTO GS) Y % PARA DEMAS PRODUCTOS
+    //  EM CIMA DE (COSTO PROD.) ambos ao agregar en MARGEN MAYORISTA ya
+    //  nos traria automaticamente el VALOR MAYORISTA".
+    //
+    // Al escribir el % en MARGEN MAYORISTA (o tocar cualquier costo que
+    // afecta la base), el VALOR MAYORISTA de la fila se llena SOLO, con la
+    // MISMA fórmula de la planilla LISTA VIZA HOME (columna CV):
+    //        VALOR = CostoBase * (1 + %)
+    //   · AIRES → CostoBase = COSTO GS   (col Costo Gs)
+    //   · DEMÁS → CostoBase = COSTO PROD. (recalculado en vivo con los
+    //     cambios pendientes, espejo del recálculo del servidor)
+    // Si el producto no tiene margen (o es 0), el VALOR no se toca: queda
+    // el que el admin escribió a mano (regla de la casa). El valor quedó
+    // en el dirty, así que se GUARDA junto con todo lo demás; el PUT del
+    // servidor lo recalcula igual como espejo de seguridad.
+    const TRIGGERS_MAYORISTA = [
+      "margenTecnico", "costBR", "costUS", "costGs",
+      "discountPct", "addPct", "admPct", "valorDesc", "valorAdd",
+    ];
+    if (!TRIGGERS_MAYORISTA.includes(key)) return;
+    const productoFila = products.find((p) => p.id === productId);
+    if (!productoFila) return;
+    const cambiosFila: any = { ...(dirty[productId] || {}), [key]: value };
+    // margen efectivo: el recién escrito (si es el caso) o el que ya tenía
+    const margenEfectivo =
+      cambiosFila.margenTecnico !== undefined
+        ? cambiosFila.margenTecnico
+        : (productoFila as any).margenTecnico;
+    const esAire = esProductoAire(productoFila as any);
+    // Base del cálculo:
+    //   AIRES → COSTO GS directo (lo escrito ahora manda si lo está editando)
+    //   DEMÁS → COSTO PROD. EN VIVO: espejo de recalcLive con los cambios
+    //           pendientes (igual que hace getDisplayValues para pintarlo);
+    //           si el producto no tiene costos de entrada (solo Costo Prod.
+    //           viejo), se usa su COSTO PROD. guardado — mismo fallback del
+    //           servidor.
+    let baseMayorista: number;
+    if (esAire) {
+      baseMayorista = Number(
+        cambiosFila.costGs !== undefined ? cambiosFila.costGs : (productoFila as any).costGs
+      ) || 0;
+    } else {
+      const formVivo: any = { ...(productoFila as any), ...cambiosFila };
+      const tieneCostoEntrada =
+        Number(formVivo.costBR) > 0 ||
+        Number(formVivo.costUS) > 0 ||
+        Number(formVivo.costGs) > 0;
+      baseMayorista = tieneCostoEntrada
+        ? Number(recalcLive(formVivo, tasasCambio).costProd) || 0
+        : Number((productoFila as any).costProd) || 0;
+    }
+    if (baseMayorista <= 0) return; // sin base todavía: no se toca el VALOR
+    const valorAuto = calcularValorMayorista(
+      { costGs: baseMayorista, costProd: baseMayorista, categoria: "", tipo: "", name: "" },
+      margenEfectivo
+    );
+    if (valorAuto === null) return;
+    setDirty((d) => {
+      const existing = d[productId] || {};
+      const nuevoValor = String(valorAuto);
+      if (existing.valorTecnico === nuevoValor) return d;
+      return {
+        ...d,
+        [productId]: { ...existing, [key]: value, valorTecnico: nuevoValor },
+      };
     });
   };
 
@@ -4835,7 +4934,10 @@ const Cell = memo(function Cell({
 
   const displayValue =
     isPct && value !== "" && value !== null && value !== undefined
-      ? Number(value) * 100
+      ? // Limpieza visual del ruido de punto flotante (0.1*100 =
+        // 10.000000000000002 en JS): se corta a 4 decimales de %, sin
+        // tocar el valor guardado (la edición sigue guardando fracción).
+        Math.round(Number(value) * 1000000) / 10000
       : value ?? "";
 
   const inputNode = (

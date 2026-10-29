@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { valoresDistinctCapacidad } from "@/lib/producto-capacidad";
 
 // Columnas numéricas del modelo Product (devuelven min/max en lugar de distinct)
 const NUMERIC_COLUMNS = new Set([
@@ -119,6 +120,21 @@ export async function GET(req: NextRequest) {
     // Admin y supremo_admin ven todos los productos. Colaboradores solo los visibles.
     if (role !== "admin" && role !== "supremo_admin") {
       baseWhere.showInCatalog = true;
+    }
+
+    // Task 97: CAPACIDAD vive en tabla APARTE (ProductCapacidad, mismo
+    // patrón que #HASHTAG), así que sus valores únicos salen de ahí. Si la
+    // tabla aún no existe, valoresDistinctCapacidad devuelve [] y el
+    // filtro queda simplemente vacío (nada se rompe).
+    if (column === "capacidad") {
+      const valores = await valoresDistinctCapacidad();
+      return NextResponse.json({
+        type: "text",
+        column,
+        values: valores.map((v) => v.value),
+        counts: valores,
+        count: valores.length,
+      });
     }
 
     // Columna numérica: devolver min, max y count

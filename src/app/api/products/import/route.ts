@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { naceConMargenDefault } from "@/lib/gasto-adm";
+import { guardarCapacidad } from "@/lib/producto-capacidad";
 import ExcelJS from "exceljs";
 import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 
@@ -231,7 +232,20 @@ export async function POST(req: NextRequest) {
         // KENTON nacen como siempre (sin el 1%).
         naceConMargenDefault(productData);
         recalculate(productData, tasasImport);
-        await db.product.create({ data: productData });
+        const creado = await db.product.create({ data: productData });
+
+        // Task 97: CAPACIDAD (columna nueva de la Base, tabla aparte
+        // ProductCapacidad). Si la planilla la trae (header "CAPACIDAD"),
+        // nace con ella; si no existe la columna o falla el guardado, el
+        // producto queda creado igual (jamás frena la importación).
+        const capExcel = toString(getCell(row, "CAPACIDAD"));
+        if (capExcel) {
+          try {
+            await guardarCapacidad(creado.id, capExcel);
+          } catch {
+            // sin capacidad: la importación sigue igual que siempre
+          }
+        }
         results.nuevos++;
       }
       results.total++;

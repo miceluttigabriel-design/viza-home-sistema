@@ -6,6 +6,8 @@ import { leerCostosEditados } from "@/lib/costo-editado";
 import { leerHashtags } from "@/lib/producto-hashtag";
 import { hashtagVisibleParaVendedor, hoyParaguay } from "@/lib/hashtag-formato";
 import { naceConMargenDefault } from "@/lib/gasto-adm";
+import { calcularValorMayorista } from "@/lib/margen-mayorista";
+import { guardarCapacidad, idsPorCapacidad, leerCapacidades } from "@/lib/producto-capacidad";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { getTasasCambio } from "@/lib/tasas-cambio";
 
@@ -67,7 +69,7 @@ export async function GET(req: NextRequest) {
       // CORRECCIÓN v1.1: Búsqueda CASE-INSENSITIVE (no distingue mayúsculas de minúsculas)
       // Ahora "moto" encuentra "MOTO KENTON", "Moto", "mOtO", etc.
       // Funciona para TODOS los usuarios (supremo, admin, colaborador).
-      where.OR = [
+      const orList: Record<string, unknown>[] = [
         { name: { contains: search, mode: "insensitive" } },
         { sku: { contains: search, mode: "insensitive" } },
         { brand: { contains: search, mode: "insensitive" } },
@@ -78,10 +80,26 @@ export async function GET(req: NextRequest) {
         { modelo: { contains: search, mode: "insensitive" } },
         { referencia: { contains: search, mode: "insensitive" } },
       ];
+      // Task 97: la CAPACIDAD vive en tabla aparte (ProductCapacidad, mismo
+      // patrón que #HASHTAG), así que su búsqueda se resuelve por ids y se
+      // suma al OR. Si la tabla aún no existe, idsPorCapacidad devuelve []
+      // y la búsqueda sigue funcionando igual por los demás campos.
+      const idsCap = await idsPorCapacidad(search.trim(), null);
+      if (idsCap.length > 0) {
+        orList.push({ id: { in: idsCap } });
+      }
+      where.OR = orList;
     }
 
     // Aplicar filtros por columna: where[col] = { in: values }
+    // Task 97: CAPACIDAD no es columna de Product — su filtro se traduce a
+    // ids desde la tabla aparte (idéntico criterio que la búsqueda de arriba).
     for (const [col, values] of Object.entries(columnFilters)) {
+      if (col === "capacidad") {
+        const idsCap = await idsPorCapacidad(null, values);
+        where.id = { in: idsCap.length > 0 ? idsCap : ["__sin_coincidencia__"] };
+        continue;
+      }
       where[col] = { in: values };
     }
 
@@ -175,6 +193,15 @@ export async function GET(req: NextRequest) {
     // tabla del Panel ADM y las búsquedas de los paneles del vendedor.
     const hashtagsMap = await leerHashtags(products.map((p) => p.id));
 
+    // ─── CAPACIDAD por producto (Task 97, columna nueva de la Base) ───
+    // Tabla aparte AUTO-GESTIONADA (ver src/lib/producto-capacidad.ts):
+    // si aún no existe se crea sola y NUNCA rompe esta ruta (devuelve mapa
+    // vacío y los productos salgan sin capacidad, igual que antes). Sale
+    // fusionada como campo "capacidad" de cada producto, igual que el
+    // hashtag — la tabla del Panel ADM la muestra entre MODELO y
+    // REF.FABRICA, en el orden que pidió el dueño.
+    const capacidadesMap = await leerCapacidades(products.map((p) => p.id));
+
     // ─── VENCIDOS FUERA DE LA VISTA DEL VENDEDOR (Task 95, pedido del dueño) ───
     // El valor del # se paga como PREMIO al vendedor y tiene fecha de validez.
     // Cuando la fecha ya pasó, el # desaparece SOLO para la gente de ventas:
@@ -210,6 +237,7 @@ export async function GET(req: NextRequest) {
         ...p,
         costosEditados: editadosMap.get(p.id) ?? [],
         hashtag: hashtagsSalida.get(p.id) ?? null,
+        capacidad: capacidadesMap.get(p.id) ?? null,
       })),
       total,
       page,
@@ -355,7 +383,30 @@ export async function POST(req: NextRequest) {
     data.price = data.priceContado ?? 0;
     data.cost = data.costProd ?? 0;
 
+    // Task 97: % MAYORISTA automático al CREAR el producto. Si el admin
+    // carga MARGEN MAYORISTA (margenTecnico) sin escribir VALOR MAYORISTA,
+    // el valor nace solo con la fórmula de la planilla:
+    //   AIRES → COSTO GS · DEMÁS → COSTO PROD. · VALOR = CostoBase * (1 + %)
+    // Si trae valorTecnico explícito, se RESPETA (regla de la casa).
+    if (body.valorTecnico === undefined) {
+      const valorAuto = calcularValorMayorista(data, data.margenTecnico);
+      if (valorAuto !== null) data.valorTecnico = valorAuto;
+    }
+
     const product = await db.product.create({ data });
+
+    // Task 97: CAPACIDAD (columna nueva de la Base) — vive en tabla aparte
+    // (ProductCapacidad, mismo patrón que #HASHTAG). Si el body la trae, se
+    // guarda; si falla, la creación del producto NO se rompe por esto.
+    if (body.capacidad !== undefined) {
+      try {
+        await guardarCapacidad(product.id, body.capacidad === null || body.capacidad === "" ? null : String(body.capacidad));
+      } catch {
+        // sin capacidad: el producto quedó creado igual (mismo espíritu del
+        // resto de las tablas aparte — jamás frenan la operación principal)
+      }
+    }
+
     return NextResponse.json({ product });
   } catch (error) {
     console.error("Error creando producto:", error);

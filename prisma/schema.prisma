@@ -257,6 +257,26 @@ model ProductHashtag {
 }
 
 // ============================================================
+// CAPACIDAD POR PRODUCTO (Task 97, pedido del dueño)
+// Columna NUEVA "CAPACIDAD" de la Base (texto libre: "12.000 BTU",
+// "650M3H", "90CM"...). El dato no existía ni en la planilla ni en la
+// base. MISMO PATRÓN que ProductHashtag: tabla APARTE para no tocar el
+// modelo Product (lección de la casa: columnas nuevas en Product
+// rompían la app cuando el db push no se había ejecutado). Se muestra
+// en la tabla entre MODELO y REF.FABRICA, es editable, se puede filtrar
+// y buscar. Si la tabla falta, se crea SOLA en el primer uso (SQL
+// idempotente en src/lib/producto-capacidad.ts) o al correr
+// `npx prisma db push`. Sin relación Prisma a propósito, por el mismo
+// motivo que CostoEditado.
+// ============================================================
+model ProductCapacidad {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  valor     String?
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
 // ETIQUETAS DE COLOR CREADAS POR EL SUPREMO (Task 84)
 // Etiquetas ADICIONALES a las 4 fijas de siempre (verde, azul,
 // dorado, rojo). El supremo_admin las crea con el botón CREAR
