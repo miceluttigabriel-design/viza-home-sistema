@@ -335,7 +335,7 @@ export async function POST(req: NextRequest) {
     doc.setTextColor(255, 255, 255);
     doc.setFillColor(...BLUE);
     doc.roundedRect(margin, y, contentW, 28, 4, 4, "F");
-    doc.text("CRONOGRAMA DE PAGOS ESCALONADOS", margin + 14, y + 18);
+    doc.text("CRONOGRAMA DE PAGOS", margin + 14, y + 18);
     y += 36;
 
     // Tabla de cronograma
