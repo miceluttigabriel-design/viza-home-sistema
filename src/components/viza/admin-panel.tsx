@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   LogOut,
   X,
+  LayoutGrid,
   Check,
   Trash2,
   ChevronLeft,
@@ -155,6 +156,10 @@ interface AdminPanelProps {
   onGoSales: () => void;
   onGoGestion?: () => void;
   isSupremo?: boolean;
+  // Task 91 (mudanza visual): SOLO llega al supremo_admin desde page.tsx →
+  // habilita el botón ORQUESTADOR (ir a los 4 cuadros). Si no llega, el botón
+  // no se renderiza (admin/consulta no lo ven).
+  onGoOrquestador?: () => void;
   // Task 78 (pedido del dueño): MODO SOLO LECTURA para viza.compras@
   // (ENC. COMPRAS). Ve TODA la base con buscador, filtros, orden y
   // paginación, pero NO puede editar ninguna celda ni borrar/exportar/
@@ -392,7 +397,7 @@ const frozenWidthByKey: Record<string, number> = Object.fromEntries(
   FROZEN_COLUMNS.map((c) => [c.key, c.width])
 );
 
-export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectura }: AdminPanelProps) {
+export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrquestador, modoLectura }: AdminPanelProps) {
   // Modo SOLO LECTURA (Task 78): el usuario de COMPRAS ve la base completa
   // pero no edita nada. Default false = admins de siempre, sin cambios.
   const esLectura = modoLectura === true;
@@ -1348,6 +1353,21 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, modoLectur
             >
               <ShoppingCart className="h-4 w-4" />
             </button>
+
+            {/* 2. Task 91 (mudanza visual): ORQUESTADOR — solo supremo (la prop
+                solo llega al supremo desde page.tsx). Vuelve a la pantalla de
+                los 4 cuadros: La Base · Stock General · Cotizador · Distribución. */}
+            {onGoOrquestador && (
+              <button
+                onClick={onGoOrquestador}
+                className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
+                style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+                title="Ir al Orquestador (los 4 cuadros del sistema)"
+                aria-label="Ir al Orquestador"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+            )}
 
             {/* 2.5 CRM (ranking de presupuestos por usuario, general y por sucursal).
                 Task 82 (pedido del dueño): en MODO SOLO LECTURA TAMBIÉN se

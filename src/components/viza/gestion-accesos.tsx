@@ -12,6 +12,7 @@ import {
   Power,
   RefreshCw,
   Download,
+  LayoutGrid,
   AlertCircle,
   Loader2,
   Copy,
@@ -61,6 +62,9 @@ interface GestionAccesosProps {
   user: AppUser;
   onGoSales: () => void;
   onGoAdmin: () => void;
+  // Task 91 (mudanza visual): SOLO llega al supremo (gestión es solo suya).
+  // Botón para volver al Orquestador (los 4 cuadros).
+  onGoOrquestador?: () => void;
 }
 
 function formatDatePY(ts: string | null): string {
@@ -263,7 +267,7 @@ function sectorDe(u: Usuario): string {
   return MAPA_SECTOR_EXCEL[u.email.trim().toLowerCase()] || SECTOR_GENERAL;
 }
 
-export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosProps) {
+export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: GestionAccesosProps) {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -767,6 +771,18 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin }: GestionAccesosPro
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Task 91 (mudanza visual): ORQUESTADOR — vuelve a los 4 cuadros. */}
+            {onGoOrquestador && (
+              <button
+                onClick={onGoOrquestador}
+                className="h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm hover:brightness-110"
+                style={{ backgroundColor: "#FFFFFF", color: "#0d3d5e" }}
+                title="Volver al Orquestador (los 4 cuadros del sistema)"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                ORQUESTADOR
+              </button>
+            )}
             {/* BASE (antes VOLVER A ADMIN): compacto, dorado, sin icono. */}
             <button
               onClick={onGoAdmin}

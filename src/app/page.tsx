@@ -6,19 +6,25 @@ import { LoginForm } from "@/components/viza/login-form";
 import { SalesPanel } from "@/components/viza/sales-panel";
 import { AdminPanel } from "@/components/viza/admin-panel";
 import { GestionAccesos } from "@/components/viza/gestion-accesos";
+// Task 91: Orquestador (solo supremo) + Stock General (cuadro azul nuevo)
+import { Orquestador } from "@/components/viza/orquestador";
+import { StockGeneral } from "@/components/viza/stock-general";
 import { Loader2 } from "lucide-react";
 import { setCurrentUserId } from "@/lib/user-scoped-storage";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 export default function Home() {
   const { data: session, status } = useSession();
-  // Vista interna: "sales" | "admin" | "gestion" | "base"
-  // - admin/supremo_admin: pueden alternar entre las 3 (supremo tiene "gestion" extra)
-  // - "base" (Task 78/79): viza.compras@ (ENC. COMPRAS) — la vista de la
-  //   BASE completa en SOLO LECTURA desde su panel de ventas (por EMAIL,
-  //   independiente del rol que tenga en la base).
-  // Regla de oro: el menú depende del ROL del usuario, no de la vista actual.
-  const [adminView, setAdminView] = useState<"sales" | "admin" | "gestion" | "base">("admin");
+  // Vista interna: "orquestador" | "sales" | "admin" | "gestion" | "base" | "stock"
+  // Task 91 (mudanza visual, pedido del dueño): null = todavía no navegó a
+  // ningún lado → la vista INICIAL depende del ROL:
+  //   · supremo_admin → ORQUESTADOR (los 4 cuadros del diagrama, solo él)
+  //   · admin → LA BASE directo (con opción de ver el panel, como siempre)
+  //   · colaborador/consulta → PANEL DE VENTAS directo (sin cambios)
+  // Regla de oro intacta: el menú depende del ROL del usuario, no de la vista.
+  const [adminView, setAdminView] = useState<
+    "orquestador" | "sales" | "admin" | "gestion" | "base" | "stock" | null
+  >(null);
 
   // Setear el userId actual en localStorage para que los stores (cart, cotizacion,
   // plan-safra, cheque) usen un storage AISLADO POR USUARIO.
@@ -52,6 +58,12 @@ export default function Home() {
     role,
   };
 
+  // Vista efectiva (Task 91): si todavía no navegó (null), la inicial es
+  // por rol → supremo cae en el ORQUESTADOR; todos los demás, donde ya
+  // caían antes (admin → base, colaborador → panel). Cero cambios para
+  // los que no son supremo.
+  const view = adminView ?? (role === "supremo_admin" ? "orquestador" : "admin");
+
   // ═══ SOLO LECTURA TOTAL (Task 79 + Task 82, pedido del dueño) ═══
   // Usuarios de CONSULTA (lista única en src/lib/usuarios-consulta.ts):
   //   · viza.compras@viza.com.py (ENC. COMPRAS, Adriano) — Task 79
@@ -66,7 +78,7 @@ export default function Home() {
   // (onGoBase SOLO se pasa a estos emails; ningún otro usuario lo recibe).
   const esConsultaBase = esEmailSoloLectura(user.email);
   if (esConsultaBase) {
-    if (adminView === "base") {
+    if (view === "base") {
       return (
         <AdminPanel user={user} onGoSales={() => setAdminView("sales")} modoLectura />
       );
@@ -85,35 +97,58 @@ export default function Home() {
     return <SalesPanel user={user} />;
   }
 
-  // Admin "común" → puede cambiar entre Sales y Admin (sin Gestión de Accesos)
+  // Admin "común" → entra DIRECTO a la BASE (Task 91: igual que siempre)
+  // y puede cambiar a Ventas (sin Gestión de Accesos). NO ve el orquestador.
   if (role === "admin") {
-    if (adminView === "sales") {
+    if (view === "sales") {
       return <SalesPanel user={user} onGoAdmin={() => setAdminView("admin")} />;
     }
     return <AdminPanel user={user} onGoSales={() => setAdminView("sales")} />;
   }
 
-  // SUPREMO_ADMIN → Acceso Total: Sales + Admin + Gestión de Accesos
-  // Los botones de navegación SIEMPRE deben estar visibles para el supremo,
-  // sin importar en qué pantalla esté (regla de oro: el menú depende del ROL,
-  // no de la vista actual).
+  // SUPREMO_ADMIN → Acceso Total: Orquestador + Base + Stock + Ventas + Gestión
+  // Task 91: el supremo es el ÚNICO que ve los cuadros del orquestador.
+  // Los botones de navegación SIEMPRE visibles (regla de oro del menú por rol).
   if (role === "supremo_admin") {
-    if (adminView === "sales") {
+    if (view === "orquestador") {
+      return (
+        <Orquestador
+          user={user}
+          onGoBase={() => setAdminView("admin")}
+          onGoStock={() => setAdminView("stock")}
+          onGoSales={() => setAdminView("sales")}
+          onGoGestion={() => setAdminView("gestion")}
+        />
+      );
+    }
+    if (view === "stock") {
+      return (
+        <StockGeneral
+          user={user}
+          onGoOrquestador={() => setAdminView("orquestador")}
+          onGoBase={() => setAdminView("admin")}
+          onGoSales={() => setAdminView("sales")}
+        />
+      );
+    }
+    if (view === "sales") {
       return (
         <SalesPanel
           user={user}
           onGoAdmin={() => setAdminView("admin")}
           onGoGestion={() => setAdminView("gestion")}
+          onGoOrquestador={() => setAdminView("orquestador")}
           isSupremo
         />
       );
     }
-    if (adminView === "gestion") {
+    if (view === "gestion") {
       return (
         <GestionAccesos
           user={user}
           onGoSales={() => setAdminView("sales")}
           onGoAdmin={() => setAdminView("admin")}
+          onGoOrquestador={() => setAdminView("orquestador")}
         />
       );
     }
@@ -122,6 +157,7 @@ export default function Home() {
         user={user}
         onGoSales={() => setAdminView("sales")}
         onGoGestion={() => setAdminView("gestion")}
+        onGoOrquestador={() => setAdminView("orquestador")}
         isSupremo
       />
     );

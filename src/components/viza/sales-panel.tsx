@@ -20,6 +20,7 @@ import {
   Gift,
   AlertTriangle,
   KeyRound,
+  LayoutGrid,
   BarChart3,
   Tag,
 } from "lucide-react";
@@ -250,6 +251,10 @@ interface SalesPanelProps {
   // TODA la base de productos con filtros, pero SOLO LECTURA (ninguna celda
   // editable).
   onGoBase?: () => void;
+  // Task 91 (mudanza visual): SOLO llega al supremo_admin desde page.tsx.
+  // Habilita el botón ORQUESTADOR para volver a la pantalla de los 4 cuadros.
+  // Si no llega la prop, el botón no se renderiza (admin/consulta no lo ven).
+  onGoOrquestador?: () => void;
 }
 
 // ─── CRM DE MI SUCURSAL (panel de ventas, solo encargados) ───
@@ -295,7 +300,7 @@ const medalStyleSuc = (pos: number): { bg: string; fg: string } | null =>
     ? { bg: "#CD7F32", fg: "#fff7ed" }
     : null;
 
-export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }: SalesPanelProps) {
+export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, onGoOrquestador }: SalesPanelProps) {
   // El rol define qué botones de navegación se muestran, NO la vista actual.
   // REGLA DE ORO: el menú depende del ROL del usuario, no de la pantalla.
   // El supremo admin es supremo admin en TODAS las pantallas (admin, ventas, gestión).
@@ -1149,6 +1154,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase }
                 aria-label="Gestión de Accesos y Contraseñas"
               >
                 GDA
+              </button>
+            )}
+            {/* Task 91 (mudanza visual): ORQUESTADOR — solo supremo (la prop
+                solo llega al supremo desde page.tsx). Vuelve a la pantalla de
+                los 4 cuadros: La Base · Stock General · Cotizador · Distribución. */}
+            {onGoOrquestador && (
+              <button
+                onClick={onGoOrquestador}
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
+                style={{ backgroundColor: "#FFFFFF", color: AZUL_OSCURO }}
+                title="Volver al Orquestador (los 4 cuadros del sistema)"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">ORQUESTADOR</span>
               </button>
             )}
             {isAdmin && onGoAdmin && (
