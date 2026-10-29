@@ -1,17 +1,23 @@
 // POST /api/products/gasto-adm/apply
 //
-// APLICA el GASTOS ADM 1% (Task 96, pedido del dueño) a TODOS los productos
-// de la base, EXCEPTO los TRANSPORTERS de CHACOMER/KENTON (excepción del
-// dueño: quedan exactamente como están).
+// APLICA el 1% del dueño (Task 96/96b) a TODOS los productos de la base, en
+// UN MISMO botón, EXCEPTO los TRANSPORTERS de CHACOMER/KENTON (excepción del
+// dueño: quedan exactamente como están):
+//   · GASTOS ADM (columna O) = 1% en TODOS los no-transporters.
+//   · % ADD (columna M) = 1% SOLO donde está vacío (null o 0). Los que ya
+//     tienen un % ADD PROPIO (planilla VALOR ADD o carga a mano, ej.
+//     refuerzos SAFRA) NO se les pisa: se respeta su valor (regla de la
+//     casa: nunca borrar valores que el producto ya tiene). Se cuentan en
+//     conAddPropio y el preview los lista para que el dueño los vea.
 //
 // Cómo funciona (MISMO mecanismo que /api/config-cambio — Task 87 — y la
 // edición manual PUT /api/products/[id]):
-//   · Para cada producto: admPct = 0.01 (1%) y se recalcula TODA la cadena
-//     de costos con las MISMAS fórmulas del Excel (L → N → P = N + N×O con
-//     O = 1% → Costo Prod. → márgenes 1..30 → precios).
-//   · Los costos de ENTRADA (costBR/costUS/costGs), % DESC, % ADD, VALOR
-//     DESC., VALOR ADD y las bases de porcentajes NUNCA se modifican: solo
-//     admPct y las columnas derivadas.
+//   · Para cada producto: admPct = 0.01 y/o addPct = 0.01 (1%) y se
+//     recalcula TODA la cadena de costos con las MISMAS fórmulas del Excel
+//     (L → N = L+L×M → P = N+N×O → Costo Prod. → márgenes 1..30 → precios).
+//   · Los costos de ENTRADA (costBR/costUS/costGs), % DESC, VALOR DESC.,
+//     VALOR ADD y las bases de porcentajes NUNCA se modifican: solo % ADD
+//     (cuando está vacío), GASTOS ADM y las columnas derivadas.
 //   · IDEMPOTENTE: pone 1% (no suma 1%). Si algo se corta a la mitad
 //     (red/timeout), apretar de nuevo completa el trabajo y el resultado es
 //     exactamente el mismo — los que ya están en 1% se saltan (yaIgual).
@@ -26,7 +32,10 @@ import { authOptions } from "@/lib/auth";
 import { getTasasCambio, TasasCambio, TASAS_DEFAULT } from "@/lib/tasas-cambio";
 import {
   GASTO_ADM_DEFAULT,
+  PCT_ADD_DEFAULT,
   yaEsGastoAdmDefault,
+  yaEsAddPctDefault,
+  tieneAddPctPropio,
   esTransporterChacomerKenton,
 } from "@/lib/gasto-adm";
 
@@ -119,7 +128,7 @@ export async function POST(req: NextRequest) {
     }
     if ((session.user as any)?.role !== "supremo_admin") {
       return NextResponse.json(
-        { error: "Solo supremo_admin puede aplicar el GASTOS ADM 1%" },
+        { error: "Solo supremo_admin puede aplicar el 1% (% ADD + GASTOS ADM)" },
         { status: 403 }
       );
     }
@@ -151,6 +160,7 @@ export async function POST(req: NextRequest) {
     let actualizados = 0;
     let yaIgual = 0;
     let excluidos = 0;
+    let conAddPropio = 0; // con % ADD propio que SE RESPETA (no se pisa)
     const errores: string[] = [];
 
     // Construir updates primero (rápido), para contar exacto y ejecutar en
@@ -161,20 +171,33 @@ export async function POST(req: NextRequest) {
         excluidos++; // TRANSPORTER CHACOMER/KENTON: NO se toca NADA
         continue;
       }
-      if (yaEsGastoAdmDefault(producto.admPct)) {
-        yaIgual++; // ya está en 1%: nada que hacer (idempotencia)
+      const necesitaAdm = !yaEsGastoAdmDefault(producto.admPct);
+      const addPropio = tieneAddPctPropio(producto.addPct);
+      // % ADD: solo se llena si está VACÍO (null/0). Un valor propio
+      // (ej. refuerzo SAFRA 25%) NUNCA se pisa con el 1%.
+      const necesitaAdd = !addPropio && !yaEsAddPctDefault(producto.addPct);
+      if (!necesitaAdm && !necesitaAdd) {
+        // Nada que escribir (idempotencia)
+        yaIgual++;
+        if (addPropio) conAddPropio++;
         continue;
       }
       const merged: any = { ...producto };
-      merged.admPct = GASTO_ADM_DEFAULT; // 1%
+      const data: Record<string, number | null> = {};
+      if (necesitaAdm) {
+        merged.admPct = GASTO_ADM_DEFAULT; // 1%
+        data.admPct = GASTO_ADM_DEFAULT;
+      }
+      if (necesitaAdd) {
+        merged.addPct = PCT_ADD_DEFAULT; // 1%
+        data.addPct = PCT_ADD_DEFAULT;
+      }
       recalculate(merged, tasas);
-      const data: Record<string, number | null> = {
-        admPct: GASTO_ADM_DEFAULT,
-      };
       for (const k of CAMPOS_RECALCULADOS) {
         data[k] = merged[k] ?? null;
       }
       updates.push({ id: producto.id, data });
+      if (addPropio) conAddPropio++; // se actualizó pero SU % ADD quedó intacto
     }
 
     // Lotes de 150 updates por transacción: rápido y cada lote queda
@@ -201,6 +224,7 @@ export async function POST(req: NextRequest) {
       actualizados,
       yaIgual,
       excluidos,
+      conAddPropio,
       fallidos: updates.length - actualizados, // updates construidos menos los exitosos
       errores: errores.slice(0, 20),
       duracionMs: Date.now() - t0,
@@ -208,7 +232,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Error en gasto-adm/apply:", error);
     return NextResponse.json(
-      { error: "Error al aplicar el GASTOS ADM 1% (intenta de nuevo: el proceso continúa donde quedó)" },
+      { error: "Error al aplicar el 1% (intenta de nuevo: el proceso continúa donde quedó)" },
       { status: 500 }
     );
   }

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { leerProductosProtegidos } from "@/lib/costo-editado";
+import { naceConMargenDefault } from "@/lib/gasto-adm";
 import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 import { Prisma } from "@prisma/client";
 import {
@@ -274,6 +275,10 @@ function buildNuevoProduct(
       p.safra = formatSafra(pickSafra.avg);
     }
   }
+  // Task 96/96b (pedido del dueño): los productos NUEVOS que no sean
+  // TRANSPORTERS de CHACOMER/KENTON YA NACEN con % ADD = 1% y GASTOS ADM =
+  // 1% en la cadena de costos (la stock-planilla no trae esas columnas).
+  naceConMargenDefault(p);
   // Disparar la cadena de cálculo completa (costGs → costProd → márgenes → precios)
   recalculateFull(p, tasas ?? TASAS_DEFAULT);
   return p;
