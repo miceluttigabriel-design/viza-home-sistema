@@ -34,6 +34,7 @@ import {
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import { formatPYG } from "@/lib/format";
+import { hashtagCeldaRoja, hoyParaguay } from "@/lib/hashtag-formato";
 import type { EtiquetaCreada } from "@/lib/etiquetas";
 import { puedeEditarTasaCambio } from "@/lib/permisos-cambio";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
@@ -4445,8 +4446,22 @@ const Cell = memo(function Cell({
   // hacer return temprano antes de llamarlos.)
   if (col.key === "hashtag") {
     const h = hashtag ?? { valor: null as number | null, fecha: null as string | null };
+    // Task 95 (pedido del dueño): la celda del # va en ROJO cuando la fecha
+    // de validez vence HOY o ya venció. Es un aviso DENTRO DE LA BASE para
+    // que el admin la renueve o la limpie; mientras esté vencida el # ya no
+    // se le muestra a los vendedores (el valor del # es su premio).
+    const celdaRoja = hashtagCeldaRoja(h.fecha);
     return (
-      <td className="px-1 py-0 border-r border-stone-50 bg-white">
+      <td
+        title={
+          celdaRoja
+            ? h.fecha
+              ? `Este # ${h.fecha === hoyParaguay() ? "VENCE HOY" : "VENCIO"} (${h.fecha.split("-").reverse().join("/")}): ya no sale para los vendedores. Renueve la fecha o limpie el valor.`
+              : "Este # esta vencido: ya no sale para los vendedores."
+            : undefined
+        }
+        className={`px-1 py-0 border-r border-stone-50 ${celdaRoja ? "bg-red-200" : "bg-white"}`}
+      >
         <div className="flex items-center gap-1">
           <input
             type="number"
@@ -4462,7 +4477,9 @@ const Cell = memo(function Cell({
               })
             }
             className={`w-[78px] h-6 px-1 rounded border outline-none text-xs tabular-nums text-right ${
-              modoLectura
+              celdaRoja
+                ? "border-transparent bg-transparent text-red-800 font-semibold"
+                : modoLectura
                 ? "border-transparent bg-white text-stone-700 cursor-default"
                 : "border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100"
             }`}
@@ -4479,7 +4496,9 @@ const Cell = memo(function Cell({
               })
             }
             className={`w-[120px] h-6 px-1 rounded border outline-none text-xs tabular-nums ${
-              modoLectura
+              celdaRoja
+                ? "border-transparent bg-transparent text-red-800 font-semibold"
+                : modoLectura
                 ? "border-transparent bg-white text-stone-700 cursor-default"
                 : "border-transparent hover:border-stone-200 focus:border-rose-400 focus:bg-amber-50 focus:ring-1 focus:ring-rose-100"
             }`}

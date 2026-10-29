@@ -55,7 +55,19 @@ export async function GET() {
     }
 
     // Usuarios del sistema (solo columnas seguras: nunca la contraseña).
+    // Task 95 (pedido del dueño): en el CRM NO aparecen:
+    //   · usuarios INACTIVOS (active = false), ni
+    //   · usuarios con rol admin / supremo_admin — los ADM y SUPREMO no son
+    //     vendedores: no van al ranking en NINGUNA sucursal.
+    // El recorte es acá, en el servidor: así desaparecen de la vista GENERAL,
+    // de las pills por sucursal Y del CRM de los encargados (que filtra este
+    // mismo ranking por sucursal). La gestión de usuarios sigue completa en
+    // el panel ADM (gestion-accesos), que no usa este endpoint.
     const users = await db.user.findMany({
+      where: {
+        active: true,
+        role: { notIn: ["admin", "supremo_admin"] },
+      },
       select: { id: true, name: true, email: true, role: true, active: true },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     });

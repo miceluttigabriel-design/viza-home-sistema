@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { leerCostosEditados } from "@/lib/costo-editado";
 import { leerHashtags } from "@/lib/producto-hashtag";
+import { hashtagVisibleParaVendedor, hoyParaguay } from "@/lib/hashtag-formato";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { getTasasCambio } from "@/lib/tasas-cambio";
 
@@ -173,11 +174,41 @@ export async function GET(req: NextRequest) {
     // tabla del Panel ADM y las búsquedas de los paneles del vendedor.
     const hashtagsMap = await leerHashtags(products.map((p) => p.id));
 
+    // ─── VENCIDOS FUERA DE LA VISTA DEL VENDEDOR (Task 95, pedido del dueño) ───
+    // El valor del # se paga como PREMIO al vendedor y tiene fecha de validez.
+    // Cuando la fecha ya pasó, el # desaparece SOLO para la gente de ventas:
+    // no pueden verlo ni agregarlo a un presupuesto nuevo (el sistema lo saca
+    // automáticamente, sin que nadie tenga que borrar nada).
+    //   · admin / supremo_admin → ven TODO (es su base de trabajo: la celda
+    //     les queda pintada roja en el panel para que la renueven o limpien).
+    //   · usuarios de consulta (solo lectura) → ven TODO igual que el admin
+    //     (no cargan premios, es la misma base en modo lectura).
+    //   · cualquier otro (vendedores) → SOLO hashtags no vencidos: se ven
+    //     hasta el ÚLTIMO día de la fecha, al día siguiente desaparecen.
+    // No se borra NADA de la tabla: el admin sigue viendo el valor y la fecha
+    // para renovarlo. Los presupuestos ya emitidos y los carritos en curso no
+    // se tocan (la evidencia del premio queda igual que siempre).
+    const rolSesion = (session.user as any)?.role || "";
+    const emailSesion = ((session.user as any)?.email || "").trim().toLowerCase();
+    const veBaseCompleta =
+      rolSesion === "admin" ||
+      rolSesion === "supremo_admin" ||
+      esEmailSoloLectura(emailSesion);
+    const hashtagsSalida = (() => {
+      if (veBaseCompleta) return hashtagsMap;
+      const hoy = hoyParaguay();
+      const filtrado = new Map<string, { valor: number | null; fecha: string | null }>();
+      for (const [pid, h] of hashtagsMap) {
+        if (hashtagVisibleParaVendedor(h.fecha, hoy)) filtrado.set(pid, h);
+      }
+      return filtrado;
+    })();
+
     return NextResponse.json({
       products: products.map((p) => ({
         ...p,
         costosEditados: editadosMap.get(p.id) ?? [],
-        hashtag: hashtagsMap.get(p.id) ?? null,
+        hashtag: hashtagsSalida.get(p.id) ?? null,
       })),
       total,
       page,
