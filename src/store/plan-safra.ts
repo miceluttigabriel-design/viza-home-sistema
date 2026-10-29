@@ -300,6 +300,8 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
   // === ITERACIÓN MES A MES (1 a 18) - PASADA 1 ===
   // v2.2: Mostrar cada refuerzo SEPARADO (incluso en el mismo mes)
   // v2.2: El último refuerzo se etiqueta como "PAGO FINAL"
+  // (Task 94b: además, al final del cálculo una pasada de NORMALIZACIÓN
+  // garantiza que la última fila pagada sea PAGO FINAL — ver más abajo.)
   for (let mes = 1; mes <= 18; mes++) {
     if (saldoActual <= 0) break;
     const saldoInicialMes = saldoActual;
@@ -419,6 +421,33 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
         });
       }
     }
+  }
+
+  // === NORMALIZACIÓN DEL RÓTULO "PAGO FINAL" (Task 94b) ===
+  // Pedido del dueño: "el último tiene que salir como PAGO FINAL".
+  // Se decide sobre las filas REALES ya construidas: la ÚLTIMA fila con
+  // pago > 0 que no sea la ENTRADA SIEMPRE es "PAGO FINAL", y ninguna
+  // otra fila puede llevar ese rótulo. Esto tapa los dos agujeros del
+  // rótulo viejo (comparaba contra maxMes de TODOS los refuerzos):
+  //   a) un refuerzo "fantasma" con valor 0 (el ajuste de la pasada 2
+  //      puede dejarlo en 0) robaba el rótulo sin generar fila;
+  //   b) el loop se corta cuando el saldo llega a 0, así que un refuerzo
+  //      de mes alto puede quedar FUERA del cronograma y el rótulo se
+  //      perdía. Con la normalización, el rótulo depende de lo que SE
+  //      MUESTRA, no de supuestos. CERO cambios de valores ni fechas.
+  if (cronograma.length > 0) {
+    let idxUltimoPago = -1;
+    for (let i = cronograma.length - 1; i >= 0; i--) {
+      if (cronograma[i].pago > 0 && cronograma[i].mes !== 0) { idxUltimoPago = i; break; }
+    }
+    cronograma.forEach((f, i) => {
+      if (f.mes === 0) return; // ENTRADA nunca se toca
+      if (i === idxUltimoPago) {
+        if (f.concepto !== "PAGO FINAL") f.concepto = "PAGO FINAL";
+      } else if (f.concepto === "PAGO FINAL") {
+        f.concepto = "Refuerzo";
+      }
+    });
   }
 
   // === VALIDACIONES ===
