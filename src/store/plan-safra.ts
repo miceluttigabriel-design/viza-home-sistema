@@ -57,7 +57,7 @@ export interface PagoManual {
   id: string;        // ID único
   mes: number;       // 0 = entrada, 1-18 = refuerzos (derivado de fecha)
   valor: number;     // monto en Gs (AUTO-CALCULADO en v2.0)
-  concepto: string;  // descripción (default "Refuerzo Mes N")
+  concepto: string;  // descripción (default "Refuerzo" — sin número de mes, Task 94)
   fecha?: string;    // ISO date (YYYY-MM-DD) - input del usuario (v2.0)
 }
 
@@ -315,7 +315,10 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
         cronograma.push({
           mes,
           fecha: r.fecha || addMonths(fechaEmision, mes),
-          concepto: esUltimo ? "PAGO FINAL" : `Refuerzo Mes ${mes}`,
+          // Task 94 (pedido del dueño): el rótulo es solo "Refuerzo", SIN
+          // número de mes. El número ya se ve en el círculo del mes (c.mes)
+          // y en la fecha, así el rótulo nunca puede quedar desincronizado.
+          concepto: esUltimo ? "PAGO FINAL" : "Refuerzo",
           saldoInicial: Math.round(saldoInicialMes),
           pago: r.valor,
           interes: Math.round(interesMes),
@@ -399,7 +402,8 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
           cronograma.push({
             mes,
             fecha: r.fecha || addMonths(fechaEmision, mes),
-            concepto: esUltimo ? "PAGO FINAL" : `Refuerzo Mes ${mes}`,
+            // Task 94: igual que en PASADA 1 — solo "Refuerzo", sin número.
+            concepto: esUltimo ? "PAGO FINAL" : "Refuerzo",
             saldoInicial: Math.round(saldoInicialMes),
             pago: r.valor,
             interes: Math.round(interesMes),
@@ -564,7 +568,9 @@ export const usePlanSafraStore = create<PlanSafraState>()(
           return {
             refuerzos: [
               ...state.refuerzos,
-              { id: genId(), mes: nuevoMes, valor: 0, concepto: `Refuerzo Mes ${nuevoMes}`, fecha: nuevaFecha },
+              // Task 94: rótulo fijo "Refuerzo" (el mes se ve en la fecha y
+              // en el círculo del cronograma — no se repite en el texto).
+              { id: genId(), mes: nuevoMes, valor: 0, concepto: "Refuerzo", fecha: nuevaFecha },
             ],
           };
         }),
@@ -573,13 +579,26 @@ export const usePlanSafraStore = create<PlanSafraState>()(
           refuerzos: state.refuerzos.filter((r) => r.id !== id),
         })),
       setRefuerzoMes: (id, mes) =>
-        set((state) => ({
-          refuerzos: state.refuerzos.map((r) =>
-            r.id === id
-              ? { ...r, mes: Math.max(1, Math.min(18, mes)), concepto: `Refuerzo Mes ${Math.max(1, Math.min(18, mes))}` }
-              : r
-          ),
-        })),
+        set((state) => {
+          // FIX (Task 94): al cambiar el mes, la fecha se recalcula TAMBIÉN
+          // (emisión + N meses) para que el mes interno y la fecha NUNCA
+          // queden desincronizados. El rótulo es fijo "Refuerzo" (sin
+          // número, pedido del dueño) así jamás puede contradecir la fecha.
+          const mesSeguro = Math.max(1, Math.min(18, mes));
+          const fechaBase = state.fechaEmision || new Date().toISOString().slice(0, 10);
+          return {
+            refuerzos: state.refuerzos.map((r) =>
+              r.id === id
+                ? {
+                    ...r,
+                    mes: mesSeguro,
+                    concepto: "Refuerzo",
+                    fecha: addMonths(fechaBase, mesSeguro),
+                  }
+                : r
+            ),
+          };
+        }),
       setRefuerzoValor: (id, valor) =>
         set((state) => ({
           refuerzos: state.refuerzos.map((r) =>
@@ -587,18 +606,26 @@ export const usePlanSafraStore = create<PlanSafraState>()(
           ),
         })),
       // v2.0: setRefuerzoFecha - usuario ingresa fecha, sistema deriva mes
+      // FIX (Task 94 - reporte del dueño: "REFUERZO MES 4 pero fecha figura
+      // mes 3"): la regla vieja restaba 1 mes cuando el DÍA de la fecha del
+      // refuerzo era menor al día de la emisión (ej: emisión 29/10, pago el
+      // 25). Así un pago del 25/03/2027 quedaba como "MES 4", cuando en la
+      // cuadrícula del plan (cuota N = emisión + N meses) marzo es el MES 5.
+      // Ahora el mes se calcula IGUAL que el cronograma: diferencia de meses
+      // de calendario, sin ajuste por día. Y por pedido del dueño el rótulo
+      // es fijo "Refuerzo" SIN número de mes: el mes real se ve en la fecha
+      // y en el círculo del cronograma, y el texto nunca puede fallar.
       setRefuerzoFecha: (id, fecha) =>
         set((state) => {
           const fechaBase = state.fechaEmision || new Date().toISOString().slice(0, 10);
           const dBase = new Date(fechaBase + "T00:00:00");
           const dRefuerzo = new Date(fecha + "T00:00:00");
-          let mesCalculado = (dRefuerzo.getFullYear() - dBase.getFullYear()) * 12 + (dRefuerzo.getMonth() - dBase.getMonth());
-          if (dRefuerzo.getDate() < dBase.getDate()) { mesCalculado--; }
-          mesCalculado = Math.max(1, Math.min(18, mesCalculado));
+          const mesCalculado = (dRefuerzo.getFullYear() - dBase.getFullYear()) * 12 + (dRefuerzo.getMonth() - dBase.getMonth());
+          const mesSeguro = Math.max(1, Math.min(18, mesCalculado));
           return {
             refuerzos: state.refuerzos.map((r) =>
               r.id === id
-                ? { ...r, fecha, mes: mesCalculado, concepto: `Refuerzo Mes ${mesCalculado}` }
+                ? { ...r, fecha, mes: mesSeguro, concepto: "Refuerzo" }
                 : r
             ),
           };
