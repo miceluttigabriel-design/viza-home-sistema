@@ -683,6 +683,31 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   // Checkbox de doble confirmación (debe tildar "SI, BORRAR TODO" para habilitar)
   const [deleteAllConfirmCheck, setDeleteAllConfirmCheck] = useState(false);
 
+  // ─── GASTOS ADM 1% (Task 96, pedido del dueño) ───
+  // Pone el GASTOS ADM en 1% en TODOS los productos de la base (recalcula
+  // Costo Prod. y precios con las fórmulas de siempre), EXCEPTO los
+  // TRANSPORTERS de CHACOMER/KENTON. Mismo patrón del DELETE ALL:
+  // preview → confirmación con checkbox → apply. Solo supremo_admin.
+  const [gaOpen, setGaOpen] = useState(false);
+  const [gaLoading, setGaLoading] = useState(false);
+  const [gaApplying, setGaApplying] = useState(false);
+  const [gaPreview, setGaPreview] = useState<{
+    total: number;
+    aActualizar: number;
+    yaIgual: number;
+    excluidos: number;
+    excluidosLista: Array<{ sku: string; name: string }>;
+  } | null>(null);
+  const [gaResult, setGaResult] = useState<{
+    actualizados: number;
+    yaIgual: number;
+    excluidos: number;
+    fallidos: number;
+    errores?: string[];
+  } | null>(null);
+  // Checkbox de doble confirmación (entiende que los precios se recalculan)
+  const [gaConfirmCheck, setGaConfirmCheck] = useState(false);
+
   // ─── CRM: ranking de presupuestos emitidos por usuario (general y por sucursal) ───
   const [crmOpen, setCrmOpen] = useState(false);
   const [crmLoading, setCrmLoading] = useState(false);
@@ -796,6 +821,56 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   useEffect(() => {
     setPage(1);
   }, [search]);
+
+  // ─── GASTOS ADM 1%: abre el modal (preview) y aplica (Task 96) ───
+  // Va DESPUÉS de fetchProducts porque al aplicar recarga la lista.
+  const abrirGa = useCallback(async () => {
+    setGaOpen(true);
+    setGaLoading(true);
+    setGaPreview(null);
+    setGaResult(null);
+    setGaConfirmCheck(false);
+    try {
+      const res = await fetch("/api/products/gasto-adm/preview", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || data?.error) throw new Error(data?.error || `Error HTTP ${res.status}`);
+      setGaPreview(data);
+    } catch (error) {
+      toast.error(`GASTOS ADM 1%: ${(error as Error).message}`);
+      setGaOpen(false);
+    } finally {
+      setGaLoading(false);
+    }
+  }, []);
+
+  const aplicarGa = useCallback(async () => {
+    if (gaApplying) return;
+    setGaApplying(true);
+    const toastId = toast.loading("Aplicando GASTOS ADM 1% a la base... (puede tardar un poco)");
+    try {
+      const res = await fetch("/api/products/gasto-adm/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      const data = await res.json();
+      if (!res.ok || data?.error) throw new Error(data?.error || `Error HTTP ${res.status}`);
+      setGaResult(data);
+      toast.success(
+        `GASTOS ADM 1% aplicado: ${data.actualizados ?? 0} productos actualizados`,
+        { id: toastId, duration: 6000 }
+      );
+      // Recargar la lista para ver los nuevos valores al instante
+      await fetchProducts();
+    } catch (error) {
+      toast.error(
+        `GASTOS ADM 1%: ${(error as Error).message} — si la base es grande puede haberse cortado: apretar de nuevo completa el trabajo (no se duplica nada)`,
+        { id: toastId, duration: 10000 }
+      );
+    } finally {
+      setGaApplying(false);
+    }
+  }, [gaApplying, fetchProducts]);
 
   const handleChange = (productId: string, key: string, value: string) => {
     // Modo SOLO LECTURA (Task 78): ninguna celda se edita (defensa extra;
@@ -1750,6 +1825,21 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                       IMPORTAR VALOR + % ADD
                     </button>
                   </>
+                )}
+
+                {/* Botón GASTOS ADM 1% (Task 96, pedido del dueño) — solo supremo_admin.
+                    Pone 1% en TODOS los productos y recalcula; EXCEPTO los
+                    TRANSPORTERS de CHACOMER/KENTON (excepción del dueño). */}
+                {isSupremo && (
+                  <button
+                    onClick={abrirGa}
+                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    style={{ background: "linear-gradient(135deg, #155789 0%, #1d4ed8 100%)" }}
+                    title="Poner GASTOS ADM = 1% en TODOS los productos (recalcula Costo Prod. y precios). EXCEPTO los TRANSPORTERS de CHACOMER/KENTON."
+                  >
+                    <Percent className="h-3.5 w-3.5" />
+                    GASTOS ADM 1%
+                  </button>
                 )}
 
                 {/* Boton DELETE ALL (borrar TODOS los productos) — rojo, solo supremo_admin */}
@@ -3579,6 +3669,182 @@ tr.fila-etiquetada-${e.id}:hover td {
         </div>
       )}
 
+
+      {/* ════════════════════════════════════════════════════════════════
+          MODAL: GASTOS ADM 1% (Task 96, pedido del dueño)
+          - Pone GASTOS ADM = 1% en TODOS los productos (recalcula)
+          - EXCEPTO TRANSPORTERS de CHACOMER/KENTON (lista visible)
+          - Preview antes de aplicar + doble confirmación (checkbox)
+          - Idempotente: aplicarlo dos veces = mismo resultado
+          ════════════════════════════════════════════════════════════════ */}
+      {gaOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => {
+            if (!gaLoading && !gaApplying) setGaOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Encabezado */}
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-stone-200">
+              <Percent className="h-4 w-4" style={{ color: "#155789" }} />
+              <h3 className="font-bold text-stone-900 text-sm flex-1">
+                GASTOS ADM 1% — TODOS LOS PRODUCTOS
+              </h3>
+              <button
+                onClick={() => {
+                  if (!gaLoading && !gaApplying) setGaOpen(false);
+                }}
+                disabled={gaLoading || gaApplying}
+                className="h-7 w-7 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors disabled:opacity-50"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Cuerpo */}
+            <div className="px-5 py-4 overflow-y-auto flex-1 text-sm text-stone-700">
+              {gaLoading && (
+                <div className="flex items-center justify-center gap-2 py-10 text-stone-500">
+                  <div className="h-5 w-5 rounded-full border-2 border-stone-300 border-t-stone-600 animate-spin"></div>
+                  Calculando...
+                </div>
+              )}
+
+              {!gaLoading && gaResult && (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+                    <p className="font-bold text-emerald-800 flex items-center gap-1.5">
+                      <Check className="h-4 w-4" />
+                      LISTO: GASTOS ADM 1% aplicado
+                    </p>
+                    <ul className="mt-2 text-xs text-emerald-900 space-y-0.5">
+                      <li>· {gaResult.actualizados} productos quedaron con 1% (costos y precios recalculados)</li>
+                      <li>· {gaResult.yaIgual} ya estaban en 1% (no se tocaron)</li>
+                      <li>· {gaResult.excluidos} TRANSPORTERS CHACOMER/KENTON excluidos (quedaron como estaban)</li>
+                      {gaResult.fallidos > 0 && (
+                        <li className="font-semibold">· {gaResult.fallidos} NO se pudieron actualizar — apretar APLICAR de nuevo completa el trabajo</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {!gaLoading && !gaResult && gaPreview && (
+                <div className="space-y-3">
+                  <p className="text-stone-700">
+                    Se pone <b>GASTOS ADM = 1%</b> en todos los productos y se
+                    recalcula la cadena de costos (Costo Prod. y precios) con
+                    las fórmulas de siempre:
+                  </p>
+                  <div className="rounded-xl border border-stone-200 divide-y divide-stone-100">
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-stone-600">Productos que reciben el 1%</span>
+                      <span className="font-bold text-stone-900 tabular-nums">{gaPreview.aActualizar.toLocaleString("es-PY")}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-stone-600">Ya están en 1% (no se tocan)</span>
+                      <span className="font-bold text-stone-600 tabular-nums">{gaPreview.yaIgual.toLocaleString("es-PY")}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-stone-600">EXCLUIDOS: TRANSPORTERS CHACOMER/KENTON</span>
+                      <span className="font-bold text-red-600 tabular-nums">{gaPreview.excluidos.toLocaleString("es-PY")}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-stone-600">Total de productos en la base</span>
+                      <span className="font-bold text-stone-400 tabular-nums">{gaPreview.total.toLocaleString("es-PY")}</span>
+                    </div>
+                  </div>
+                  {gaPreview.excluidos > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-stone-500 mb-1">
+                        Excluidos (quedan EXACTAMENTE como están):
+                      </p>
+                      <div className="max-h-40 overflow-y-auto rounded-xl border border-red-200 bg-red-50/50 divide-y divide-red-100">
+                        {gaPreview.excluidosLista.map((x) => (
+                          <div key={x.sku} className="px-3 py-1.5 text-xs flex items-center gap-2">
+                            <span className="font-mono text-stone-500 shrink-0">{x.sku}</span>
+                            <span className="text-stone-700 line-clamp-1">{x.name}</span>
+                          </div>
+                        ))}
+                        {gaPreview.excluidos > gaPreview.excluidosLista.length && (
+                          <div className="px-3 py-1.5 text-xs text-stone-500 italic">
+                            …y {gaPreview.excluidos - gaPreview.excluidosLista.length} más
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+                    <b>Cuidado:</b> el 1% entra al costo → el Costo Prod. y los
+                    precios de TODA la base suben acorde. Los costos de entrada
+                    (R$/US$/Gs), % DESC, % ADD, VALOR DESC., VALOR ADD y las
+                    bases de porcentajes NO cambian. Es seguro repetirlo: pone
+                    1%, no suma (aplicarlo dos veces da el mismo resultado).
+                  </div>
+                  <label className="flex items-start gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={gaConfirmCheck}
+                      onChange={(e) => setGaConfirmCheck(e.target.checked)}
+                      disabled={gaApplying}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300"
+                    />
+                    <span className="text-xs font-semibold text-stone-700">
+                      ENTIENDO: los precios de la base se recalculan con el 1% de GASTOS ADM (menos los TRANSPORTERS excluidos)
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Pie con acciones */}
+            {!gaLoading && !gaResult && gaPreview && (
+              <div className="px-5 py-4 border-t border-stone-200 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setGaOpen(false)}
+                  disabled={gaApplying}
+                  className="h-9 px-4 rounded-lg text-stone-700 text-sm font-semibold hover:bg-stone-100 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={aplicarGa}
+                  disabled={gaApplying || !gaConfirmCheck || gaPreview.aActualizar === 0}
+                  className="h-9 px-4 rounded-lg text-white text-sm font-bold flex items-center gap-1.5 hover:brightness-110 transition-colors disabled:opacity-50"
+                  style={{ background: "linear-gradient(135deg, #155789 0%, #1d4ed8 100%)" }}
+                >
+                  {gaApplying ? (
+                    <>
+                      <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                      APLICANDO...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4" />
+                      SÍ, APLICAR 1% A TODOS
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+            {!gaLoading && gaResult && (
+              <div className="px-5 py-4 border-t border-stone-200 flex items-center justify-end">
+                <button
+                  onClick={() => setGaOpen(false)}
+                  className="h-9 px-4 rounded-lg text-white text-sm font-bold hover:brightness-110 transition-colors"
+                  style={{ background: "linear-gradient(135deg, #b45309 0%, #d97706 100%)" }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ════════════════════════════════════════════════════════════════
           MODAL: DELETE ALL (borrar TODOS los productos)

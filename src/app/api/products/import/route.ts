@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
+import { GASTO_ADM_DEFAULT, esTransporterChacomerKenton } from "@/lib/gasto-adm";
 import ExcelJS from "exceljs";
 import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 
@@ -222,6 +223,17 @@ export async function POST(req: NextRequest) {
           subcategory: toString(getCell(row, "SUB-GRUPO")) || null,
           // etiquetaColor: queda null por defecto (definido en schema)
         };
+        // Task 96 (pedido del dueño): producto NUEVO de la planilla SIN la
+        // columna GASTOS ADM → nace con 1% ("quiero que esto vaya hasta en
+        // los productos que vamos a cargar nuevos"). Si la planilla lo trae
+        // (aunque sea 0), se RESPETA la planilla. EXCEPCIÓN: los TRANSPORTERS
+        // de CHACOMER/KENTON nacen sin el 1% (quedan como siempre: null).
+        if (
+          (productData.admPct === null || productData.admPct === undefined) &&
+          !esTransporterChacomerKenton(productData)
+        ) {
+          productData.admPct = GASTO_ADM_DEFAULT;
+        }
         recalculate(productData, tasasImport);
         await db.product.create({ data: productData });
         results.nuevos++;

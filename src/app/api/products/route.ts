@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { leerCostosEditados } from "@/lib/costo-editado";
 import { leerHashtags } from "@/lib/producto-hashtag";
 import { hashtagVisibleParaVendedor, hoyParaguay } from "@/lib/hashtag-formato";
+import { GASTO_ADM_DEFAULT, esTransporterChacomerKenton } from "@/lib/gasto-adm";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { getTasasCambio } from "@/lib/tasas-cambio";
 
@@ -304,6 +305,17 @@ export async function POST(req: NextRequest) {
       valorTecnico: body.valorTecnico ? Number(body.valorTecnico) : null,
       margenTecnico: body.margenTecnico ? Number(body.margenTecnico) : null,
     };
+
+    // Task 96 (pedido del dueño): producto NUEVO SIN GASTOS ADM propio →
+    // nace con 1% ("quiero que esto vaya hasta en los productos que vamos
+    // a cargar nuevos"). Si el admin carga un valor explícito, se RESPETA.
+    // EXCEPCIÓN: los TRANSPORTERS de CHACOMER/KENTON nacen sin el 1%.
+    if (
+      (data.admPct === null || data.admPct === undefined) &&
+      !esTransporterChacomerKenton(data)
+    ) {
+      data.admPct = GASTO_ADM_DEFAULT;
+    }
 
     // Aplicar márgenes 1-30 si vienen
     for (let i = 1; i <= 30; i++) {
