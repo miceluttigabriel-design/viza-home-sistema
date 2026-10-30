@@ -12,7 +12,10 @@ import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../li
 // sucursal + teléfono de la planilla FUN.VIZA) en todos los presupuestos.
 // drawVendedor vive en la lib de diseño compartida (misma franja en los 4
 // PDFs) y los datos se resuelven server-side, sin pedir nada al cliente.
-import { drawVendedor } from "../../../../lib/pdf/vizaPdfDesign";
+// Task 103 (pedido del dueño): la franja del vendedor va ABAJO de todo,
+// encima de la barra de datos de Viza Home, y TODO el presupuesto entra
+// en UNA sola hoja (encabezado/footer compactos + filas más bajas).
+import { drawVendedor, yVendedorSobreFooter } from "../../../../lib/pdf/vizaPdfDesign";
 import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
 
 // Task 88 (pedido del dueño): el margen adicional del contado se muestra en
@@ -160,9 +163,10 @@ const LINE: RGB = [216, 222, 230];
 const DORADO_TXT: RGB = [138, 109, 47]; // #8a6d2f
 
 const VALIDEZ_DIAS = 10;
-const FOOTER_H = 64;
-const FOOTER_BOTTOM_GAP = 34; // distancia del borde inferior de la barra al fin de página
-const FOOTER_RESERVE = FOOTER_H + FOOTER_BOTTOM_GAP + 14;
+// Task 103 (una sola hoja): footer compacto (alto 64→56, aire abajo 34→30)
+// y espacio reservado para la franja del vendedor (encima de esta barra).
+const FOOTER_H = 56;
+const FOOTER_BOTTOM_GAP = 30; // distancia del borde inferior de la barra al fin de página
 
 // Dibuja un path cerrado con curvas Bézier usando coordenadas absolutas.
 type Seg = ["L", number, number] | ["C", number, number, number, number, number, number];
@@ -226,38 +230,40 @@ function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: number,
   drawWave(doc, pageW);
 
   // Logo (wordmark real) + "home" dorado + eslogan bicolor
-  const lh = 40;
+  // Task 103 (una sola hoja): encabezado compacto (logo/título/cajas suben
+  // ~27pt) sin cambiar el estilo — solo alturas y posiciones.
+  const lh = 36;
   const lw = lh * VIZA_LOGO_WORDMARK_RATIO;
-  doc.addImage(VIZA_LOGO_WORDMARK_PNG, "PNG", margin, 34, lw, lh);
+  doc.addImage(VIZA_LOGO_WORDMARK_PNG, "PNG", margin, 28, lw, lh);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(26);
   doc.setTextColor(...GOLD);
-  doc.text("home", margin + lw + 6, 73);
+  doc.text("home", margin + lw + 6, 63);
 
   doc.setFontSize(8.5);
   const s1 = "Todo para tu hogar";
   doc.setTextColor(...GOLD);
-  doc.text(s1, margin, 88);
+  doc.text(s1, margin, 76);
   doc.setTextColor(...BLUE);
-  doc.text(", en un solo lugar.", margin + doc.getTextWidth(s1), 88);
+  doc.text(", en un solo lugar.", margin + doc.getTextWidth(s1), 76);
 
   // Título
   doc.setFont("helvetica", "bold");
   doc.setFontSize(21);
   doc.setTextColor(...BLUE);
-  doc.text("PRESUPUESTO", margin, 150);
+  doc.text("PRESUPUESTO", margin, 130);
   const tw = doc.getTextWidth("PRESUPUESTO");
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...GOLD);
-  doc.text("DE VENTA", margin + tw + 8, 150);
+  doc.text("DE VENTA", margin + tw + 8, 130);
   doc.setFillColor(...GOLD);
-  doc.rect(margin, 160, 48, 2.5, "F");
+  doc.rect(margin, 139, 48, 2.5, "F");
 
   // 3 cajas: N° / EMISIÓN / VÁLIDO HASTA
   const gap = 10;
   const bw = (contentW - gap * 2) / 3;
-  const by = 173;
-  const bh = 42;
+  const by = 150;
+  const bh = 38;
   const validez = new Date(emision);
   validez.setDate(validez.getDate() + VALIDEZ_DIAS);
   const boxes: [string, string][] = [
@@ -274,10 +280,10 @@ function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: number,
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.8);
     doc.setTextColor(...GREY);
-    doc.text(label, x + 14, by + 15);
-    doc.setFontSize(10);
+    doc.text(label, x + 14, by + 13.5);
+    doc.setFontSize(9.5);
     doc.setTextColor(...BLUE);
-    doc.text(value, x + 14, by + 33);
+    doc.text(value, x + 14, by + 28);
   });
   return by + bh; // y inferior del encabezado
 }
@@ -308,21 +314,21 @@ function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: number, co
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10.5);
   doc.setTextColor(255, 255, 255);
-  doc.text("VENTAS ONLINE", x + 18, y + 19);
+  doc.text("VENTAS ONLINE", x + 18, y + 17);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  doc.text("WhatsApp: (0987) 700 707", x + 18, y + 34);
-  doc.text("ventas.online@viza.com.py", x + 18, y + 47);
+  doc.text("WhatsApp: (0987) 700 707", x + 18, y + 31);
+  doc.text("ventas.online@viza.com.py", x + 18, y + 43);
 
   doc.setTextColor(...BLUE);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
-  doc.text("SEGUINOS", x + split + 18, y + 19);
-  doc.text("VISITÁNOS", x + split + 135, y + 19);
+  doc.text("SEGUINOS", x + split + 18, y + 17);
+  doc.text("VISITÁNOS", x + split + 135, y + 17);
   doc.setFontSize(8);
-  doc.text("Facebook · Instagram", x + split + 18, y + 34);
-  doc.text("@vizahome", x + split + 18, y + 47);
-  doc.text("www.viza.com.py", x + split + 135, y + 34);
+  doc.text("Facebook · Instagram", x + split + 18, y + 31);
+  doc.text("@vizahome", x + split + 18, y + 43);
+  doc.text("www.viza.com.py", x + split + 135, y + 31);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.8);
@@ -330,7 +336,7 @@ function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: number, co
   doc.text(
     `Viza E.A.S (Viza Home) Presupuesto válido por ${VALIDEZ_DIAS} días desde la fecha de emisión.`,
     pageW / 2,
-    pageH - 20,
+    pageH - 16,
     { align: "center" }
   );
 }
@@ -401,16 +407,18 @@ export async function POST(req: NextRequest) {
       formatDateEs
     );
 
-    let y = headerBottom + 26;
+    let y = headerBottom + 16;
 
-    // ===== VENDEDOR (Task 102, pedido del dueño) =====
-    // Franja fina y bien ubicada: nombre completo del vendedor + sucursal +
-    // teléfono, debajo de las 3 cajas del encabezado, en TODOS los presupuestos.
-    y = drawVendedor(doc, margin, y, contentW, vendedor) + 18;
+    // ===== VENDEDOR (Task 103, pedido del dueño) =====
+    // La franja (nombre completo + sucursal + teléfono) ya NO va arriba:
+    // va ABAJO de todo, ENCAMIMA de la barra de datos de Viza Home (footer).
+    // Acá solo se RESERVA su lugar: ningún contenido puede pasar de yVend;
+    // la franja se dibuja al final, en su lugar fijo.
+    const yVend = yVendedorSobreFooter(pageH, FOOTER_H, FOOTER_BOTTOM_GAP);
 
-    // Salto de página respetando el espacio de la barra del footer
+    // Salto de página respetando la franja del vendedor + la barra del footer
     const ensureSpace = (needed: number) => {
-      if (y + needed > pageH - FOOTER_RESERVE) {
+      if (y + needed > yVend - 12) {
         doc.addPage();
         y = 60;
       }
@@ -422,7 +430,7 @@ export async function POST(req: NextRequest) {
       y += 14;
       const hasTel = !!body.cliente.telefono;
       const hasDoc = !!body.cliente.documento;
-      const boxH = 40;
+      const boxH = 36;
       doc.setFillColor(...LIGHT);
       doc.rect(margin, y, contentW, boxH, "F");
       const cols: [string, string, number][] = [["CLIENTE", body.cliente.nombre, margin + 12]];
@@ -434,14 +442,14 @@ export async function POST(req: NextRequest) {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(6.8);
         doc.setTextColor(...GREY);
-        doc.text(label, cx, y + 15);
+        doc.text(label, cx, y + 13);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9.5);
         doc.setTextColor(...DARK);
         const maxW = i === 0 ? contentW * 0.5 - 20 : contentW * 0.25 - 10;
-        doc.text(doc.splitTextToSize(value, maxW)[0], cx, y + 29);
+        doc.text(doc.splitTextToSize(value, maxW)[0], cx, y + 26.5);
       });
-      y += boxH + 20;
+      y += boxH + 16;
     }
 
     // ===== TABLA DE PRODUCTOS =====
@@ -526,43 +534,44 @@ export async function POST(req: NextRequest) {
       // sin hashtag en el PDF si falla — el resto del presupuesto sale igual
     }
 
-    const colN = 25;
-    const colSku = 70;
-    const colCant = 50;
-    const colPU = 110;
-    const colSub = 110;
+    const colN = 22;
+    const colSku = 58;
+    const colCant = 46;
+    const colPU = 100;
+    const colSub = 100;
     const colName = incluirPrecioContado
       ? contentW - colN - colSku - colCant - colPU - colSub
       : contentW - colN - colSku - colCant;
 
     // Header tabla
     doc.setFillColor(...BLUE);
-    doc.rect(margin, y, contentW, 24, "F");
+    doc.rect(margin, y, contentW, 22, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
     let xx = margin + 8;
-    doc.text("#", xx, y + 16);
+    doc.text("#", xx, y + 14.5);
     xx += colN;
-    doc.text("COD", xx, y + 16);
+    doc.text("COD", xx, y + 14.5);
     xx += colSku;
-    doc.text("PRODUCTO", xx, y + 16);
+    doc.text("PRODUCTO", xx, y + 14.5);
     xx += colName;
-    doc.text("CANT.", xx, y + 16);
+    doc.text("CANT.", xx, y + 14.5);
     xx += colCant;
     if (incluirPrecioContado) {
-      doc.text("P. CONTADO", xx, y + 16);
+      doc.text("P. CONTADO", xx, y + 14.5);
       xx += colPU;
-      doc.text("SUBTOTAL", margin + contentW - 10, y + 16, { align: "right" });
+      doc.text("SUBTOTAL", margin + contentW - 10, y + 14.5, { align: "right" });
     }
-    y += 24;
+    y += 22;
 
     // Filas productos (con margen aplicado al P.CONTADO si corresponde)
     itemsConMargen.forEach((it, idx) => {
-      // #HASHTAG (Task 83): si el producto tiene, la fila crece 30→40 para
+      // #HASHTAG (Task 83): si el producto tiene, la fila crece (26→33) para
       // que el hashtag entre bien abajo de la descripción sin pisar nada.
+      // Task 103 (una sola hoja): filas más bajas (30→26 / 40→33).
       const hashtagTxt = hashtagPorSku.get((it.sku || "").trim()) || "";
-      const rowH = hashtagTxt ? 40 : 30;
+      const rowH = hashtagTxt ? 33 : 26;
       ensureSpace(rowH + 4);
       if (idx % 2 === 1) {
         doc.setFillColor(...ZEBRA);
@@ -576,38 +585,38 @@ export async function POST(req: NextRequest) {
       doc.setTextColor(...GREY);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.text(String(idx + 1), xxx, y + 13);
+      doc.text(String(idx + 1), xxx, y + 11.5);
       xxx += colN;
-      doc.text(it.sku, xxx, y + 13);
+      doc.text(it.sku, xxx, y + 11.5);
 
       xxx += colSku;
       doc.setTextColor(...DARK);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(8.5);
+      doc.setFontSize(8);
       const nameLines = doc.splitTextToSize(it.name, colName - 6);
-      doc.text(nameLines.slice(0, 2), xxx, y + 13);
+      doc.text(nameLines.slice(0, 2), xxx, y + 11.5);
       // #HASHTAG bien abajo de la descripción (Task 83): "# 200" en dorado.
       if (hashtagTxt) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(7);
         doc.setTextColor(...DORADO_TXT);
-        doc.text(hashtagTxt, xxx, y + 13 + nameLines.length * 9.5 + 1.5);
+        doc.text(hashtagTxt, xxx, y + 11.5 + nameLines.length * 9 + 1);
         doc.setTextColor(...DARK); // restaurar para cant./precios de la misma fila
       }
 
       xxx += colName;
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text(String(it.quantity), xxx + 6, y + 13);
+      doc.setFontSize(8.5);
+      doc.text(String(it.quantity), xxx + 6, y + 11.5);
 
       if (incluirPrecioContado) {
         xxx += colCant;
         doc.setTextColor(...DARK);
-        doc.text(formatPYG(it.priceContado), xxx, y + 13);
+        doc.text(formatPYG(it.priceContado), xxx, y + 11.5);
         xxx += colPU;
         doc.setFont("helvetica", "bold");
         doc.setTextColor(...BLUE);
-        doc.text(formatPYG(it.subtotalContado), margin + contentW - 10, y + 13, { align: "right" });
+        doc.text(formatPYG(it.subtotalContado), margin + contentW - 10, y + 11.5, { align: "right" });
       }
       y += rowH;
     });
@@ -615,15 +624,16 @@ export async function POST(req: NextRequest) {
     // Bloque TOTAL CONTADO (solo si incluirPrecioContado)
     if (incluirPrecioContado) {
       ensureSpace(70);
-      y += 10;
+      y += 8;
       const totalBoxW = 280;
       const totalBoxX = pageW - margin - totalBoxW;
       // UNA SOLA FILA: el TOTAL CONTADO ya muestra el precio final (con el
       // margen incluido cuando el vendedor lo aplicó). No se duplica la misma
       // información con una segunda fila "PRECIO FINAL CONTADO".
       // Task 88 (pedido del dueño): si hay margen adicional, la caja crece
-      // (32→44) para que entre la línea "VZH 3" debajo de la etiqueta.
-      const boxH = ajusteContado ? 44 : 32;
+      // (28→40) para que entre la línea "VZH 3" debajo de la etiqueta.
+      // Task 103: cajas más bajas (32→28 / 44→40) para la única hoja.
+      const boxH = ajusteContado ? 40 : 28;
 
       doc.setFillColor(...BLUE);
       doc.rect(totalBoxX, y, totalBoxW, boxH, "F");
@@ -633,14 +643,14 @@ export async function POST(req: NextRequest) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(255, 255, 255);
-      doc.text("TOTAL CONTADO", totalBoxX + 14, y + 20);
+      doc.text("TOTAL CONTADO", totalBoxX + 14, y + 17.5);
       doc.setFontSize(12);
       // Con margen aplicado el TOTAL muestra el precio final (mismo valor que
       // P.CONTADO y SUBTOTAL de los productos arriba).
       doc.text(
         formatPYG(ajusteContado ? body.contadoAjustado : body.contadoOriginal),
         totalBoxX + totalBoxW - 14,
-        y + 20,
+        y + 17.5,
         { align: "right" }
       );
       // Task 88 (pedido del dueño): el margen adicional aplicado al contado
@@ -653,11 +663,11 @@ export async function POST(req: NextRequest) {
         doc.text(
           `VZH ${fmtMargenVzh(body.contadoMarginPct)}`,
           totalBoxX + 14,
-          y + 34
+          y + 29
         );
       }
 
-      y += boxH + 3 + 22;
+      y += boxH + 2 + 16;
     } else {
       y += 18;
     }
@@ -697,23 +707,23 @@ export async function POST(req: NextRequest) {
       doc.text("CONSULTE OPCIONES DE FINANCIACIÓN", margin + contentW / 2, y + 23, { align: "center" });
       y += 46;
     } else {
-      // Header de tabla
+      // Header de tabla (Task 103: header 26→22 y filas 32→27, una sola hoja)
       doc.setFillColor(...BLUE);
-      doc.rect(margin, y, contentW, 26, "F");
+      doc.rect(margin, y, contentW, 22, "F");
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
       let pp = margin + 10;
-      doc.text("PLAN", pp, y + 17);
+      doc.text("PLAN", pp, y + 14.5);
       pp += pColBadge;
-      doc.text("CUOTAS", pp, y + 17);
+      doc.text("CUOTAS", pp, y + 14.5);
       pp += pColCuotas;
-      doc.text("VALOR POR CUOTA", pp, y + 17);
+      doc.text("VALOR POR CUOTA", pp, y + 14.5);
       pp += pColValor;
-      doc.text("TOTAL DEL PLAN", margin + contentW - 10, y + 17, { align: "right" });
-      y += 26;
+      doc.text("TOTAL DEL PLAN", margin + contentW - 10, y + 14.5, { align: "right" });
+      y += 22;
 
-      const rowH = 32;
+      const rowH = 27;
       let rowIdx = 0;
 
       // Estilo común de fila (fondo + cinta dorada en la primera)
@@ -733,11 +743,11 @@ export async function POST(req: NextRequest) {
       };
       const badge = (x: number, label: string, fill: RGB, text: RGB) => {
         doc.setFillColor(...fill);
-        doc.roundedRect(x + 16, y + 9, 70, 15, 7.5, 7.5, "F");
+        doc.roundedRect(x + 16, y + 7.5, 70, 13.5, 6.75, 6.75, "F");
         doc.setFont("helvetica", "bold");
         doc.setFontSize(6.8);
         doc.setTextColor(...text);
-        doc.text(label, x + 16 + 35, y + 19.3, { align: "center" });
+        doc.text(label, x + 16 + 35, y + 17, { align: "center" });
       };
 
       // ===== CON ENTREGA + FILA CONTADO (opción A, también contado solo) =====
@@ -756,23 +766,23 @@ export async function POST(req: NextRequest) {
           rowBase();
           let ppE = margin + 10;
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(12);
+          doc.setFontSize(11.5);
           doc.setTextColor(...BLUE);
-          doc.text("E", ppE, y + 20);
+          doc.text("E", ppE, y + 17.5);
           ppE += pColBadge;
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(9.5);
+          doc.setFontSize(9);
           doc.setTextColor(...DARK);
-          doc.text("ENTREGA INICIAL", ppE, y + 20);
+          doc.text("ENTREGA INICIAL", ppE, y + 17.5);
           ppE += pColCuotas;
           ppE += pColValor;
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(11);
+          doc.setFontSize(10.5);
           doc.setTextColor(...DARK);
           doc.text(
             formatPYG(entregaInicial),
             margin + contentW - 10,
-            y + 20,
+            y + 17.5,
             { align: "right" }
           );
           y += rowH;
@@ -787,23 +797,23 @@ export async function POST(req: NextRequest) {
             rowBase();
             let ppC = margin + 10;
             doc.setFont("helvetica", "bold");
-            doc.setFontSize(12);
+            doc.setFontSize(11.5);
             doc.setTextColor(...BLUE);
-            doc.text(plan.letra, ppC, y + 20);
+            doc.text(plan.letra, ppC, y + 17.5);
             badge(ppC, "CONTADO", GOLD, BLUE);
             ppC += pColBadge;
             doc.setFont("helvetica", "normal");
-            doc.setFontSize(9.5);
+            doc.setFontSize(9);
             doc.setTextColor(...DARK);
-            doc.text("Contado", ppC, y + 20);
+            doc.text("Contado", ppC, y + 17.5);
             ppC += pColCuotas;
             doc.setFont("helvetica", "bold");
-            doc.setFontSize(11);
+            doc.setFontSize(10.5);
             doc.setTextColor(...BLUE);
-            doc.text(formatPYG(plan.valorPorCuota), ppC, y + 20);
+            doc.text(formatPYG(plan.valorPorCuota), ppC, y + 17.5);
             ppC += pColValor;
             doc.setTextColor(...DARK);
-            doc.text(formatPYG(plan.total), margin + contentW - 10, y + 20, { align: "right" });
+            doc.text(formatPYG(plan.total), margin + contentW - 10, y + 17.5, { align: "right" });
             y += rowH;
             rowIdx++;
             return;
@@ -812,29 +822,29 @@ export async function POST(req: NextRequest) {
           rowBase();
           let pp2 = margin + 10;
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(12);
+          doc.setFontSize(11.5);
           doc.setTextColor(...BLUE);
-          doc.text(plan.letra, pp2, y + 20);
+          doc.text(plan.letra, pp2, y + 17.5);
           badge(pp2, "CON ENTREGA", BLUE, [255, 255, 255]);
           pp2 += pColBadge;
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(9.5);
+          doc.setFontSize(9);
           doc.setTextColor(...DARK);
           doc.text(
             entregaInicial > 0
               ? `${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`
               : `1 ENTRADA + ${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`,
             pp2,
-            y + 20
+            y + 17.5
           );
           pp2 += pColCuotas;
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(11);
+          doc.setFontSize(10.5);
           doc.setTextColor(...BLUE);
-          doc.text(formatPYG(plan.valorPorCuota), pp2, y + 20);
+          doc.text(formatPYG(plan.valorPorCuota), pp2, y + 17.5);
           pp2 += pColValor;
           doc.setTextColor(...DARK);
-          doc.text(formatPYG(plan.total), margin + contentW - 10, y + 20, { align: "right" });
+          doc.text(formatPYG(plan.total), margin + contentW - 10, y + 17.5, { align: "right" });
           y += rowH;
           rowIdx++;
         });
@@ -847,23 +857,23 @@ export async function POST(req: NextRequest) {
           rowBase();
           let pp2 = margin + 10;
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(12);
+          doc.setFontSize(11.5);
           doc.setTextColor(...BLUE);
-          doc.text(plan.letra, pp2, y + 20);
+          doc.text(plan.letra, pp2, y + 17.5);
           badge(pp2, "SIN ENTREGA", GOLD, BLUE);
           pp2 += pColBadge;
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(9.5);
+          doc.setFontSize(9);
           doc.setTextColor(...DARK);
-          doc.text(plan.cuotas === 1 ? "1 PAGO" : `${plan.cuotas} CUOTAS`, pp2, y + 20);
+          doc.text(plan.cuotas === 1 ? "1 PAGO" : `${plan.cuotas} CUOTAS`, pp2, y + 17.5);
           pp2 += pColCuotas;
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(11);
+          doc.setFontSize(10.5);
           doc.setTextColor(...BLUE);
-          doc.text(formatPYG(plan.valorPorCuota), pp2, y + 20);
+          doc.text(formatPYG(plan.valorPorCuota), pp2, y + 17.5);
           pp2 += pColValor;
           doc.setTextColor(...DARK);
-          doc.text(formatPYG(plan.total), margin + contentW - 10, y + 20, { align: "right" });
+          doc.text(formatPYG(plan.total), margin + contentW - 10, y + 17.5, { align: "right" });
           y += rowH;
           rowIdx++;
         });
@@ -874,16 +884,21 @@ export async function POST(req: NextRequest) {
     // ===== OBSERVACIONES =====
     if (body.cliente && body.cliente.observaciones && body.cliente.observaciones.trim()) {
       ensureSpace(80);
-      y += 22;
+      y += 14;
       drawSectionTitle(doc, "OBSERVACIONES", margin, y, contentW);
-      y += 20;
+      y += 15;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(...GREY);
       const obsLines = doc.splitTextToSize(body.cliente.observaciones, contentW - 20);
       doc.text(obsLines, margin, y);
-      y += obsLines.length * 12;
+      y += obsLines.length * 11;
     }
+
+    // ===== VENDEDOR (Task 103): franja abajo de todo, ENCAMIMA de los datos
+    // de Viza Home (barra del footer). Se dibuja una sola vez, sobre la
+    // última página, en su lugar fijo reservado (yVend).
+    drawVendedor(doc, margin, yVend, contentW, vendedor);
 
     // ===== FOOTER (en todas las páginas) + numeración =====
     const totalPages = doc.getNumberOfPages();

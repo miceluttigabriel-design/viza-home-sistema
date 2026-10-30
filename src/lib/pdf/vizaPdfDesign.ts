@@ -75,20 +75,32 @@ export function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: 
   return by + bh;
 }
 
-// ─── VENDEDOR (Task 102, pedido del dueño) ───
+// ─── VENDEDOR (Task 102, pedido del dueño; Task 103: posición abajo) ───
 // Franja fina y elegante con el nombre completo del vendedor que emite el
 // presupuesto, su sucursal y su número de contacto (planilla FUN.VIZA).
-// Va justo debajo de las 3 cajas del encabezado, en TODOS los presupuestos
-// (PRESUPUESTO / SAFRA / CON CHEQUE / MAYORISTA). Discreta: 34pt de alto,
-// mismo estilo de etiqueta+valor que DATOS DEL CLIENTE, acento dorado VIZA.
-// Devuelve el Y inferior dibujado (para encadenar el contenido siguiente).
+// Task 103 (pedido del dueño): la franja ya NO va debajo del encabezado —
+// va ABAJO de todo, ENCAMIMA de la barra de datos de Viza Home (footer),
+// en TODOS los presupuestos (PRESUPUESTO / SAFRA / CON CHEQUE / MAYORISTA).
+// Discreta: 30pt de alto, mismo estilo de etiqueta+valor que DATOS DEL
+// CLIENTE, acento dorado VIZA. Devuelve el Y inferior dibujado.
 export interface VendedorPdf {
   nombre: string;
   sucursal?: string;
   telefono?: string;
 }
 
-const VENDEDOR_H = 34;
+export const VENDEDOR_H = 30;
+
+// Task 103: Y donde se dibuja la franja del vendedor — anclada 10pt encima
+// de la barra del footer (los "datos de Viza Home"). footerH/gapBottom
+// existen porque el PDF PRESUPUESTO usa un footer compacto propio.
+export function yVendedorSobreFooter(
+  pageH: number,
+  footerH: number = FOOTER_H,
+  gapBottom: number = FOOTER_BOTTOM_GAP
+): number {
+  return pageH - gapBottom - footerH - VENDEDOR_H - 10;
+}
 
 export function drawVendedor(
   doc: jsPDF,
@@ -102,7 +114,7 @@ export function drawVendedor(
   doc.setFillColor(...LIGHT);
   doc.roundedRect(margin, y, contentW, h, 6, 6, "F");
   doc.setFillColor(...GOLD);
-  doc.rect(margin, y + 8, 3, h - 16, "F");
+  doc.rect(margin, y + 7, 3, h - 14, "F");
 
   // Columnas: VENDEDOR (45%) · SUCURSAL (25%) · TELÉFONO (30%).
   // Sucursal y teléfono se omiten si no hay dato (sin "—" innecesarios).
@@ -117,11 +129,11 @@ export function drawVendedor(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.5);
     doc.setTextColor(...GREY);
-    doc.text(label, cx, y + 14);
+    doc.text(label, cx, y + 12);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(...DARK);
-    doc.text(value, cx, y + 27);
+    doc.text(value, cx, y + 23.5);
   });
   return y + h;
 }

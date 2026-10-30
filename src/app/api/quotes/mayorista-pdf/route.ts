@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
-import { drawHeader, drawFooter, formatPYG, formatDateEs, formatDateTimeEs, BLUE, GOLD, GREY, drawVendedor } from "../../../../lib/pdf/vizaPdfDesign";
+import { drawHeader, drawFooter, formatPYG, formatDateEs, formatDateTimeEs, yVendedorSobreFooter, BLUE, GOLD, GREY, drawVendedor } from "../../../../lib/pdf/vizaPdfDesign";
 // Task 102: datos del vendedor que emite el presupuesto (nombre completo de
 // la sesión + sucursal + teléfono de la planilla FUN.VIZA).
 import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
@@ -121,9 +121,15 @@ export async function POST(req: NextRequest) {
     // ===== DATOS DEL CLIENTE (si hay) =====
     let y = headerBottom + 26;
 
-    // ===== VENDEDOR (Task 102, pedido del dueño) =====
-    // Franja fina: nombre completo + sucursal + teléfono, igual en los 4 PDFs.
-    y = drawVendedor(doc, margin, y, contentW, vendedor) + 18;
+    // Task 103: la franja del vendedor va ABAJO de todo, encima de la barra
+    // de datos de Viza Home (footer). Ningún contenido puede pasar de yVend.
+    const yVend = yVendedorSobreFooter(pageH);
+    const ensureSpace = (min: number) => {
+      if (y + min > yVend - 12) {
+        doc.addPage();
+        y = 60;
+      }
+    };
 
     if (body.cliente && body.cliente.nombre) {
       doc.setFont("helvetica", "bold");
@@ -158,13 +164,6 @@ export async function POST(req: NextRequest) {
 
     // ===== TABLA DE PRODUCTOS (con precios) =====
     y += 15;
-
-    const ensureSpace = (min: number) => {
-      if (y > pageH - min) {
-        doc.addPage();
-        y = 60;
-      }
-    };
 
     ensureSpace(180);
 
@@ -364,6 +363,10 @@ export async function POST(req: NextRequest) {
       doc.text(obsLines, margin, y);
       y += obsLines.length * 12;
     }
+
+    // ===== VENDEDOR (Task 103): franja abajo de todo, encima de los datos
+    // de Viza Home (barra del footer), en su lugar fijo reservado =====
+    drawVendedor(doc, margin, yVend, contentW, vendedor);
 
     // ===== FOOTER (mismo diseño unificado) =====
     drawFooter(doc, pageW, pageH, margin, contentW, "Presupuesto Mayorista");

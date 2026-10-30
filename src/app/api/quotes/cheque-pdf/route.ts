@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
-import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY, drawVendedor } from "../../../../lib/pdf/vizaPdfDesign";
+import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, yVendedorSobreFooter, BLUE, GOLD, DARK, GREY, drawVendedor } from "../../../../lib/pdf/vizaPdfDesign";
 // Task 102: datos del vendedor que emite el presupuesto (nombre completo de
 // la sesión + sucursal + teléfono de la planilla FUN.VIZA).
 import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
@@ -137,6 +137,11 @@ export async function POST(req: NextRequest) {
     const margin = 42;
     const contentW = pageW - margin * 2;
 
+    // Task 103: la franja del vendedor va ABAJO de todo, encima de la barra
+    // de datos de Viza Home (footer). Ningún contenido puede pasar de yVend.
+    const yVend = yVendedorSobreFooter(pageH);
+    const hayLugar = (alto: number) => y + alto <= yVend - 12;
+
     let y = 0;
 
     // ===== ENCABEZADO (nuevo diseño con logo + wave + 3 cajas) =====
@@ -158,10 +163,6 @@ export async function POST(req: NextRequest) {
       formatDateEs
     );
     y = headerBottom + 26;
-
-    // ===== VENDEDOR (Task 102, pedido del dueño) =====
-    // Franja fina: nombre completo + sucursal + teléfono, igual en los 4 PDFs.
-    y = drawVendedor(doc, margin, y, contentW, vendedor) + 18;
 
     // ===== DATOS DEL CLIENTE =====
     doc.setFillColor(248, 249, 250);
@@ -253,7 +254,7 @@ export async function POST(req: NextRequest) {
     }
     doc.setFont("helvetica", "normal");
     body.productos.forEach((it, idx) => {
-      if (y > pageH - FOOTER_RESERVE) {
+      if (!hayLugar(30)) {
         doc.addPage();
         y = margin;
       }
@@ -298,7 +299,7 @@ export async function POST(req: NextRequest) {
 
     // ===== PLAN CON CHEQUE - TABLA DE CHEQUES =====
     const chequesTableH = 30 + cheques.length * 22 + 30;
-    if (y + chequesTableH > pageH - 100) {
+    if (!hayLugar(chequesTableH)) {
       doc.addPage();
       y = margin + 10;
     }
@@ -334,7 +335,7 @@ export async function POST(req: NextRequest) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     cheques.forEach((c, idx) => {
-      if (y > pageH - FOOTER_RESERVE) {
+      if (!hayLugar(24)) {
         doc.addPage();
         y = margin;
       }
@@ -386,7 +387,7 @@ export async function POST(req: NextRequest) {
 
     // ===== OBSERVACIONES =====
     if (body.cliente && body.cliente.observaciones) {
-      if (y > pageH - FOOTER_RESERVE) {
+      if (!hayLugar(70)) {
         doc.addPage();
         y = margin;
       }
@@ -409,6 +410,10 @@ export async function POST(req: NextRequest) {
 
       y += obsH + 18;
     }
+
+    // ===== VENDEDOR (Task 103): franja abajo de todo, encima de los datos
+    // de Viza Home (barra del footer), en su lugar fijo reservado =====
+    drawVendedor(doc, margin, yVend, contentW, vendedor);
 
     // ===== FOOTER (nuevo diseño) =====
     drawFooter(doc, pageW, pageH, margin, contentW, "Plan Con Cheque");
