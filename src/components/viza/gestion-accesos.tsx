@@ -20,6 +20,7 @@ import {
   Bell,
   BellOff,
   MapPin,
+  Phone,
   UserPlus,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
@@ -29,6 +30,11 @@ import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 // la API /api/crm/ranking para decidir quién ve el CRM). Lib estática y
 // client-safe: no importa Prisma ni la base (ver cabecera del archivo).
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+// Task 101 (pedido del dueño): número de CONTACTO de cada usuario, sacado de
+// la planilla oficial FUN.VIZA (columna CONTACTO, coincidencia por EMAIL).
+// Lib estática y client-safe (mismo patrón que encargados-sucursal): es solo
+// referencia de lectura en el cliente, NO se guarda en la base y NO toca API.
+import { contactoDe } from "@/lib/fun-viza-contactos";
 
 interface AppUser {
   email: string;
@@ -276,6 +282,9 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
   const [filtroSucursal, setFiltroSucursal] = useState<string>("todas");
   const [mostrarContrasenas, setMostrarContrasenas] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Task 101: guarda el id del usuario cuyo NÚMERO DE CONTACTO acaba de
+  // copiarse (independiente del estado de copiar contraseñas).
+  const [copiedContactoId, setCopiedContactoId] = useState<string | null>(null);
   const [historialModal, setHistorialModal] = useState<{ email: string; name: string | null; items: HistorialItem[] } | null>(null);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
   const [resetando, setResetando] = useState<string | null>(null);
@@ -433,6 +442,15 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
     toast.success("Copiado");
+  };
+
+  // Task 101: copiar el número de contacto de la planilla FUN.VIZA con un
+  // click (mismo comportamiento que copiar contraseñas, con su propio estado).
+  const copiarContacto = (numero: string, id: string) => {
+    navigator.clipboard.writeText(numero);
+    setCopiedContactoId(id);
+    setTimeout(() => setCopiedContactoId(null), 1500);
+    toast.success("Número copiado");
   };
 
   const abrirHistorial = async (u: Usuario) => {
@@ -594,6 +612,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
     lines.push("");
     lines.push("  ORGANIZACIÓN: SUCURSAL → SECTOR (planilla FUN.VIZA) → usuarios.");
     lines.push("  TIPO DE USUARIO: SUPREMO = acceso total · ADMIN = Admin + Ventas · VIP = ve el CRM de su sucursal · COMÚN = solo Ventas.");
+    lines.push("  CONTACTO: número de teléfono de la planilla FUN.VIZA (columna CONTACTO); '—' = la planilla todavía no lo tiene.");
     lines.push("");
 
     // ── Agrupar TODOS los usuarios por sucursal (mismo orden del panel) ──
@@ -638,6 +657,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
           lines.push(`    Email:        ${u.email}`);
           lines.push(`    Contraseña:   ${u.contrasenaActual}`);
           lines.push(`    Nombre:       ${u.name || "—"}`);
+          lines.push(`    Contacto:     ${contactoDe(u.email) || "—"}`);
           lines.push(`    Tipo:         ${tipoUsuario(u.role, u.email)}`);
           lines.push("");
         }
@@ -1049,6 +1069,10 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                   {/* SECTOR (planilla FUN.VIZA) con el TIPO DE USUARIO al lado
                       (Supremo / Admin / VIP / Común) — pedido del dueño, Tasks 75/76. */}
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Sector</th>
+                  {/* CONTACTO (planilla FUN.VIZA, columna CONTACTO) — Task 101,
+                      pedido del dueño: cada usuario con su respectivo número.
+                      Solo referencia de lectura; un click copia el número. */}
+                  <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Contacto</th>
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Tipo</th>
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Estado</th>
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Contraseña Actual</th>
@@ -1059,14 +1083,14 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-stone-500">
+                    <td colSpan={9} className="text-center py-12 text-stone-500">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                       Cargando usuarios...
                     </td>
                   </tr>
                 ) : filtrados.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-stone-500">
+                    <td colSpan={9} className="text-center py-12 text-stone-500">
                       No se encontraron usuarios con esos filtros.
                     </td>
                   </tr>
@@ -1080,7 +1104,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                           key={fila.key}
                           style={{ backgroundColor: "rgba(217, 184, 107, 0.16)", borderBottom: "1px solid #e5d9bd" }}
                         >
-                          <td colSpan={8} className="px-3 py-2">
+                          <td colSpan={9} className="px-3 py-2">
                             <div className="flex items-center gap-2">
                               <MapPin className="h-3.5 w-3.5" style={{ color: "#b89853" }} />
                               <span
@@ -1103,6 +1127,9 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                     const u = fila.usuario;
                     const rb = roleBadge(u.role, u.email);
                     const destacado = destacadosIds.has(u.id);
+                    // Task 101: número de contacto del usuario según la planilla
+                    // FUN.VIZA. Vacío = la planilla todavía no lo tiene ("—").
+                    const tel = contactoDe(u.email);
                     return (
                       <tr
                         key={fila.key}
@@ -1121,6 +1148,24 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                             <MapPin className="h-3 w-3" style={{ color: "#b89853" }} />
                             {sectorDe(u)}
                           </span>
+                        </td>
+                        {/* CONTACTO según la planilla FUN.VIZA (Task 101, pedido del
+                            dueño: cada uno con su respectivo número). Solo referencia
+                            de lectura; un click copia el número. Sin número = "—". */}
+                        <td className="px-3 py-2.5">
+                          {tel ? (
+                            <button
+                              onClick={() => copiarContacto(tel, u.id)}
+                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-stone-100 border border-stone-200 hover:bg-amber-50 hover:border-amber-300 transition-colors group"
+                              title={`Copiar ${tel}`}
+                            >
+                              <Phone className="h-3 w-3" style={{ color: "#b89853" }} />
+                              <span className="text-xs font-mono font-medium text-stone-700 group-hover:text-stone-900">{tel}</span>
+                              {copiedContactoId === u.id && <Check className="h-3.5 w-3.5 text-green-600" />}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-stone-300">—</span>
+                          )}
                         </td>
                         {/* TIPO DE USUARIO al lado del sector: Supremo / Admin / VIP / Común.
                             Task 82: para usuarios NO supremo el tipo es un SELECT — el dueño
@@ -1374,7 +1419,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                 </select>
               </div>
               <p className="text-[11px] text-stone-500 leading-relaxed">
-                Se crea ACTIVO y queda registrado en la bitácora de contraseñas (PasswordLog), igual que un reseteo. Si el email está en la planilla, sector y sucursal se asignan solos (ej.: ventas.lorena@viza.com.py = VENTAS / KATUETE).
+                Se crea ACTIVO y queda registrado en la bitácora de contraseñas (PasswordLog), igual que un reseteo. Si el email está en la planilla, sector y sucursal se asignan solos (ej.: ventas.lorena@viza.com.py = VENTAS / KATUETE). Su número de CONTACTO aparece solo si la planilla FUN.VIZA lo tiene.
               </p>
               <div className="flex gap-2 pt-1">
                 <button
