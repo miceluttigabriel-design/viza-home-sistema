@@ -2775,6 +2775,11 @@ tr.fila-etiquetada-${e.id}:hover td {
                           body: JSON.stringify({
                             nuevos: importPreview.nuevos,
                             actualizados: importPreview.actualizados,
+                            // Task 98: reparto del saldo por SUCURSAL que vino
+                            // en la planilla (CENTRAL = depósito central). El
+                            // apply lo guarda en la tabla aparte StockSucursal
+                            // para el filtro por sucursal del Stock General.
+                            stockPorSucursal: (importPreview as any).stockPorSucursal || {},
                           }),
                         });
                         // Leer SIEMPRE como texto primero, y después intentar

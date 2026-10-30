@@ -403,3 +403,36 @@ model QuoteSequence {
 
   @@unique([plan, userId])
 }
+
+// ============================================================
+// STOCK POR SUCURSAL (Task 98, pedido del dueño)
+// "tenemos que hacer um filtro para poder ver por sucursal... lo que
+// esta Central es nuestro deposito Central y los otros son por cada
+// sucursal... tenemos que dividir bien".
+// El inventario del ERP (grid_inventario_stock_new) trae la columna
+// SUCURSAL: CENTRAL = depósito central; KATUETE / NUEVA ESPERANZA /
+// SALTOS DEL GUAIRA / LA PALOMA = sucursales de venta. Una fila por
+// (producto, sucursal) con el SALDO entero de esa planilla.
+// El Product.stock global de SIEMPRE sigue existiendo y se sigue
+// llenando con la suma total del Excel (intacto).
+// TABLA APARTE A PROPÓSITO (misma lección de CostoEditado /
+// ProductHashtag / ProductCapacidad): el modelo Product queda
+// EXACTAMENTE igual que siempre, así que NINGUNA consulta existente
+// puede romperse. Si esta tabla todavía no existe en la base, el
+// código que la usa falla en silencio (try/catch) y la app funciona
+// igual que antes; se crea SOLA en el primer uso (SQL idempotente en
+// src/lib/stock-sucursal.ts) o al correr `npx prisma db push`.
+// Sin relación Prisma a propósito, por el mismo motivo que
+// CostoEditado: tocar Product (columna nueva) era lo que rompía la
+// app cuando el db push no se había ejecutado.
+// ============================================================
+model StockSucursal {
+  id        String   @id @default(cuid())
+  productId String   // Product.id (sin relación a propósito, ver arriba)
+  sucursal  String   // "CENTRAL" | "KATUETE" | "NUEVA ESPERANZA" | ... (tal cual el ERP)
+  saldo     Float    @default(0) // parte entera del Saldo de la planilla (1.0000 → 1)
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, sucursal])
+  @@index([sucursal])
+}

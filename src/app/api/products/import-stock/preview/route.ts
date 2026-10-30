@@ -234,11 +234,27 @@ export async function POST(req: NextRequest) {
         subGrupo: string | null;
         name: string | null;
         filas: number;
+        // Task 98: saldo de ESTE codigo repartido por SUCURSAL tal cual
+        // trae la planilla del ERP ("CENTRAL" = depósito central; el resto
+        // son sucursales de venta). El stock global de siempre sigue
+        // siendo la suma de TODAS las filas (stockSumado, intocado).
+        porSucursal: Record<string, number>;
       }
     > = {};
 
     const errores: string[] = [];
     let totalFilas = 0;
+
+    // ─── Task 98: columna SUCURSAL del ERP ───
+    // Si la planilla no la trae (planilla vieja), stockPorSucursal queda
+    // vacío y TODO funciona exactamente igual que siempre (retrocompatible).
+    const colSucursal = resolveColumn("SUCURSAL");
+    // Resumen por sucursal para la vista previa (el dueño ve ANTES de
+    // confirmar cómo se va a dividir el inventario: filas, SKUs y unidades).
+    const sucursalesResumen: Record<
+      string,
+      { nombre: string; filas: number; skus: Set<string>; unidades: number }
+    > = {};
 
     // AVISO visible en la vista previa: si la columna de costo no se encontró
     // con NINGUNA de las variantes aceptadas, avisarlo CLARO antes de aplicar.
@@ -275,6 +291,13 @@ export async function POST(req: NextRequest) {
       const subGrupo = toString(getCell(row, "SUBGRUPO")) || null;
       const name = toString(getCell(row, "DESCRIPCION")) || null;
 
+      // ─── Task 98: sucursal de la fila (mayúsculas, sin espacios) ───
+      let sucursalFila = "";
+      if (colSucursal) {
+        const rawSuc = row.getCell(colSucursal).value;
+        sucursalFila = toString(rawSuc).toUpperCase();
+      }
+
       // Si el Codigo ya está en grouped, sumar el saldo
       if (grouped[codigo]) {
         grouped[codigo].stockSumado += saldo;
@@ -288,7 +311,26 @@ export async function POST(req: NextRequest) {
           subGrupo,
           name,
           filas: 1,
+          porSucursal: {},
         };
+      }
+
+      // Reparto por sucursal (solo si la planilla trae la columna y la
+      // fila tiene sucursal; saldo 0 no crea fila — no aporta unidades).
+      if (sucursalFila && saldo !== 0) {
+        grouped[codigo].porSucursal[sucursalFila] =
+          (grouped[codigo].porSucursal[sucursalFila] || 0) + saldo;
+        if (!sucursalesResumen[sucursalFila]) {
+          sucursalesResumen[sucursalFila] = {
+            nombre: sucursalFila,
+            filas: 0,
+            skus: new Set<string>(),
+            unidades: 0,
+          };
+        }
+        sucursalesResumen[sucursalFila].filas++;
+        sucursalesResumen[sucursalFila].skus.add(codigo);
+        sucursalesResumen[sucursalFila].unidades += saldo;
       }
     }
 
@@ -378,7 +420,30 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 8. Devolver preview al frontend
+    // 8. Task 98: mapa sku → { sucursal → saldo } para el apply (el stock
+    // global de siempre sigue viniendo en nuevos/actualizados; esto es el
+    // REPARTO por sucursal de la MISMA planilla). Las sucursales van en
+    // orden fijo: CENTRAL (depósito central) primero, resto alfabético.
+    const stockPorSucursal: Record<string, Record<string, number>> = {};
+    for (const codigo of codigosList) {
+      const por = grouped[codigo].porSucursal;
+      if (!por || Object.keys(por).length === 0) continue;
+      stockPorSucursal[codigo] = por;
+    }
+    const sucursales = Object.values(sucursalesResumen)
+      .map((s) => ({
+        nombre: s.nombre,
+        filas: s.filas,
+        skus: s.skus.size,
+        unidades: Math.round(s.unidades),
+      }))
+      .sort((a, b) => {
+        if (a.nombre === "CENTRAL") return -1;
+        if (b.nombre === "CENTRAL") return 1;
+        return a.nombre.localeCompare(b.nombre, "es");
+      });
+
+    // 9. Devolver preview al frontend
     return NextResponse.json({
       ok: true,
       totalFilas,
@@ -387,6 +452,9 @@ export async function POST(req: NextRequest) {
       actualizadosCount: actualizados.length,
       nuevos,
       actualizados,
+      // Task 98 (nuevo, opcional para clientes viejos):
+      stockPorSucursal,
+      sucursales,
       errores,
     });
   } catch (error) {

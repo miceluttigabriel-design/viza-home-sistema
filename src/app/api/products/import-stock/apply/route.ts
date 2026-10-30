@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { leerProductosProtegidos } from "@/lib/costo-editado";
 import { naceConMargenDefault } from "@/lib/gasto-adm";
 import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
+import { guardarStockPorSucursal, type GuardarSaldosResultado } from "@/lib/stock-sucursal"; // Task 98
 import { Prisma } from "@prisma/client";
 import {
   computeDbMarginStats,
@@ -73,6 +74,12 @@ interface ActualizadoItem {
 interface ApplyBody {
   nuevos: NuevoItem[];
   actualizados: ActualizadoItem[];
+  // ─── Task 98 (OPCIONAL, pedido del dueño): reparto del saldo por SUCURSAL ───
+  // { sku: { "CENTRAL": 3, "KATUETE": 1, ... } }. Lo manda el preview de la
+  // MISMA planilla (columna SUCURSAL del ERP). Si no viene (cliente viejo o
+  // planilla sin esa columna) NO se toca nada por sucursal — exactamente
+  // igual que antes. CENTRAL = depósito central; el resto, sucursales.
+  stockPorSucursal?: Record<string, Record<string, number>>;
 }
 
 // Tamaño de lote para SQL bulk UPDATE con CASE WHEN.
@@ -563,6 +570,49 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ─────────────────────────────────────────────────────
+    // 7. STOCK POR SUCURSAL (Task 98, pedido del dueño)
+    //    "tenemos que dividir bien alla amigo": el saldo de la planilla se
+    //    guarda POR SUCURSAL (tabla aparte StockSucursal) además del stock
+    //    global de siempre. Set absoluto por producto: después de esto, lo
+    //    que hay por sucursal para los SKUs de la planilla es EXACTAMENTE
+    //    lo que dice el Excel (los SKUs que no vienen quedan intocados).
+    //    Solo supremo llega acá (auth de arriba), y si el body no trae el
+    //    mapa (cliente viejo / planilla sin columna SUCURSAL) no se toca
+    //    nada — retrocompatible al 100%.
+    // ─────────────────────────────────────────────────────
+    let sucursalesGuardadas: GuardarSaldosResultado | null = null;
+    if (body.stockPorSucursal && typeof body.stockPorSucursal === "object") {
+      // Necesito el id de cada SKU (los nuevos recién creados incluidos).
+      const skusConSucursal = Object.keys(body.stockPorSucursal);
+      if (skusConSucursal.length > 0) {
+        try {
+          const rowsIds = await db.product.findMany({
+            where: { sku: { in: skusConSucursal } },
+            select: { id: true, sku: true },
+          });
+          const skusToId = new Map(rowsIds.map((p) => [p.sku, p.id]));
+          sucursalesGuardadas = await guardarStockPorSucursal(
+            body.stockPorSucursal,
+            skusToId
+          );
+          for (const e of sucursalesGuardadas.errores) {
+            errores.push(`Sucursales: ${e}`);
+          }
+        } catch (err: any) {
+          const msg = err?.message || String(err);
+          errores.push(`Sucursales: no se pudo guardar el reparto por sucursal: ${msg}`);
+          sucursalesGuardadas = {
+            ok: false,
+            filasGuardadas: 0,
+            productosTocados: 0,
+            sucursales: 0,
+            errores: [msg],
+          };
+        }
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       creados,
@@ -570,6 +620,15 @@ export async function POST(req: NextRequest) {
       conCostoActualizado,
       margenesAutomaticas,
       conSafraAutomatica,
+      // Task 98 (nuevo, opcional):
+      sucursales: sucursalesGuardadas
+        ? {
+            ok: sucursalesGuardadas.ok,
+            filasGuardadas: sucursalesGuardadas.filasGuardadas,
+            productosTocados: sucursalesGuardadas.productosTocados,
+            sucursales: sucursalesGuardadas.sucursales,
+          }
+        : null,
       errores,
     });
   } catch (error) {
