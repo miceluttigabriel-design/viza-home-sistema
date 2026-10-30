@@ -22,6 +22,7 @@ import { usePlanSafraStore, parseSafra } from "@/store/plan-safra";
 import { formatPYG } from "@/lib/format";
 import { esProductoRegalo } from "@/lib/producto-regalo";
 import { CostoInterno, extractCosto } from "./costo-interno";
+import { StockSucursalChips } from "./stock-sucursal-chips";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
 // momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
@@ -53,7 +54,7 @@ interface SafraProductApi {
   [key: string]: any;
 }
 
-export function PlanSafra() {
+export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
   // === Búsqueda de productos ===
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<SafraProductApi[]>([]);
@@ -489,6 +490,10 @@ export function PlanSafra() {
                             ? ` · Contado: ${formatPYG(p.priceContado)}`
                             : ""}
                         </p>
+                        {/* Task 104: cuadritos STOCK POR SUCURSAL (Stock General,
+                            sin el depósito en tránsito). El de MI sucursal va
+                            verde. Solo presentación — jamás viaja al PDF. */}
+                        <StockSucursalChips stock={p.stockPorSucursal} sucursalMia={sucursalMia} />
                         {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026" */}
                         {p.hashtag?.valor ? (
                           <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>

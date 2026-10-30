@@ -9,6 +9,7 @@ import { naceConMargenDefault } from "@/lib/gasto-adm";
 import { calcularValorMayorista } from "@/lib/margen-mayorista";
 import { guardarCapacidad, idsPorCapacidad, leerCapacidades } from "@/lib/producto-capacidad";
 import { guardarCores, idsPorCores, leerCores } from "@/lib/producto-cores";
+import { stockPorSucursalDeIds } from "@/lib/stock-por-sucursal";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { getTasasCambio } from "@/lib/tasas-cambio";
 
@@ -227,6 +228,16 @@ export async function GET(req: NextRequest) {
     // el orden que pidió el dueño.
     const coresMap = await leerCores(products.map((p) => p.id));
 
+    // ─── STOCK POR SUCURSAL (Task 104, pedido del dueño) ───
+    // Cuadritos del buscador del vendedor: el stock de CADA sucursal de
+    // venta (KATUETE / LA PALOMA / NUEVA ESPERANZA / SALTOS DEL GUAIRA)
+    // según la MISMA tabla aparte del Stock General (StockSucursal, Task 98,
+    // planilla del ERP). El DEPÓSITO general (sucursal CENTRAL, stock en
+    // tránsito) NO se muestra — pedido explícito del dueño. Sale como campo
+    // "stockPorSucursal" de cada producto ([] si no hay stock en sucursales).
+    // Si la tabla aún no existe, sale [] y NADA se rompe (best-effort).
+    const stockSucMap = await stockPorSucursalDeIds(products.map((p) => p.id));
+
     // ─── VENCIDOS FUERA DE LA VISTA DEL VENDEDOR (Task 95, pedido del dueño) ───
     // El valor del # se paga como PREMIO al vendedor y tiene fecha de validez.
     // Cuando la fecha ya pasó, el # desaparece SOLO para la gente de ventas:
@@ -264,6 +275,8 @@ export async function GET(req: NextRequest) {
         hashtag: hashtagsSalida.get(p.id) ?? null,
         capacidad: capacidadesMap.get(p.id) ?? null,
         cores: coresMap.get(p.id) ?? null,
+        // Task 104: cuadritos de stock por sucursal del buscador (sin depósito)
+        stockPorSucursal: stockSucMap.get(p.id) ?? [],
       })),
       total,
       page,

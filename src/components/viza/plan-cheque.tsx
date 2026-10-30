@@ -10,6 +10,7 @@ import { useChequeStore, parseSafra, addDays } from "@/store/cheque";
 import { formatPYG } from "@/lib/format";
 import { esProductoRegalo } from "@/lib/producto-regalo";
 import { CostoInterno, extractCosto } from "./costo-interno";
+import { StockSucursalChips } from "./stock-sucursal-chips";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
 // momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
@@ -36,7 +37,7 @@ interface ChequeProductApi {
   safra: string | null; [key: string]: any;
 }
 
-export function PlanCheque() {
+export function PlanCheque({ sucursalMia }: { sucursalMia?: string | null }) {
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<ChequeProductApi[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -198,7 +199,7 @@ export function PlanCheque() {
                 searchResults.length === 0 ? <div className="p-4 text-sm text-stone-500 text-center">No se encontraron productos</div> :
                 searchResults.map(p => (
                   <button key={p.id} onClick={() => handleAddProduct(p)} className="w-full text-left p-3 hover:bg-rose-50 border-b border-stone-100 last:border-0 flex items-center justify-between gap-3">
-                    <div><p className="font-semibold text-stone-900 text-sm">{p.name}</p><p className="text-xs text-stone-500">SKU: {p.sku}</p>{p.hashtag?.valor ? (<p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>#{Number(p.hashtag.valor).toLocaleString("es-PY")} GS{p.hashtag.fecha ? ` valido hasta ${p.hashtag.fecha.split("-").reverse().join("/")}` : ""}</p>) : null}</div>
+                    <div><p className="font-semibold text-stone-900 text-sm">{p.name}</p><p className="text-xs text-stone-500">SKU: {p.sku}</p><StockSucursalChips stock={p.stockPorSucursal} sucursalMia={sucursalMia} />{p.hashtag?.valor ? (<p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>#{Number(p.hashtag.valor).toLocaleString("es-PY")} GS{p.hashtag.fecha ? ` valido hasta ${p.hashtag.fecha.split("-").reverse().join("/")}` : ""}</p>) : null}</div>
                     <span className="font-bold text-rose-600 text-sm">{formatPYG(p.priceContado ?? 0)}</span>
                   </button>
                 ))}

@@ -43,6 +43,7 @@ import { CostoInterno, extractCosto } from "./costo-interno";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
 import { esProductoRegalo } from "@/lib/producto-regalo";
+import { StockSucursalChips } from "./stock-sucursal-chips";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
 // momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
@@ -342,6 +343,25 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         // tasas de siempre — el panel de ventas funciona igual que siempre
       }
     })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // ─── MI SUCURSAL (Task 104, pedido del dueño) ───
+  // Sucursal del usuario logueado (tabla UsuarioSucursal / FUN.VIZA) para
+  // resaltar en VERDE el cuadrito de SU sucursal entre los cuadritos de
+  // stock del buscador. SOLO LECTURA: si falla queda "" y los cuadritos
+  // salen igual, solo que sin el resaltado de "tu sucursal".
+  const [sucursalMia, setSucursalMia] = useState<string>("");
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/mi-sucursal")
+      .then((r) => (r.ok ? r.json() : { sucursal: "" }))
+      .then((d) => {
+        if (vivo && typeof d?.sucursal === "string") setSucursalMia(d.sucursal);
+      })
+      .catch(() => {});
     return () => {
       vivo = false;
     };
@@ -1521,9 +1541,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       })()}
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {viewMode === "safra" && <PlanSafra />}
-        {viewMode === "cheque" && <PlanCheque />}
-        {viewMode === "mayorista" && <PlanMayorista />}
+        {viewMode === "safra" && <PlanSafra sucursalMia={sucursalMia} />}
+        {viewMode === "cheque" && <PlanCheque sucursalMia={sucursalMia} />}
+        {viewMode === "mayorista" && <PlanMayorista sucursalMia={sucursalMia} />}
 
         {viewMode === "cotizador" && (
         <>
@@ -1615,6 +1635,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                             SKU: {p.sku}
                             {p.priceContado ? ` · Contado: ${formatPYG(p.priceContado)}` : ""}
                           </p>
+                          {/* Task 104: cuadritos STOCK POR SUCURSAL (Stock General,
+                              sin el depósito en tránsito). El de MI sucursal va
+                              verde. Solo presentación — jamás viaja al PDF. */}
+                          <StockSucursalChips stock={p.stockPorSucursal} sucursalMia={sucursalMia} />
                           {/* Bolinha + nombre de la etiqueta (Task 86): SOLO en
                               pantalla — el PDF del presupuesto jamás recibe esto. */}
                           {et ? (

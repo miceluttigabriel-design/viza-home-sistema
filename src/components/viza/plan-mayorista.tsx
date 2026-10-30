@@ -16,6 +16,7 @@ import { usePlanMayoristaStore } from "@/store/mayorista";
 import { formatPYG } from "@/lib/format";
 import { esProductoRegalo } from "@/lib/producto-regalo";
 import { CostoInterno, extractCostoMayorista } from "./costo-interno";
+import { StockSucursalChips } from "./stock-sucursal-chips";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
 // momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
@@ -54,7 +55,7 @@ function parseValorTecnico(valor: unknown): number {
   return n;
 }
 
-export function PlanMayorista() {
+export function PlanMayorista({ sucursalMia }: { sucursalMia?: string | null }) {
   // === Búsqueda de productos ===
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<MayoristaProductApi[]>([]);
@@ -350,6 +351,10 @@ export function PlanMayorista() {
                             {p.name}
                           </p>
                           <p className="text-xs text-stone-500">SKU: {p.sku}</p>
+                          {/* Task 104: cuadritos STOCK POR SUCURSAL (Stock General,
+                              sin el depósito en tránsito). El de MI sucursal va
+                              verde. Solo presentación — jamás viaja al PDF. */}
+                          <StockSucursalChips stock={p.stockPorSucursal} sucursalMia={sucursalMia} />
                           {/* #HASHTAG (promo del admin) */}
                           {p.hashtag?.valor ? (
                             <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>
@@ -376,6 +381,10 @@ export function PlanMayorista() {
                             {p.name}
                           </p>
                           <p className="text-xs text-stone-500">SKU: {p.sku}</p>
+                          {/* Task 104: cuadritos STOCK POR SUCURSAL (Stock General,
+                              sin el depósito en tránsito). El de MI sucursal va
+                              verde. Solo presentación — jamás viaja al PDF. */}
+                          <StockSucursalChips stock={p.stockPorSucursal} sucursalMia={sucursalMia} />
                           {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026" */}
                           {p.hashtag?.valor ? (
                             <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>
