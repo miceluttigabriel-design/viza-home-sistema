@@ -2097,7 +2097,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     setLabelFilter(prev => prev === "verde" ? null : "verde");
                     setPage(1);
                   }}
-                  title="Filtrar: Seleccionados"
+                  title="Filtrar: SELECCIONADOS"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -2113,7 +2113,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   }}
                 >
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#28A745" }}></span>
-                  Seleccionado
+                  SELECCIONADO
                 </button>
                 <button
                   type="button"
@@ -2123,7 +2123,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     setLabelFilter(prev => prev === "azul" ? null : "azul");
                     setPage(1);
                   }}
-                  title="Filtrar: Para Pedido"
+                  title="Filtrar: PARA PEDIDO"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -2139,7 +2139,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   }}
                 >
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#007BFF" }}></span>
-                  Para Pedido
+                  PARA PEDIDO
                 </button>
                 <button
                   type="button"
@@ -2149,7 +2149,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     setLabelFilter(prev => prev === "dorado" ? null : "dorado");
                     setPage(1);
                   }}
-                  title="Filtrar: Descontinuado"
+                  title="Filtrar: DESCONTINUADO"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -2165,7 +2165,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   }}
                 >
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#FFC107" }}></span>
-                  Descontinuado
+                  DESCONTINUADO
                 </button>
                 <button
                   type="button"
@@ -2175,7 +2175,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     setLabelFilter(prev => prev === "rojo" ? null : "rojo");
                     setPage(1);
                   }}
-                  title="Filtrar: Quema Stock"
+                  title="Filtrar: QUEMA STOCK"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -2191,7 +2191,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   }}
                 >
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "#DC3545" }}></span>
-                  Quema Stock
+                  QUEMA STOCK
                 </button>
                 {/* Etiquetas CREADAS por el supremo (Task 84): mismo filtro
                     clickeable que las 4 fijas, con su color propio. */}
@@ -2205,7 +2205,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                       setLabelFilter(prev => prev === e.id ? null : e.id);
                       setPage(1);
                     }}
-                    title={`Filtrar: ${e.nombre}`}
+                    title={`Filtrar: ${e.nombre.toUpperCase()}`}
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
@@ -2221,7 +2221,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     }}
                   >
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: e.color }}></span>
-                    {e.nombre}
+                    {/* Task 100: el nombre SIEMPRE en MAYÚSCULAS en pantalla
+                        (también cubre etiquetas viejas guardadas en
+                        minúsculas, ej: "viza liquida" → "VIZA LIQUIDA"). */}
+                    {e.nombre.toUpperCase()}
                   </button>
                 ))}
               </div>
@@ -4541,11 +4544,13 @@ const ExcelRow = memo(function ExcelRow({
     dorado: { bg: "#FFE082", border: "#FFC107", hover: "#FFD54F", cellClass: "fila-etiquetada-dorado" },
     rojo: { bg: "#EF9A9A", border: "#DC3545", hover: "#E57373", cellClass: "fila-etiquetada-rojo" },
   };
+  // Nombres de las 4 fijas SIEMPRE EN MAYÚSCULAS (Task 100, pedido del
+  // dueño: "Estos nonbres de Etiquetas deben ser siempre en MAYUSCULAS").
   const labelColors = [
-    { id: "verde", color: "#28A745", label: "Seleccionado" },
-    { id: "azul", color: "#007BFF", label: "Para Pedido" },
-    { id: "dorado", color: "#FFC107", label: "Descontinuado" },
-    { id: "rojo", color: "#DC3545", label: "Quema Stock" },
+    { id: "verde", color: "#28A745", label: "SELECCIONADO" },
+    { id: "azul", color: "#007BFF", label: "PARA PEDIDO" },
+    { id: "dorado", color: "#FFC107", label: "DESCONTINUADO" },
+    { id: "rojo", color: "#DC3545", label: "QUEMA STOCK" },
   ];
   // Etiquetas CREADAS (Task 84): mismas bolitas del menú, con su nombre.
   const coloresCreadas = etiquetasCreadas.map((e) => ({
@@ -5365,7 +5370,7 @@ function ModalCrearEtiqueta({
         toast.error(data.error || "No se pudo crear la etiqueta", { id: toastId });
         return;
       }
-      toast.success(`Etiqueta "${data.etiqueta.nombre}" creada`, { id: toastId });
+      toast.success(`Etiqueta "${data.etiqueta.nombre.toUpperCase()}" creada`, { id: toastId });
       onCreadas([...creadas, data.etiqueta].sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setNombre("");
     } catch {
@@ -5377,7 +5382,7 @@ function ModalCrearEtiqueta({
 
   const borrar = async (e: EtiquetaCreada) => {
     if (!window.confirm(
-      `¿Borrar la etiqueta "${e.nombre}"?\n\nLos productos que la tenían quedan SIN etiqueta (igual que si se la sacaras a mano).`
+      `¿Borrar la etiqueta "${e.nombre.toUpperCase()}"?\n\nLos productos que la tenían quedan SIN etiqueta (igual que si se la sacaras a mano).`
     )) return;
     const toastId = toast.loading("Borrando etiqueta...");
     try {
@@ -5389,7 +5394,7 @@ function ModalCrearEtiqueta({
         toast.error(data.error || "No se pudo borrar la etiqueta", { id: toastId });
         return;
       }
-      toast.success(`Etiqueta "${e.nombre}" borrada`, { id: toastId });
+      toast.success(`Etiqueta "${e.nombre.toUpperCase()}" borrada`, { id: toastId });
       onCreadas(creadas.filter((x) => x.id !== e.id));
     } catch {
       toast.error("Error de red al borrar la etiqueta", { id: toastId });
@@ -5429,7 +5434,10 @@ function ModalCrearEtiqueta({
             </label>
             <input
               value={nombre}
-              onChange={(ev) => setNombre(ev.target.value)}
+              // Task 100: el nombre de la etiqueta SIEMPRE en MAYÚSCULAS —
+              // se pasa a mayúsculas mientras se escribe (y el server
+              // normaliza igual al guardar, ver src/lib/etiquetas.ts).
+              onChange={(ev) => setNombre(ev.target.value.toUpperCase())}
               onKeyDown={(ev) => {
                 if (ev.key === "Enter") crear();
               }}
@@ -5478,7 +5486,7 @@ function ModalCrearEtiqueta({
           >
             <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="text-sm font-semibold" style={{ color: "#1c1917" }}>
-              {nombre.trim() || "Vista previa de la etiqueta"}
+              {nombre.trim().toUpperCase() || "Vista previa de la etiqueta"}
             </span>
           </div>
 
@@ -5502,8 +5510,8 @@ function ModalCrearEtiqueta({
             </p>
             {creadas.length === 0 ? (
               <p className="text-xs text-stone-400">
-                Todavía no creaste etiquetas. Las de siempre (Seleccionado, Para Pedido,
-                Descontinuado, Quema Stock) siguen funcionando igual y no se pueden borrar.
+                Todavía no creaste etiquetas. Las de siempre (SELECCIONADO, PARA PEDIDO,
+                DESCONTINUADO, QUEMA STOCK) siguen funcionando igual y no se pueden borrar.
               </p>
             ) : (
               <div className="space-y-1.5">
@@ -5515,7 +5523,7 @@ function ModalCrearEtiqueta({
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: e.color }} />
-                      <span className="text-sm font-semibold text-stone-800 truncate">{e.nombre}</span>
+                      <span className="text-sm font-semibold text-stone-800 truncate">{e.nombre.toUpperCase()}</span>
                     </div>
                     <button
                       onClick={() => borrar(e)}

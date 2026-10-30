@@ -128,14 +128,17 @@ export async function existeEtiquetaCreada(id: string): Promise<boolean> {
 }
 
 // ─── Escritura: crear etiqueta (solo la llama el API con supremo) ───
-// Nombre: trim, 1..40 caracteres, ÚNICO (comparación sin mayúsculas y
-// sin espacios de los bordes). Color: "#RRGGBB" ya normalizado.
+// Nombre: trim, SIEMPRE EN MAYÚSCULAS (Task 100, pedido del dueño:
+// "Estos nonbres de Etiquetas deben ser siempre en MAYUSCULAS"), 1..40
+// caracteres, ÚNICO (comparación sin mayúsculas y sin espacios de los
+// bordes). Color: "#RRGGBB" ya normalizado.
 // Devuelve { ok: true, etiqueta } o { ok: false, error }.
 export async function crearEtiqueta(
   nombreRaw: unknown,
   colorRaw: unknown
 ): Promise<{ ok: boolean; error?: string; etiqueta?: EtiquetaCreada }> {
-  const nombre = typeof nombreRaw === "string" ? nombreRaw.trim().slice(0, 40) : "";
+  const nombre =
+    typeof nombreRaw === "string" ? nombreRaw.trim().toUpperCase().slice(0, 40) : "";
   if (!nombre) return { ok: false, error: "Falta el nombre de la etiqueta" };
   const color = normalizarColorHex(colorRaw);
   if (!color) return { ok: false, error: "Color inválido (se espera un hex #RRGGBB)" };

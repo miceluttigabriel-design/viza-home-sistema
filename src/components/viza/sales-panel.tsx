@@ -73,10 +73,12 @@ const CREMA = "#faf6ed";
 // para identificar el producto de un vistazo (bolita + nombre) y para el
 // listado por etiqueta. Acá NO se etiqueta nada y NO se toca la base.
 const ETIQUETAS_FIJAS: EtiquetaInfo[] = [
-  { id: "verde", color: "#28A745", nombre: "Seleccionado" },
-  { id: "azul", color: "#007BFF", nombre: "Para Pedido" },
-  { id: "dorado", color: "#FFC107", nombre: "Descontinuado" },
-  { id: "rojo", color: "#DC3545", nombre: "Quema Stock" },
+  // Task 100: nombres SIEMPRE EN MAYÚSCULAS (pedido del dueño), igual que
+  // en la Base.
+  { id: "verde", color: "#28A745", nombre: "SELECCIONADO" },
+  { id: "azul", color: "#007BFF", nombre: "PARA PEDIDO" },
+  { id: "dorado", color: "#FFC107", nombre: "DESCONTINUADO" },
+  { id: "rojo", color: "#DC3545", nombre: "QUEMA STOCK" },
 ];
 
 // Resuelve el id guardado en products.etiquetaColor a la info visible de
@@ -1621,7 +1623,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                                 className="h-2 w-2 rounded-full inline-block shrink-0"
                                 style={{ backgroundColor: et.color }}
                               />
-                              {et.nombre}
+                              {/* Task 100: nombre de etiqueta SIEMPRE en MAYÚSCULAS. */}
+                              {et.nombre.toUpperCase()}
                             </p>
                           ) : null}
                           {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026" */}
@@ -1722,13 +1725,14 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                     backgroundColor: activa ? et.color : "transparent",
                     color: activa ? "#ffffff" : et.color,
                   }}
-                  title={`Ver productos con la etiqueta ${et.nombre}`}
+                  title={`Ver productos con la etiqueta ${et.nombre.toUpperCase()}`}
                 >
                   <span
                     className="h-2.5 w-2.5 rounded-full inline-block shrink-0"
                     style={{ backgroundColor: activa ? "#ffffff" : et.color }}
                   />
-                  {et.nombre}
+                  {/* Task 100: nombre de etiqueta SIEMPRE en MAYÚSCULAS. */}
+                  {et.nombre.toUpperCase()}
                 </button>
               );
             })}
@@ -2485,7 +2489,8 @@ function ProductItemRow({
               className="h-2 w-2 rounded-full inline-block shrink-0"
               style={{ backgroundColor: etiqueta.color }}
             />
-            {etiqueta.nombre}
+            {/* Task 100: nombre de etiqueta SIEMPRE en MAYÚSCULAS. */}
+            {etiqueta.nombre.toUpperCase()}
           </p>
         ) : null}
         {/* #HASHTAG (Task 83, pedido del dueño): bajo la descripción del
