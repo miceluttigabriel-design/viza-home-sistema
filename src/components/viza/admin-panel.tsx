@@ -135,6 +135,9 @@ interface Product {
   // Task 97: CAPACIDAD (columna nueva; vive en tabla aparte ProductCapacidad
   // y llega fusionada desde GET /api/products, igual que el hashtag)
   capacidad?: string | null;
+  // Task 98: CORES (columna nueva; vive en tabla aparte ProductCores
+  // y llega fusionada desde GET /api/products, igual que capacidad)
+  cores?: string | null;
   coluna1: string | null;
   coluna2: string | null;
   stock: number;
@@ -258,7 +261,11 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   // Orden de columnas a pedido del usuario (Task 97, despues del COD fijo):
   //   COD > PROVEDOR > GRUPO > SUBGRUPO > MARCA > TIPO PRODUCTO > MODELO >
-  //   > CAPACIDAD > REF.FABRICA > DESCRIPCION
+  //   > CORES > CAPACIDAD > REF.FABRICA > DESCRIPCION
+  // Task 98: el dueño pidió "crea una coluna nombre CORES entre la coluna
+  // MODELO y CAPACIDAD" — CORES es la columna NUEVA de esta tarea (texto
+  // libre, vive en la tabla aparte ProductCores, mismo patrón que
+  // CAPACIDAD). El resto del orden queda igual.
   // Cambios de esta tarea: PROVEDOR pasó al frente (antes iba detrás de
   // SUB-GRUPO); TIPO PRODUCTO y CAPACIDAD son las DOS columnas NUEVAS
   // ("hay que crear mas dos tanbien"); el resto queda igual. Solo cambia
@@ -290,9 +297,16 @@ const COLUMNS: ColDef[] = [
   // (encabezado "MODELO" de la planilla, columna justo detrás de MARCA), en
   // la importación de productos y en el export Excel; ahora también se
   // muestra y es editable en esta tabla. Va justo detrás de MARCA, como en
-  // la planilla. Como está dentro del bloque de columnas fijas, se congela
-  // junto a ellas (ver FROZEN_COLUMNS).
+  // la planilla. (Task 98: MODELO dejó de ser columna FIJA — ahora se
+  // scrollea normal; ver FROZEN_COLUMNS.)
   { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
+  // CORES (NUEVA, Task 98): a pedido del dueño, entre MODELO y CAPACIDAD.
+  // Dato de texto libre con los colores del producto ("BRANCO/AZUL",
+  // "PRETO"...). Vive en la tabla APARTE ProductCores (mismo patrón que
+  // CAPACIDAD: se activa sola, jamás toca el modelo Product ni rompe nada
+  // sin db push) y llega fusionada desde GET /api/products. Editable,
+  // filtrable y buscable como cualquier columna de texto.
+  { key: "cores", label: "CORES", type: "text", group: "DATOS FINALES" },
   // CAPACIDAD (NUEVA, Task 97): la segunda de las dos columnas nuevas del
   // pedido ("hay que crear mas dos tanbien"). Dato de texto libre que NO
   // existía ni en la planilla ni en la base (las capacidades hoy viven
@@ -381,23 +395,24 @@ const COLUMNS: ColDef[] = [
   // Siguen existiendo en la base de datos y en import/export Excel; solo dejan de mostrarse.
 ];
 
-// ─── Columnas FIJAS (congeladas) — experimento a pedido del usuario ───
+// ─── Columnas FIJAS (congeladas) ───
 // Se congelan igual que ACCIONES y COD (position sticky al scrollear hacia los
 // costados). TODOS los encabezados llevan el dorado del padrón (#D9B86B);
 // las CELDAS de las columnas que aparecen en FROZEN_BLANCO (ver abajo) llevan
 // fondo blanco en vez de dorado. Los anchos son fijos para poder calcular la
 // posicion left de cada una (arranque: ACCIONES 120px + COD 110px = 230px).
 // Para revertir el experimento: dejar el array VACIO ([]).
+//
+// Task 98 (pedido del dueño): "las colunas TIPO PRODUCTO y CAPACIDAD hay que
+// dejarlas fijas". Hasta la Task 97 estaban fijas TODAS las del bloque
+// izquierdo (PROVEDOR, GRUPO, SUB-GRUPO, MARCA, TIPO PRODUCTO, MODELO,
+// CAPACIDAD, REF.FABRICA y DESCRIPCION); ahora quedan fijas SOLO esas dos y
+// el resto vuelve a scrollear normal (PROVEDOR, GRUPO, SUB-GRUPO, MARCA,
+// MODELO, CORES, REF.FABRICA y DESCRIPCION dejan de estar congeladas).
+// La columna nueva CORES (Task 98) NO es fija: scrollea normal.
 const FROZEN_COLUMNS: { key: string; width: number }[] = [
-  { key: "fabricante", width: 130 }, // PROVEDOR (Task 97: pasó al frente)
-  { key: "categoria", width: 100 },  // GRUPO
-  { key: "subGrupo", width: 120 },   // SUB-GRUPO
-  { key: "marca", width: 100 },      // MARCA
-  { key: "tipo", width: 120 },       // TIPO PRODUCTO (nueva, Task 97)
-  { key: "modelo", width: 130 },     // MODELO (restaurada a pedido del usuario)
-  { key: "capacidad", width: 100 },  // CAPACIDAD (nueva, Task 97)
-  { key: "referencia", width: 130 }, // REF.FABRICA
-  { key: "name", width: 400 },       // DESCRIPCION
+  { key: "tipo", width: 120 },      // TIPO PRODUCTO (FIJA, pedido del dueño Task 98)
+  { key: "capacidad", width: 100 }, // CAPACIDAD (FIJA, pedido del dueño Task 98)
 ];
 const FROZEN_START_LEFT = 230; // modo normal: ACCIONES (120px) + COD (110px)
 const FROZEN_BG = "#D9B86B";   // mismo dorado del encabezado / ACCIONES / COD
@@ -407,7 +422,11 @@ const COSTO_EDITADO_BG = "#FFD700";
 // Columnas fijas cuyas CELDAS llevan fondo BLANCO en vez de dorado (a pedido
 // del usuario: DESCRIPCION fija y blanca). El ENCABEZADO sigue dorado,
 // respetando el padrón de encabezados dorados.
-const FROZEN_BLANCO = new Set<string>(["name"]); // "name" = DESCRIPCION
+// Task 98: DESCRIPCION dejó de ser columna fija, así que este Set queda
+// VACIO (ninguna celda fija blanca por ahora; TIPO PRODUCTO y CAPACIDAD
+// llevan el dorado del padrón). Si mañana el dueño vuelve a congelar
+// DESCRIPCION, alcanza con re-agregarla a FROZEN_COLUMNS de arriba.
+const FROZEN_BLANCO = new Set<string>();
 // Posiciones left de las columnas fijas: se calculan desde el arranque.
 // Task 80 (ajuste visual): en MODO SOLO LECTURA la columna ACCIONES no
 // existe, así que las fijas arrancan PEGADAS al COD (110px); antes quedaban

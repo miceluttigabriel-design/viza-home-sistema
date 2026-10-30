@@ -8,6 +8,7 @@ import { hashtagVisibleParaVendedor, hoyParaguay } from "@/lib/hashtag-formato";
 import { naceConMargenDefault } from "@/lib/gasto-adm";
 import { calcularValorMayorista } from "@/lib/margen-mayorista";
 import { guardarCapacidad, idsPorCapacidad, leerCapacidades } from "@/lib/producto-capacidad";
+import { guardarCores, idsPorCores, leerCores } from "@/lib/producto-cores";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { getTasasCambio } from "@/lib/tasas-cambio";
 
@@ -88,6 +89,14 @@ export async function GET(req: NextRequest) {
       if (idsCap.length > 0) {
         orList.push({ id: { in: idsCap } });
       }
+      // Task 98: los CORES viven en tabla aparte (ProductCores, mismo
+      // patrón que CAPACIDAD), así que su búsqueda también se resuelve
+      // por ids y se suma al OR. Si la tabla aún no existe, idsPorCores
+      // devuelve [] y la búsqueda sigue funcionando igual.
+      const idsCores = await idsPorCores(search.trim(), null);
+      if (idsCores.length > 0) {
+        orList.push({ id: { in: idsCores } });
+      }
       where.OR = orList;
     }
 
@@ -98,6 +107,13 @@ export async function GET(req: NextRequest) {
       if (col === "capacidad") {
         const idsCap = await idsPorCapacidad(null, values);
         where.id = { in: idsCap.length > 0 ? idsCap : ["__sin_coincidencia__"] };
+        continue;
+      }
+      // Task 98: CORES no es columna de Product — su filtro se traduce a
+      // ids desde la tabla aparte (idéntico criterio que CAPACIDAD).
+      if (col === "cores") {
+        const idsCores = await idsPorCores(null, values);
+        where.id = { in: idsCores.length > 0 ? idsCores : ["__sin_coincidencia__"] };
         continue;
       }
       where[col] = { in: values };
@@ -202,6 +218,15 @@ export async function GET(req: NextRequest) {
     // REF.FABRICA, en el orden que pidió el dueño.
     const capacidadesMap = await leerCapacidades(products.map((p) => p.id));
 
+    // ─── CORES por producto (Task 98, columna nueva de la Base) ───
+    // Tabla aparte AUTO-GESTIONADA (ver src/lib/producto-cores.ts):
+    // si aún no existe se crea sola y NUNCA rompe esta ruta (devuelve mapa
+    // vacío y los productos salen sin cores, igual que antes). Sale
+    // fusionada como campo "cores" de cada producto, igual que capacidad
+    // — la tabla del Panel ADM la muestra entre MODELO y CAPACIDAD, en
+    // el orden que pidió el dueño.
+    const coresMap = await leerCores(products.map((p) => p.id));
+
     // ─── VENCIDOS FUERA DE LA VISTA DEL VENDEDOR (Task 95, pedido del dueño) ───
     // El valor del # se paga como PREMIO al vendedor y tiene fecha de validez.
     // Cuando la fecha ya pasó, el # desaparece SOLO para la gente de ventas:
@@ -238,6 +263,7 @@ export async function GET(req: NextRequest) {
         costosEditados: editadosMap.get(p.id) ?? [],
         hashtag: hashtagsSalida.get(p.id) ?? null,
         capacidad: capacidadesMap.get(p.id) ?? null,
+        cores: coresMap.get(p.id) ?? null,
       })),
       total,
       page,
@@ -404,6 +430,17 @@ export async function POST(req: NextRequest) {
       } catch {
         // sin capacidad: el producto quedó creado igual (mismo espíritu del
         // resto de las tablas aparte — jamás frenan la operación principal)
+      }
+    }
+
+    // Task 98: CORES (columna nueva de la Base) — vive en tabla aparte
+    // (ProductCores, mismo patrón que CAPACIDAD). Si el body la trae, se
+    // guarda; si falla, la creación del producto NO se rompe por esto.
+    if (body.cores !== undefined) {
+      try {
+        await guardarCores(product.id, body.cores === null || body.cores === "" ? null : String(body.cores));
+      } catch {
+        // sin cores: el producto quedó creado igual (jamás frena la operación)
       }
     }
 

@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { naceConMargenDefault } from "@/lib/gasto-adm";
 import { guardarCapacidad } from "@/lib/producto-capacidad";
+import { guardarCores } from "@/lib/producto-cores";
 import ExcelJS from "exceljs";
 import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 
@@ -244,6 +245,19 @@ export async function POST(req: NextRequest) {
             await guardarCapacidad(creado.id, capExcel);
           } catch {
             // sin capacidad: la importación sigue igual que siempre
+          }
+        }
+
+        // Task 98: CORES (columna nueva de la Base, tabla aparte
+        // ProductCores). Si la planilla la trae (header "CORES"), nace con
+        // ella; si no existe la columna o falla el guardado, el producto
+        // queda creado igual (jamás frena la importación).
+        const coresExcel = toString(getCell(row, "CORES"));
+        if (coresExcel) {
+          try {
+            await guardarCores(creado.id, coresExcel);
+          } catch {
+            // sin cores: la importación sigue igual que siempre
           }
         }
         results.nuevos++;

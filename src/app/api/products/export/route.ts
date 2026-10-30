@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { leerCapacidades } from "@/lib/producto-capacidad";
+import { leerCores } from "@/lib/producto-cores";
 
 // GET /api/products/export - Exporta TODOS los productos con TODAS las columnas (103 columnas)
 // Genera CSV que abre en Excel - SIN librerias externas
@@ -33,6 +34,11 @@ export async function GET() {
     // mismo patrón que #HASHTAG). Si la tabla aún no existe, el mapa viene
     // vacío y la columna CAPACIDAD sale vacía — el export nunca se rompe.
     const capacidadesMap = await leerCapacidades(allProducts.map((p) => p.id));
+
+    // Task 98: CORES de cada producto (tabla aparte ProductCores, mismo
+    // patrón que CAPACIDAD). Si la tabla aún no existe, el mapa viene
+    // vacío y la columna CORES sale vacía — el export nunca se rompe.
+    const coresMap = await leerCores(allProducts.map((p) => p.id));
 
     // Helper para sanitizar valores CSV
     function csvVal(val: any): string {
@@ -117,8 +123,12 @@ export async function GET() {
       { header: "TIPO", fn: (p: any) => csvVal(p.tipo) },
       { header: "MARCA", fn: (p: any) => csvVal(p.marca) },
       { header: "MODELO", fn: (p: any) => csvVal(p.modelo) },
-      // Task 97: CAPACIDAD nueva, detrás de MODELO (mismo orden que la tabla
-      // del Panel ADM). El import de productos la lee para productos NUEVOS,
+      // Task 98: CORES nueva, entre MODELO y CAPACIDAD (mismo orden que la
+      // tabla del Panel ADM). El import de productos la lee para productos
+      // NUEVOS, así el round-trip export → import conserva el dato.
+      { header: "CORES", fn: (p: any) => csvVal(coresMap.get(p.id) ?? "") },
+      // Task 97: CAPACIDAD (después de CORES, mismo orden que la tabla del
+      // Panel ADM). El import de productos la lee para productos NUEVOS,
       // así el round-trip export → import conserva el dato.
       { header: "CAPACIDAD", fn: (p: any) => csvVal(capacidadesMap.get(p.id) ?? "") },
       { header: "VALOR TECNICO", fn: (p: any) => numVal(p.valorTecnico) },

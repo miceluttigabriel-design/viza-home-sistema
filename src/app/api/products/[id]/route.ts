@@ -11,6 +11,7 @@ import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 import { calcularValorMayorista } from "@/lib/margen-mayorista";
 import { guardarCapacidad } from "@/lib/producto-capacidad";
+import { guardarCores } from "@/lib/producto-cores";
 
 // Recalcula los campos derivados según las fórmulas del Excel.
 // Task 87: las tasas ya NO están fijas acá — vienen de la TasaCambio
@@ -236,6 +237,25 @@ export async function PUT(
       capacidadSalida = valorCap;
     }
 
+    // ─── CORES (Task 98, columna nueva de la Base) ───
+    // Vive en tabla APARTE (ProductCores, mismo patrón que CAPACIDAD —
+    // lección de la casa: columnas nuevas en Product rompen sin db push).
+    // Si el body la trae (celda editada en la tabla), se guarda; si falla,
+    // el guardado del producto NO se rompe por esto.
+    let coresSalida: string | null | undefined;
+    if (body.cores !== undefined) {
+      const valorCores =
+        body.cores === null || body.cores === ""
+          ? null
+          : String(body.cores).trim();
+      try {
+        await guardarCores(id, valorCores);
+      } catch {
+        // los cores son un extra: jamás frenan el guardado principal
+      }
+      coresSalida = valorCores;
+    }
+
     // ─── COSTO EDITADO Y GUARDADO (regla del usuario) ───
     // El cliente solo envía los campos que el admin tocó (objeto "dirty"),
     // así que si el body trae un campo de COSTO de entrada es porque el admin
@@ -275,6 +295,11 @@ export async function PUT(
     const productSalida: any = { ...updated, costosEditados };
     if (capacidadSalida !== undefined) {
       productSalida.capacidad = capacidadSalida;
+    }
+    // Task 98: devolver también los cores guardados (si esta edición los
+    // tocó) para que la celda quede actualizada al instante.
+    if (coresSalida !== undefined) {
+      productSalida.cores = coresSalida;
     }
 
     return NextResponse.json({ product: productSalida });

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { valoresDistinctCapacidad } from "@/lib/producto-capacidad";
+import { valoresDistinctCores } from "@/lib/producto-cores";
 
 // Columnas numéricas del modelo Product (devuelven min/max en lugar de distinct)
 const NUMERIC_COLUMNS = new Set([
@@ -128,6 +129,21 @@ export async function GET(req: NextRequest) {
     // filtro queda simplemente vacío (nada se rompe).
     if (column === "capacidad") {
       const valores = await valoresDistinctCapacidad();
+      return NextResponse.json({
+        type: "text",
+        column,
+        values: valores.map((v) => v.value),
+        counts: valores,
+        count: valores.length,
+      });
+    }
+
+    // Task 98: CORES vive en tabla APARTE (ProductCores, mismo patrón que
+    // CAPACIDAD), así que sus valores únicos salen de ahí. Si la tabla aún
+    // no existe, valoresDistinctCores devuelve [] y el filtro queda
+    // simplemente vacío (nada se rompe).
+    if (column === "cores") {
+      const valores = await valoresDistinctCores();
       return NextResponse.json({
         type: "text",
         column,

@@ -277,6 +277,26 @@ model ProductCapacidad {
 }
 
 // ============================================================
+// CORES POR PRODUCTO (Task 98, pedido del dueño)
+// Columna NUEVA "CORES" de la Base (texto libre: colores del
+// producto, ej: "BRANCO/AZUL", "PRETO", "CINZA"...). Queda entre
+// MODELO y CAPACIDAD en la tabla. MISMO PATRÓN que ProductCapacidad
+// y ProductHashtag: tabla APARTE para no tocar el modelo Product
+// (lección de la casa: columnas nuevas en Product rompían la app
+// cuando el db push no se había ejecutado). Es editable, se puede
+// filtrar y buscar. Si la tabla falta, se crea SOLA en el primer
+// uso (SQL idempotente en src/lib/producto-cores.ts) o al correr
+// `npx prisma db push`. Sin relación Prisma a propósito, por el
+// mismo motivo que CostoEditado.
+// ============================================================
+model ProductCores {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  valor     String?
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
 // ETIQUETAS DE COLOR CREADAS POR EL SUPREMO (Task 84)
 // Etiquetas ADICIONALES a las 4 fijas de siempre (verde, azul,
 // dorado, rojo). El supremo_admin las crea con el botón CREAR
