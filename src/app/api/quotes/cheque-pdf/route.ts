@@ -4,7 +4,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "../../../../lib/quote-number";
 import { guardarQuoteEmitido } from "../../../../lib/guardar-quote";
-import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY } from "../../../../lib/pdf/vizaPdfDesign";
+import { drawHeader, drawFooter, drawSectionTitle, formatPYG, formatDateEs, formatDateTimeEs, FOOTER_RESERVE, BLUE, GOLD, DARK, GREY, drawVendedor } from "../../../../lib/pdf/vizaPdfDesign";
+// Task 102: datos del vendedor que emite el presupuesto (nombre completo de
+// la sesión + sucursal + teléfono de la planilla FUN.VIZA).
+import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
 import { db } from "../../../../lib/db";
 import { leerHashtags } from "../../../../lib/producto-hashtag";
 import { textoHashtagSinGs } from "../../../../lib/hashtag-formato";
@@ -97,6 +100,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
+    // Task 102: datos del vendedor que emite (nombre + sucursal + teléfono).
+    const vendedor = await datosVendedorDeSesion(session);
+
     const body: ChequePdfPayload = await req.json();
 
     if (!body.productos || body.productos.length === 0) {
@@ -152,6 +158,10 @@ export async function POST(req: NextRequest) {
       formatDateEs
     );
     y = headerBottom + 26;
+
+    // ===== VENDEDOR (Task 102, pedido del dueño) =====
+    // Franja fina: nombre completo + sucursal + teléfono, igual en los 4 PDFs.
+    y = drawVendedor(doc, margin, y, contentW, vendedor) + 18;
 
     // ===== DATOS DEL CLIENTE =====
     doc.setFillColor(248, 249, 250);

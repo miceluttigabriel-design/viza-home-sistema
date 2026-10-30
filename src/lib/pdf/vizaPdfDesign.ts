@@ -75,6 +75,57 @@ export function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: 
   return by + bh;
 }
 
+// ─── VENDEDOR (Task 102, pedido del dueño) ───
+// Franja fina y elegante con el nombre completo del vendedor que emite el
+// presupuesto, su sucursal y su número de contacto (planilla FUN.VIZA).
+// Va justo debajo de las 3 cajas del encabezado, en TODOS los presupuestos
+// (PRESUPUESTO / SAFRA / CON CHEQUE / MAYORISTA). Discreta: 34pt de alto,
+// mismo estilo de etiqueta+valor que DATOS DEL CLIENTE, acento dorado VIZA.
+// Devuelve el Y inferior dibujado (para encadenar el contenido siguiente).
+export interface VendedorPdf {
+  nombre: string;
+  sucursal?: string;
+  telefono?: string;
+}
+
+const VENDEDOR_H = 34;
+
+export function drawVendedor(
+  doc: jsPDF,
+  margin: number,
+  y: number,
+  contentW: number,
+  vendedor: VendedorPdf
+): number {
+  const h = VENDEDOR_H;
+  // Fondo igual al de DATOS DEL CLIENTE + barra de acento dorada (marca VIZA)
+  doc.setFillColor(...LIGHT);
+  doc.roundedRect(margin, y, contentW, h, 6, 6, "F");
+  doc.setFillColor(...GOLD);
+  doc.rect(margin, y + 8, 3, h - 16, "F");
+
+  // Columnas: VENDEDOR (45%) · SUCURSAL (25%) · TELÉFONO (30%).
+  // Sucursal y teléfono se omiten si no hay dato (sin "—" innecesarios).
+  const cols: [string, string, number][] = [
+    ["VENDEDOR", (vendedor.nombre || "—").toUpperCase(), margin + 14],
+  ];
+  const c2 = margin + contentW * 0.45;
+  const c3 = margin + contentW * 0.72;
+  if (vendedor.sucursal) cols.push(["SUCURSAL", vendedor.sucursal.toUpperCase(), c2]);
+  if (vendedor.telefono) cols.push(["TELÉFONO / WHATSAPP", vendedor.telefono, c3]);
+  cols.forEach(([label, value, cx]) => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...GREY);
+    doc.text(label, cx, y + 14);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(...DARK);
+    doc.text(value, cx, y + 27);
+  });
+  return y + h;
+}
+
 export function drawSectionTitle(doc: jsPDF, text: string, x: number, y: number, w: number) {
   doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); doc.setTextColor(...BLUE);
   doc.text(text, x, y);

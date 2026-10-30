@@ -8,6 +8,12 @@ import { db } from "../../../../lib/db";
 import { leerHashtags } from "../../../../lib/producto-hashtag";
 import { textoHashtagSinGs } from "../../../../lib/hashtag-formato";
 import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../lib/pdf/vizaLogo";
+// Task 102 (pedido del dueño): franja del VENDEDOR (nombre completo +
+// sucursal + teléfono de la planilla FUN.VIZA) en todos los presupuestos.
+// drawVendedor vive en la lib de diseño compartida (misma franja en los 4
+// PDFs) y los datos se resuelven server-side, sin pedir nada al cliente.
+import { drawVendedor } from "../../../../lib/pdf/vizaPdfDesign";
+import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
 
 // Task 88 (pedido del dueño): el margen adicional del contado se muestra en
 // el presupuesto como "VZH 3" (Viza Home + el número del margen, SIN el
@@ -336,6 +342,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
+    // Task 102: datos del vendedor que emite (nombre de la sesión + sucursal
+    // de UsuarioSucursal/planilla FUN.VIZA + teléfono de la planilla).
+    const vendedor = await datosVendedorDeSesion(session);
+
     const body: PdfPayload = await req.json();
 
     if (!body.items || body.items.length === 0) {
@@ -392,6 +402,11 @@ export async function POST(req: NextRequest) {
     );
 
     let y = headerBottom + 26;
+
+    // ===== VENDEDOR (Task 102, pedido del dueño) =====
+    // Franja fina y bien ubicada: nombre completo del vendedor + sucursal +
+    // teléfono, debajo de las 3 cajas del encabezado, en TODOS los presupuestos.
+    y = drawVendedor(doc, margin, y, contentW, vendedor) + 18;
 
     // Salto de página respetando el espacio de la barra del footer
     const ensureSpace = (needed: number) => {
