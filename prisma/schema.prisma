@@ -456,3 +456,29 @@ model StockSucursal {
   @@unique([productId, sucursal])
   @@index([sucursal])
 }
+
+// ============================================================
+// Task 105 (pedido del dueño): REGISTRO DE IMPORTACIONES DE STOCK.
+// "cada vez que yo suba el excel para actualizar stock y agregar nuevos
+// productos seria importante que lo equipo tenga esto informado en su
+// panel... cantidad de productos nuevos agregados y horario de
+// actualizacion de stock... mini cuadrito lado izquierdo nel panel de
+// ventas".
+// UNA fila por importación aplicada (import-stock/apply): fecha/hora,
+// cuántos productos NUEVOS se agregaron y cuántos existentes se
+// actualizaron. El panel de ventas lee la última fila vía
+// GET /api/stock-import-info y la muestra en el mini cuadrito del header.
+// TABLA APARTE, sin relación a Product (misma lección de CostoEditado /
+// StockSucursal): tocar Product era lo que rompía la app. Si la tabla no
+// existe todavía, el código que la usa falla en silencio (try/catch) y
+// la app funciona igual que siempre; se crea SOLA en el primer uso (SQL
+// idempotente en src/lib/stock-import-log.ts) o al correr
+// `npx prisma db push`.
+// ============================================================
+model StockImportLog {
+  id            String   @id @default(cuid())
+  fecha         DateTime @default(now()) // momento de la importación aplicada
+  nuevos        Int      @default(0) // productos NUEVOS agregados por la planilla
+  actualizados  Int      @default(0) // productos existentes actualizados (stock/costo)
+  usuarioEmail  String?  // quién aplicó la importación (informativo)
+}

@@ -6,6 +6,7 @@ import { leerProductosProtegidos } from "@/lib/costo-editado";
 import { naceConMargenDefault } from "@/lib/gasto-adm";
 import { getTasasCambio, TASAS_DEFAULT, TasasCambio } from "@/lib/tasas-cambio";
 import { guardarStockPorSucursal, type GuardarSaldosResultado } from "@/lib/stock-sucursal"; // Task 98
+import { registrarImportacionStock } from "@/lib/stock-import-log"; // Task 105
 import { Prisma } from "@prisma/client";
 import {
   computeDbMarginStats,
@@ -611,6 +612,22 @@ export async function POST(req: NextRequest) {
           };
         }
       }
+    }
+
+    // ─── Task 105 (pedido del dueño): dejar constancia de la importación
+    // para el mini cuadrito del panel de ventas ("cada vez que actualize
+    // nuestro stock el ya se entera cuando fue nuestra ultima actualizacion").
+    // Se registra DESPUÉS de aplicar todo, con los conteos reales de esta
+    // planilla: creados (productos NUEVOS) + actualizados. Best-effort total:
+    // si el registro falla, la importación ya quedó hecha y responde OK igual.
+    try {
+      await registrarImportacionStock({
+        nuevos: creados,
+        actualizados: actualizadosCount,
+        usuarioEmail: (session.user as { email?: string | null })?.email || null,
+      });
+    } catch {
+      // El cuadrito informativo jamás rompe la importación.
     }
 
     return NextResponse.json({

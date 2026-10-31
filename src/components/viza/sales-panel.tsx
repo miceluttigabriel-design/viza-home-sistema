@@ -44,6 +44,7 @@ import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
 import { esProductoRegalo } from "@/lib/producto-regalo";
 import { StockSucursalChips } from "./stock-sucursal-chips";
+import { StockImportInfoCard } from "./stock-import-info-card";
 
 // FECHA DE EMISIÓN: fecha+hora LOCAL del dispositivo del vendedor, tomada en el
 // momento exacto de generar el PDF. La ruta del PDF la usa para el cuadro
@@ -1165,6 +1166,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 Hora local
               </span>
             </div>
+            {/* Task 105 (pedido del dueño): MINI CUADRITO "última actualización
+                de stock" — LADO IZQUIERDO del header, al lado del reloj (que
+                sigue PRIMERO, extremo izquierdo). Visible en TODAS las vistas
+                del panel de ventas: fecha/hora de la última subida del Excel
+                + cantidad de productos nuevos agregados. Solo lectura, no
+                toca nada del presupuesto. */}
+            <StockImportInfoCard />
             {/* REGLA DE ORO: los botones de navegación dependen del ROL, no de la pantalla.
                 El supremo admin es supremo en TODAS las pantallas (admin, ventas, gestión). */}
             {isSupremoRole && onGoGestion && (

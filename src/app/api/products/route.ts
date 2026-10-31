@@ -224,7 +224,8 @@ export async function GET(req: NextRequest) {
     // si aún no existe se crea sola y NUNCA rompe esta ruta (devuelve mapa
     // vacío y los productos salen sin cores, igual que antes). Sale
     // fusionada como campo "cores" de cada producto, igual que capacidad
-    // — la tabla del Panel ADM la muestra entre MODELO y CAPACIDAD, en
+    // — la tabla del Panel ADM la muestra detrás de REF.FABRICA (Task 105:
+    // "la coluna CORES hay que estar atras de la coluna REF.FABRICA"), en
     // el orden que pidió el dueño.
     const coresMap = await leerCores(products.map((p) => p.id));
 

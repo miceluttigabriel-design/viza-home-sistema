@@ -261,11 +261,15 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   // Orden de columnas a pedido del usuario (Task 97, despues del COD fijo):
   //   COD > PROVEDOR > GRUPO > SUBGRUPO > MARCA > TIPO PRODUCTO > MODELO >
-  //   > CORES > CAPACIDAD > REF.FABRICA > DESCRIPCION
+  //   > CAPACIDAD > REF.FABRICA > CORES > DESCRIPCION
   // Task 98: el dueño pidió "crea una coluna nombre CORES entre la coluna
   // MODELO y CAPACIDAD" — CORES es la columna NUEVA de esta tarea (texto
   // libre, vive en la tabla aparte ProductCores, mismo patrón que
   // CAPACIDAD). El resto del orden queda igual.
+  // Task 105: el dueño pidió "la coluna CORES hay que estar atras de la
+  // coluna REF.FABRICA" — CORES se movió a la DERECHA de REF.FABRICA
+  // (antes estaba entre MODELO y CAPACIDAD). Keys/campos/datos/filtros
+  // intactos: solo cambia la posición visual de la columna.
   // Cambios de esta tarea: PROVEDOR pasó al frente (antes iba detrás de
   // SUB-GRUPO); TIPO PRODUCTO y CAPACIDAD son las DOS columnas NUEVAS
   // ("hay que crear mas dos tanbien"); el resto queda igual. Solo cambia
@@ -300,14 +304,6 @@ const COLUMNS: ColDef[] = [
   // la planilla. (Task 99: MODELO vuelve a ser columna FIJA con celdas
   // doradas, igual que COD y ACCIONES; ver FROZEN_COLUMNS.)
   { key: "modelo", label: "MODELO", type: "text", group: "DATOS FINALES" },
-  // CORES (NUEVA, Task 98): a pedido del dueño, entre MODELO y CAPACIDAD.
-  // Dato de texto libre con los colores del producto ("BRANCO/AZUL",
-  // "PRETO"...). Vive en la tabla APARTE ProductCores (mismo patrón que
-  // CAPACIDAD: se activa sola, jamás toca el modelo Product ni rompe nada
-  // sin db push) y llega fusionada desde GET /api/products. Editable,
-  // filtrable y buscable como cualquier columna de texto. (Task 99: además
-  // es columna FIJA con celdas doradas; ver FROZEN_COLUMNS.)
-  { key: "cores", label: "CORES", type: "text", group: "DATOS FINALES" },
   // CAPACIDAD (NUEVA, Task 97): la segunda de las dos columnas nuevas del
   // pedido ("hay que crear mas dos tanbien"). Dato de texto libre que NO
   // existía ni en la planilla ni en la base (las capacidades hoy viven
@@ -320,6 +316,15 @@ const COLUMNS: ColDef[] = [
   // Renombre visual (pedido del usuario): se muestra REF.FABRICA; el campo/key
   // "referencia" queda intacto (datos, filtro, import y export sin cambios).
   { key: "referencia", label: "REF.FABRICA", type: "text", group: "DATOS" },
+  // CORES (NUEVA, Task 98; POSICIÓN Task 105): a pedido del dueño va ATRÁS
+  // (a la derecha) de REF.FABRICA — antes estaba entre MODELO y CAPACIDAD.
+  // Dato de texto libre con los colores del producto ("BRANCO/AZUL",
+  // "PRETO"...). Vive en la tabla APARTE ProductCores (mismo patrón que
+  // CAPACIDAD: se activa sola, jamás toca el modelo Product ni rompe nada
+  // sin db push) y llega fusionada desde GET /api/products. Editable,
+  // filtrable y buscable como cualquier columna de texto. (Task 99: además
+  // es columna FIJA con celdas doradas; ver FROZEN_COLUMNS.)
+  { key: "cores", label: "CORES", type: "text", group: "DATOS FINALES" },
   // Datos de identificacion
   { key: "name", label: "DESCRIPCION", type: "text", group: "DATOS" },
   // #HASHTAG (nueva, a pedido del usuario): promo por producto — valor en Gs
@@ -411,14 +416,19 @@ const COLUMNS: ColDef[] = [
 // COLUNAS TIENEN QUE ESTAR FIJAS Y EL FONDO DE LAS CELDAS DE ELLAS SON
 // DOURADO COMO LA DE COD Y ACCIONES". Vuelven a quedar fijas TODAS las del
 // bloque izquierdo, EN EL ORDEN real de la tabla: PROVEDOR > GRUPO >
-// SUB-GRUPO > MARCA > TIPO PRODUCTO > MODELO > CORES > CAPACIDAD >
-// REF.FABRICA. Las CELDAS de todas ellas llevan el DORADO del padrón
-// (#D9B86B, FROZEN_BG) igual que COD y ACCIONES — FROZEN_BLANCO queda VACIO.
+// SUB-GRUPO > MARCA > TIPO PRODUCTO > MODELO > CAPACIDAD > REF.FABRICA >
+// CORES (este último cambio de posición, Task 105: "la coluna CORES hay
+// que estar atras de la coluna REF.FABRICA"). Las CELDAS de todas ellas
+// llevan el DORADO del padrón (#D9B86B, FROZEN_BG) igual que COD y
+// ACCIONES — FROZEN_BLANCO queda VACIO.
 // La DESCRIPCION NO va en la lista: scrollea normal como cualquier columna
 // de la derecha (igual que #HASHTAG, STOCK, costos y precios).
 // Anchos: los mismos que usaba el bloque fijo hasta la Task 97; CORES
-// (columna nueva Task 98) entra con 110px, entre MODELO (130) y CAPACIDAD
-// (100). Bloque fijo total: ACCIONES 120 + COD 110 + 1040 = 1270px.
+// (columna nueva Task 98) sigue con 110px, ahora al FINAL del bloque,
+// detrás de REF.FABRICA (Task 105). El total no cambia (solo se reordenó):
+// ACCIONES 120 + COD 110 + 1040 = 1270px. IMPORTANTE: el orden de acá TIENE
+// que ser el MISMO de COLUMNS (las posiciones left fijas se acumulan en ese
+// orden — frozenLeftsDesde).
 const FROZEN_COLUMNS: { key: string; width: number }[] = [
   { key: "fabricante", width: 130 }, // PROVEDOR (FIJA, pedido del dueño Task 99)
   { key: "categoria", width: 100 },  // GRUPO (FIJA, pedido del dueño Task 99)
@@ -426,9 +436,9 @@ const FROZEN_COLUMNS: { key: string; width: number }[] = [
   { key: "marca", width: 100 },      // MARCA (FIJA, pedido del dueño Task 99)
   { key: "tipo", width: 120 },       // TIPO PRODUCTO (FIJA, pedido del dueño Task 98/99)
   { key: "modelo", width: 130 },     // MODELO (FIJA, pedido del dueño Task 99)
-  { key: "cores", width: 110 },      // CORES (FIJA Task 99; columna nueva Task 98)
   { key: "capacidad", width: 100 },  // CAPACIDAD (FIJA, pedido del dueño Task 98/99)
   { key: "referencia", width: 130 }, // REF.FABRICA (FIJA, pedido del dueño Task 99)
+  { key: "cores", width: 110 },      // CORES (FIJA Task 99; detrás de REF.FABRICA, Task 105)
 ];
 const FROZEN_START_LEFT = 230; // modo normal: ACCIONES (120px) + COD (110px)
 const FROZEN_BG = "#D9B86B";   // mismo dorado del encabezado / ACCIONES / COD
