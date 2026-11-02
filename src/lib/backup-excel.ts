@@ -23,6 +23,7 @@ import ExcelJS from "exceljs";
 import { db } from "@/lib/db";
 import { leerCapacidades } from "@/lib/producto-capacidad";
 import { leerCores } from "@/lib/producto-cores";
+import { ensureTablaPedidoEspecial } from "@/lib/pedido-especial";
 
 export interface BackupStats {
   fecha: string; // ISO
@@ -514,6 +515,51 @@ export async function generateBackupExcel(): Promise<BackupResult> {
       filasSeq
     )
   );
+
+  // ===== HOJA 15: PEDIDO ESPECIAL CONFIG (Task 113, pedido del dueño) =====
+  // Config de proveedores + tipos de producto + % del nuevo cotizador de
+  // PEDIDO ESPECIAL. PROTEGIDA con try/catch: si la tabla todavía no existe
+  // (nunca se usó el pedido especial y el db push no corrió), esta hoja se
+  // SALTA en silencio y el backup sigue igual — la automatización del correo
+  // (Task 112) NO se toca por nada del mundo.
+  try {
+    await ensureTablaPedidoEspecial();
+    const filasPE = await db.pedidoEspecialConfig.findMany({
+      orderBy: [{ proveedor: "asc" }, { tipoProducto: "asc" }],
+    });
+    const filasPedidoEspecial = filasPE.map((f) => ({
+      id: f.id,
+      proveedor: f.proveedor,
+      tipoProducto: f.tipoProducto,
+      pctContado: f.pctContado,
+      pct1A6: f.pct1A6,
+      pct7A13: f.pct7A13,
+      pct14A30: f.pct14A30,
+      createdAt: new Date(f.createdAt).toISOString(),
+      updatedAt: new Date(f.updatedAt).toISOString(),
+    }));
+    hojas.push(
+      await escribirHoja(
+        wb,
+        "Pedido Especial",
+        [
+          { header: "id", key: "id" },
+          { header: "proveedor", key: "proveedor" },
+          { header: "tipoProducto", key: "tipoProducto" },
+          { header: "pctContado", key: "pctContado" },
+          { header: "pct1A6", key: "pct1A6" },
+          { header: "pct7A13", key: "pct7A13" },
+          { header: "pct14A30", key: "pct14A30" },
+          { header: "createdAt", key: "createdAt", width: 24 },
+          { header: "updatedAt", key: "updatedAt", width: 24 },
+        ],
+        filasPedidoEspecial
+      )
+    );
+  } catch (error) {
+    // Tabla ausente o lectura fallida: la hoja se salta y nada más.
+    console.error("backup: hoja Pedido Especial omitida:", error);
+  }
 
   // ===== GENERAR EL BUFFER =====
   // writeBuffer() devuelve un ArrayBuffer/Buffer según el runtime; lo

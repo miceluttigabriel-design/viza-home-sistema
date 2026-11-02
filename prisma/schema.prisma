@@ -482,3 +482,49 @@ model StockImportLog {
   actualizados  Int      @default(0) // productos existentes actualizados (stock/costo)
   usuarioEmail  String?  // quién aplicó la importación (informativo)
 }
+
+// ============================================================
+// PEDIDO ESPECIAL (Task 113, pedido del dueño)
+// "nel panel del cotizador necesitamos crear una opcion para cotizar
+//  el PEDIDO ESPECIAL... pone el costo, selecciona el proveedor y el
+//  tipo de producto, escribe la descripcion, elige el tipo de plan y
+//  de acuerdo al % de nuestra base para aquel tipo de producto y
+//  proveedor genera el plan".
+// UNA fila por combinación (PROVEEDOR + TIPO DE PRODUCTO) con los %
+// que el admin carga en la Base — la MISMA estructura de % que los
+// productos de la BASE:
+//   pctContado = % CONTADO (como col AB)
+//   pct1A6     = % 1 A 6   (como col Y)
+//   pct7A13    = % 7 A 13  (como col Z)
+//   pct14A30   = % 14 A 30 (como col AA)
+// El vendedor NO escribe ningún %: elige proveedor + tipo y el sistema
+// aplica los % de acá con la MISMA fórmula de la BASE (márgenes
+// acumulativos por tramo + redondeo a miles) para calcular el plan.
+// TABLA APARTE A PROPÓSITO (misma lección de CostoEditado /
+// ProductHashtag / TasaCambio): el modelo Product queda EXACTAMENTE
+// igual que siempre, así que NINGUNA consulta existente puede
+// romperse. Si esta tabla todavía no existe en la base, el código que
+// la usa falla en silencio (try/catch) y la app funciona igual que
+// antes; se crea SOLA en el primer uso (SQL idempotente en
+// src/lib/pedido-especial.ts) o al correr `npx prisma db push`.
+// Sin relación Prisma a propósito, por el mismo motivo que
+// CostoEditado: tocar Product (columna nueva) era lo que rompía la
+// app cuando el db push no se había ejecutado.
+// ============================================================
+model PedidoEspecialConfig {
+  id           String   @id @default(cuid())
+  proveedor    String // "GAFRA", "SHOW", ... (lista derivada de estas filas)
+  tipoProducto String // "MOTOS", "ELECTRO", ...
+  // % como NÚMEROS LEGIBLES (10 = 10%, 2.5 = 2.5%) — lo que el admin
+  // escribe en el modal de la Base. El cálculo divide por 100
+  // (src/lib/pedido-especial-calc.ts); ojo: en Product los márgenes
+  // van como FRACCIÓN (0.10 = 10%) — unidades distintas a propósito.
+  pctContado   Float    @default(0) // % CONTADO (como col AB de la BASE)
+  pct1A6       Float    @default(0) // % 1 A 6   (como col Y)
+  pct7A13      Float    @default(0) // % 7 A 13  (como col Z)
+  pct14A30     Float    @default(0) // % 14 A 30 (como col AA)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([proveedor, tipoProducto])
+}

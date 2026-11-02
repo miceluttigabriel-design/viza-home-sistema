@@ -39,6 +39,7 @@ import { formatPYG } from "@/lib/format";
 import { PlanSafra } from "./plan-safra";
 import { PlanCheque } from "./plan-cheque";
 import { PlanMayorista } from "./plan-mayorista";
+import { PlanEspecial } from "./plan-especial";
 import { CostoInterno, extractCosto } from "./costo-interno";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
@@ -377,7 +378,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [calcDone, setCalcDone] = useState(false); // si ya se calculó al menos una vez
   const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [viewMode, setViewMode] = useState<"cotizador" | "safra" | "cheque" | "mayorista">("cotizador");
+  const [viewMode, setViewMode] = useState<"cotizador" | "safra" | "cheque" | "mayorista" | "especial">("cotizador");
   // Modal: cambiar mi propia contraseña (visible para todos los roles)
   const [cambiarContrasenaOpen, setCambiarContrasenaOpen] = useState(false);
   // CRM de mi sucursal (solo encargados): ranking de presupuestos SOLO LECTURA
@@ -1298,6 +1299,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             >
               MAYORISTA
             </button>
+            {/* === PEDIDO ESPECIAL (Task 113, pedido del dueño): costo → proveedor
+                → tipo de producto → descripción → plan; el sistema calcula con
+                los % de la Base para esa combinación (misma fórmula de siempre). === */}
+            <button
+              onClick={() => setViewMode("especial")}
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
+              style={
+                viewMode === "especial"
+                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
+                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
+              }
+            >
+              PEDIDO ESPECIAL
+            </button>
           </div>
 
           {/* LADO DERECHO: MOSTRADOR tasa de cambio + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión.
@@ -1568,6 +1583,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         {viewMode === "safra" && <PlanSafra sucursalMia={sucursalMia} />}
         {viewMode === "cheque" && <PlanCheque sucursalMia={sucursalMia} />}
         {viewMode === "mayorista" && <PlanMayorista sucursalMia={sucursalMia} />}
+        {viewMode === "especial" && <PlanEspecial />}
 
         {viewMode === "cotizador" && (
         <>
