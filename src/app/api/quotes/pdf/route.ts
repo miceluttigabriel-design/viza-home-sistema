@@ -165,7 +165,13 @@ const DORADO_TXT: RGB = [138, 109, 47]; // #8a6d2f
 const VALIDEZ_DIAS = 10;
 // Task 103 (una sola hoja): footer compacto (alto 64→56, aire abajo 34→30)
 // y espacio reservado para la franja del vendedor (encima de esta barra).
-const FOOTER_H = 56;
+// Task 106 (pedido del dueño): alto 56→70 para que entre DENTRO de la barra
+// la franja blanca con NUESTRAS SUCURSALES de izquierda a derecha en el
+// orden exacto que pidió: Casa Central Katuete · Suc. Katuete · Suc. Nueva
+// Esperanza · Suc. La Paloma · Suc. Saltos Del Guaira. La franja del
+// vendedor y el contenido se reacomodan solos (yVendedorSobreFooter recibe
+// FOOTER_H). SOLO el PRESUPUESTO: los otros 3 planes no se tocan.
+const FOOTER_H = 70;
 const FOOTER_BOTTOM_GAP = 30; // distancia del borde inferior de la barra al fin de página
 
 // Dibuja un path cerrado con curvas Bézier usando coordenadas absolutas.
@@ -339,6 +345,35 @@ function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: number, co
     pageH - 16,
     { align: "center" }
   );
+
+  // ─── NUESTRAS SUCURSALES (Task 106, pedido del dueño) ───
+  // Franja blanca al pie de la barra, con las 5 sucursales de IZQUIERDA a
+  // DERECHA en el orden exacto que pidió ("Casa Central Katuete, Suc.
+  // Katuete, Suc. Nueva Esperanza, Suc. La Paloma y Suc. Saltos Del
+  // Guaira"). SOLO VISUAL: no toca datos ni lógica del presupuesto.
+  // Píldora blanca + texto azul (legible sobre la mitad azul y la mitad
+  // dorada de la barra). Si el texto no entrase en el ancho, baja un poco
+  // la fuente y vuelve a medir (defensivo, no debería pasar en A4).
+  const SUCURSALES_PDF =
+    "NUESTRAS SUCURSALES:  Casa Central Katuete · Suc. Katuete · Suc. Nueva Esperanza · Suc. La Paloma · Suc. Saltos Del Guaira";
+  doc.setFont("helvetica", "bold");
+  let sucSize = 7;
+  doc.setFontSize(sucSize);
+  let sucW = doc.getTextWidth(SUCURSALES_PDF);
+  const sucMaxW = contentW - 28;
+  if (sucW > sucMaxW) {
+    sucSize = 6.2;
+    doc.setFontSize(sucSize);
+    sucW = doc.getTextWidth(SUCURSALES_PDF);
+  }
+  const sucPillW = sucW + 22;
+  const sucPillH = 12.5;
+  const sucPillX = x + (contentW - sucPillW) / 2;
+  const sucPillY = y + 50; // bajo las 2 filas de contacto (última base y+43)
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(sucPillX, sucPillY, sucPillW, sucPillH, 6.25, 6.25, "F");
+  doc.setTextColor(...BLUE);
+  doc.text(SUCURSALES_PDF, x + contentW / 2, sucPillY + 8.7, { align: "center" });
 }
 // POST /api/quotes/pdf - genera PDF del presupuesto profesional
 export async function POST(req: NextRequest) {
