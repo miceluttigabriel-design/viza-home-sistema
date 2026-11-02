@@ -22,7 +22,9 @@ import { db } from "@/lib/db";
 // Task 113 v3: "ESPECIAL" = presupuestos del PEDIDO ESPECIAL guardados
 // en el historial (tabla PedidoEspecialPresupuesto) — ESPECIAL-01, 02…,
 // cuenta PROPIA por usuario igual que los demás planes.
-const PLANES_VALIDOS = new Set(["PRESUPUESTO", "MAYOR", "SAFRA", "CHEQUE", "ESPECIAL"]);
+// Task 113 v6: "OC" = ORDEN DE COMPRA que el encargado de sucursal
+// genera del presupuesto VERIFICADO — OC-01, OC-02… (cuenta por usuario).
+const PLANES_VALIDOS = new Set(["PRESUPUESTO", "MAYOR", "SAFRA", "CHEQUE", "ESPECIAL", "OC"]);
 
 // Cache por instancia: la tabla solo se intenta crear una vez por proceso
 // (en Vercel cada instancia fría la re-crea solo si falta de verdad).

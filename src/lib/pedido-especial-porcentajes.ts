@@ -10,11 +10,15 @@
 //
 // REGLA DE CÁLCULO = la MISMA que ya usa el sistema para productos
 // sin margen propio (src/app/api/products/import-margins/shared.ts,
-// "MÁRGENES AUTOMÁTICAS"): PROMEDIO de los productos del grupo con
-// margen > 0 → si el grupo no tiene, promedio de todo el TIPO →
-// si tampoco hay, promedio GENERAL. Cada campo cae de forma
-// independiente (ej: el técnico puede venir del TIPO y el contado
-// del par proveedor+tipo).
+// "MÁRGENES AUTOMÁTICAS") + la peldaña del PROVEEDOR que pidió el
+// dueño (Task 113 v6: "en margen se usa conforme de proveedor"):
+//   PROMEDIO de los productos del PAR proveedor+tipo con margen > 0
+//   → si el par no tiene, promedio de TODO EL PROVEEDOR (todos sus
+//     productos, todos sus tipos — el margen es de él)
+//   → si tampoco hay, promedio de todo el TIPO
+//   → si tampoco hay, promedio GENERAL.
+// Cada campo cae de forma independiente (ej: el técnico puede venir
+// del TIPO y el contado del par proveedor+tipo).
 //
 // UNIDADES (verificadas contra la planilla real LISTA VIZA HOME):
 //   · marginContado / pct1A6 / pct7A13 / pct14A30 / margenTecnico
@@ -31,6 +35,7 @@
 // ============================================================
 import { db } from "@/lib/db";
 import { listarCombinaciones } from "@/lib/pedido-especial";
+import { listarTiposExtra } from "@/lib/pedido-especial-tipos";
 
 // Los 6 % legibles que usa el cálculo del pedido especial.
 export interface PorcentajesPedidoEspecial {
@@ -123,9 +128,10 @@ function promediarGrupo(filas: FilaPorcentajeProducto[]): PromediosGrupo {
 }
 
 // El corazón PURA (sin DB): filas de Product → promedios por
-// proveedor+tipo, por tipo y global. Testeable sin base de datos.
+// proveedor+tipo, por proveedor, por tipo y global. Testeable sin base.
 export interface MapaPorcentajes {
   porPar: Map<string, PromediosGrupo>; // clave "FAB||TIPO"
+  porProveedor: Map<string, PromediosGrupo>; // clave "FAB" (Task 113 v6)
   porTipo: Map<string, PromediosGrupo>; // clave "TIPO"
   global: PromediosGrupo;
 }
@@ -134,6 +140,7 @@ export function calcularPromediosPorcentajes(
   filas: FilaPorcentajeProducto[]
 ): MapaPorcentajes {
   const porPar = new Map<string, FilaPorcentajeProducto[]>();
+  const porProveedor = new Map<string, FilaPorcentajeProducto[]>();
   const porTipo = new Map<string, FilaPorcentajeProducto[]>();
   const todas: FilaPorcentajeProducto[] = [];
 
@@ -146,6 +153,9 @@ export function calcularPromediosPorcentajes(
     const arrPar = porPar.get(clavePar) || [];
     arrPar.push(f);
     porPar.set(clavePar, arrPar);
+    const arrFab = porProveedor.get(fab) || [];
+    arrFab.push(f);
+    porProveedor.set(fab, arrFab);
     const arrTip = porTipo.get(tip) || [];
     arrTip.push(f);
     porTipo.set(tip, arrTip);
@@ -153,20 +163,26 @@ export function calcularPromediosPorcentajes(
 
   const promediosPorPar = new Map<string, PromediosGrupo>();
   for (const [clave, filasPar] of porPar) promediosPorPar.set(clave, promediarGrupo(filasPar));
+  const promediosPorProveedor = new Map<string, PromediosGrupo>();
+  for (const [clave, filasFab] of porProveedor) promediosPorProveedor.set(clave, promediarGrupo(filasFab));
   const promediosPorTipo = new Map<string, PromediosGrupo>();
   for (const [clave, filasTipo] of porTipo) promediosPorTipo.set(clave, promediarGrupo(filasTipo));
 
   return {
     porPar: promediosPorPar,
+    porProveedor: promediosPorProveedor,
     porTipo: promediosPorTipo,
     global: promediarGrupo(todas),
   };
 }
 
 // Convierte un grupo (fracción) a los % LEGIBLES con la cascada
-// par → tipo → global, campo por campo. El respaldo (config del admin)
-// entra solo si la cascada dio 0 en ese campo.
-function resolverGrupo(
+// par → proveedor → tipo → global, campo por campo (Task 113 v6:
+// "en margen se usa conforme de proveedor" — si el par no tiene dato,
+// gana el promedio del PROVEEDOR antes que el del tipo). El respaldo
+// (config del admin) entra solo si la cascada dio 0 en ese campo.
+// Exportada para la prueba de humo (mismo comportamiento en prod).
+export function resolverGrupo(
   mapa: MapaPorcentajes,
   fabricante: string,
   tipo: string,
@@ -175,18 +191,29 @@ function resolverGrupo(
   const fab = normalizarClave(fabricante);
   const tip = normalizarClave(tipo);
   const par = mapa.porPar.get(`${fab}||${tip}`) || GRUPO_VACIO;
+  const prov = mapa.porProveedor.get(fab) || GRUPO_VACIO;
   const tipoSolo = mapa.porTipo.get(tip) || GRUPO_VACIO;
   const global = mapa.global || GRUPO_VACIO;
 
-  // Cada campo: par → tipo → global → respaldo (config) → 0.
+  // Cada campo: par → proveedor → tipo → global → respaldo (config) → 0.
   const porCascada = (
     delPar: number,
+    delProveedor: number,
     delTipo: number,
     delGlobal: number,
     delRespaldo: number | undefined
   ): number => {
     // Los promedios de contado/tramos/técnico vienen en FRACCIÓN → ×100.
-    const elegido = delPar > 0 ? delPar : delTipo > 0 ? delTipo : delGlobal > 0 ? delGlobal : 0;
+    const elegido =
+      delPar > 0
+        ? delPar
+        : delProveedor > 0
+          ? delProveedor
+          : delTipo > 0
+            ? delTipo
+            : delGlobal > 0
+              ? delGlobal
+              : 0;
     const legible = Math.round(elegido * 1_000_000) / 10_000; // fracción → % legible
     if (legible > 0) return legible;
     const r = Number(delRespaldo) || 0;
@@ -194,16 +221,29 @@ function resolverGrupo(
   };
 
   // SAFRA ya está en unidades legibles (7 = 7%): sin ×100.
-  const safraElegido = par.safra > 0 ? par.safra : tipoSolo.safra > 0 ? tipoSolo.safra : global.safra > 0 ? global.safra : 0;
+  const safraElegido =
+    par.safra > 0
+      ? par.safra
+      : prov.safra > 0
+        ? prov.safra
+        : tipoSolo.safra > 0
+          ? tipoSolo.safra
+          : global.safra > 0
+            ? global.safra
+            : 0;
   const safraFinal =
-    safraElegido > 0 ? Math.round(safraElegido * 1_000_000) / 1_000_000 : Number(respaldo?.pctSafra) > 0 ? Number(respaldo?.pctSafra) : 0;
+    safraElegido > 0
+      ? Math.round(safraElegido * 1_000_000) / 1_000_000
+      : Number(respaldo?.pctSafra) > 0
+        ? Number(respaldo?.pctSafra)
+        : 0;
 
   return {
-    pctContado: porCascada(par.m, tipoSolo.m, global.m, respaldo?.pctContado),
-    pct1A6: porCascada(par.y, tipoSolo.y, global.y, respaldo?.pct1A6),
-    pct7A13: porCascada(par.z, tipoSolo.z, global.z, respaldo?.pct7A13),
-    pct14A30: porCascada(par.aa, tipoSolo.aa, global.aa, respaldo?.pct14A30),
-    pctTecnico: porCascada(par.tecnico, tipoSolo.tecnico, global.tecnico, respaldo?.pctTecnico),
+    pctContado: porCascada(par.m, prov.m, tipoSolo.m, global.m, respaldo?.pctContado),
+    pct1A6: porCascada(par.y, prov.y, tipoSolo.y, global.y, respaldo?.pct1A6),
+    pct7A13: porCascada(par.z, prov.z, tipoSolo.z, global.z, respaldo?.pct7A13),
+    pct14A30: porCascada(par.aa, prov.aa, tipoSolo.aa, global.aa, respaldo?.pct14A30),
+    pctTecnico: porCascada(par.tecnico, prov.tecnico, tipoSolo.tecnico, global.tecnico, respaldo?.pctTecnico),
     pctSafra: safraFinal,
   };
 }
@@ -245,9 +285,14 @@ export interface ParConPorcentajes extends PorcentajesPedidoEspecial {
 // Mapa COMPLETO de la BASE para la pantalla: un registro por cada par
 // (fabricante, tipo) real de los productos, con los % ya resueltos
 // (promedio de la BASE + respaldo del panel del admin). NUNCA lanza.
+// Task 113 v6: además, un registro por cada TIPO CREADO por los
+// vendedores (tabla PedidoEspecialTipo, tipos que no están en la BASE)
+// × cada proveedor real — con los % de la cascada (par vacío → tipo
+// vacío → PROMEDIO GENERAL de la BASE). Así la pantalla encuentra los %
+// de un tipo recién creado exactamente igual que los de la BASE.
 export async function mapaPorcentajesDeLaBase(): Promise<ParConPorcentajes[]> {
   try {
-    const [filas, combinaciones] = await Promise.all([
+    const [filas, combinaciones, tiposExtra] = await Promise.all([
       db.product.findMany({
         where: { fabricante: { not: null }, tipo: { not: null } },
         select: {
@@ -262,6 +307,7 @@ export async function mapaPorcentajesDeLaBase(): Promise<ParConPorcentajes[]> {
         },
       }),
       listarCombinaciones().catch(() => []),
+      listarTiposExtra().catch(() => [] as string[]),
     ]);
     const mapa = calcularPromediosPorcentajes(filas);
 
@@ -281,12 +327,31 @@ export async function mapaPorcentajesDeLaBase(): Promise<ParConPorcentajes[]> {
 
     // Un registro por par REAL (texto original de la BASE, sin duplicados).
     const pares = new Map<string, { fabricante: string; tipo: string }>();
+    const proveedoresReales = new Set<string>();
     for (const f of filas) {
       const fab = String(f.fabricante || "").trim();
       const tip = String(f.tipo || "").trim();
       if (!fab || !tip) continue;
+      proveedoresReales.add(fab);
       const clave = `${normalizarClave(fab)}||${normalizarClave(tip)}`;
       if (!pares.has(clave)) pares.set(clave, { fabricante: fab, tipo: tip });
+    }
+
+    // TIPOS CREADOS (v6): un registro por (proveedor real × tipo extra).
+    // Solo si el tipo extra NO existe ya en la BASE (por las dudas).
+    const tiposBaseNorm = new Set(
+      Array.from(pares.values()).map((p) => normalizarClave(p.tipo))
+    );
+    for (const extra of tiposExtra) {
+      if (tiposBaseNorm.has(normalizarClave(extra))) continue;
+      for (const fab of Array.from(proveedoresReales).sort()) {
+        const clave = `${normalizarClave(fab)}||${normalizarClave(extra)}`;
+        if (!pares.has(clave)) pares.set(clave, { fabricante: fab, tipo: extra });
+      }
+      // Y también sin proveedor (clave fab ""), por si la pantalla algún
+      // día busca el tipo solo: cae al promedio general igual.
+      const claveSolo = `||${normalizarClave(extra)}`;
+      if (!pares.has(claveSolo)) pares.set(claveSolo, { fabricante: "", tipo: extra });
     }
 
     const salida: ParConPorcentajes[] = [];

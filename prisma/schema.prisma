@@ -553,9 +553,17 @@ model PedidoEspecialConfig {
 // es OBLIGATORIO: ahí el vendedor anota el N° de CRÉDITO con el que
 // salió el pedido, y el encargado de sucursal lo verifica después
 // (queda guardado en `idCtr` y se muestra en el historial).
-// El encargado de sucursal (lista ENCARGADOS_SUCURSAL) ve el
-// historial de SU sucursal SOLO LECTURA; el vendedor ve el propio
-// con el botón MARCAR APROBADO; admin/supremo ven todo.
+// El encargado de sucursal (lista ENCARGADOS_SUCURSAL) ve el historial
+// de TODAS las sucursales con FILTRO por sucursal (Task 113 v6: por
+// defecto ve la SUYA para facilitar); el vendedor ve el propio con el
+// botón MARCAR APROBADO; admin/supremo ven todo.
+//
+// FLUJO DE ESTADOS (Task 113 v6, pedido del dueño):
+//   GENERADO (vendedor guarda)
+//     → APROBADO (vendedor, con ID CTR obligatorio)
+//     → VERIFICADO (encargado de la sucursal — "primer el marca VERIFICADO")
+//     → ORDEN DE COMPRA (el encargado genera la orden de compra en PDF
+//       de ese presupuesto específico; queda numerada OC-01, OC-02…).
 //
 // TABLA AUTO-GESTIONADA igual que PedidoEspecialConfig: se crea
 // SOLA en el primer uso (SQL idempotente en
@@ -599,16 +607,44 @@ model PedidoEspecialPresupuesto {
   // fecha de inicio sin entrega, entrada, recargo, tasa, etc.) para
   // poder re-mostrar el plan idéntico más adelante.
   detalle        String    @default("")
-  estado         String    @default("GENERADO") // GENERADO | APROBADO
+  estado         String    @default("GENERADO") // GENERADO | APROBADO | VERIFICADO
   // Task 113 v5 (pedido del dueño): N° de CRÉDITO ("ID CTR") que el
   // vendedor ESCRIBE OBLIGATORIAMENTE al marcar el presupuesto como
   // APROBADO — después el encargado de sucursal lo verifica. Va vacío
   // mientras el presupuesto está GENERADO.
   idCtr          String    @default("")
   fechaAprobado  DateTime?
+  // Task 113 v6 (pedido del dueño): el ENCARGADO de la sucursal marca
+  // VERIFICADO el presupuesto APROBADO (con el ID CTR a la vista) y
+  // después GENERA LA ORDEN DE COMPRA de ese presupuesto específico.
+  fechaVerificado     DateTime?
+  verificadoPorEmail  String    @default("")
+  verificadoPorNombre String    @default("")
+  ordenGenerada       Boolean   @default(false)
+  ordenNumero         String    @default("") // "OC-01", "OC-02"… (QuoteSequence plan "OC")
+  ordenFecha          DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   @@index([vendedorEmail])
   @@index([sucursal])
+}
+
+// ─── PEDIDO ESPECIAL — TIPOS DE PRODUCTO CREADOS POR EL VENDEDOR ───
+// Task 113 v6 (pedido del dueño): "en tipo de producto quiero que tenga
+// opción de crear también si es que no tenemos catalogado este tipo de
+// producto". Los tipos de la BASE salen de la columna TIPO de Product
+// (DISTINCT); los tipos que alguien CREA desde la pantalla (porque no
+// existen todavía) viven acá y aparecen SIEMPRE en el dropdown, para
+// todos los proveedores. El cálculo de un tipo nuevo usa el promedio
+// GENERAL de la BASE (cascada par → proveedor → tipo → general: no hay
+// productos de ese tipo todavía, así que cae al general).
+// TABLA AUTO-GESTIONADA (mismo patrón): CREATE TABLE IF NOT EXISTS en
+// src/lib/pedido-especial.ts — sin pasos manuales, nunca rompe la app.
+model PedidoEspecialTipo {
+  id        String   @id @default(cuid())
+  nombre    String   @unique // "ELECTRO", "HERRAMIENTAS"… (mayúsculas)
+  createdBy String   @default("") // email de quien lo creó (referencia)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

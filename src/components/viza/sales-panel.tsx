@@ -1588,6 +1588,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             userEmail={user.email}
             puedeVerTodo={esEncargadoCrm || isAdmin}
             puedeAprobarTodo={isAdmin}
+            sucursalEncargado={esEncargadoCrm ? sucursalDelEncargado : null}
           />
         )}
 

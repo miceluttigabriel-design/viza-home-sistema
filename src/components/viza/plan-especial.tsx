@@ -15,6 +15,10 @@ import {
   History,
   CheckCircle2,
   Printer,
+  ShieldCheck,
+  ShoppingCart,
+  Plus,
+  Filter,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePedidoEspecialStore } from "@/store/pedido-especial";
@@ -72,6 +76,20 @@ import { formatPYG } from "@/lib/format";
 // del presupuesto guardado sale con el MISMO formato del PRESUPUESTO
 // DE VENTA (tabla de productos + TOTAL CONTADO + OPCIONES DE
 // FINANCIACIÓN, ver src/lib/pdf/pedido-especial-pdf.ts).
+// Task 113 v6 (pedido del dueño):
+//   1. El ENCARGADO ve el historial de TODAS las sucursales con un
+//      FILTRO por sucursal ("hay que crear un filtro nel historial para
+//      que el pueda ver apenas en su sucursal también para facilitar");
+//      arranca filtrado en la SUYA.
+//   2. TIPO DE PRODUCTO: opción de CREAR el tipo si no está catalogado
+//      ("quiero que tenga opción de crear tanbien") — queda para todos.
+//   3. MARGEN conforme al PROVEEDOR (se aplica en la API de porcentajes).
+//   4. FLUJO: vendedor APRUEBA (con ID CTR) → encargado marca
+//      VERIFICADO → encargado GENERA LA ORDEN DE COMPRA (PDF nueva,
+//      numerada OC-01, OC-02…) de ese presupuesto en específico.
+//   5. El PDF del presupuesto muestra los cálculos de abajo (cronograma
+//      SAFRA) CONFORME EL PANEL: mismas columnas PAGO/INTERÉS/SALDO y
+//      misma fila de total del plan.
 // El campo de costo (y la entrada del SAFRA) formatean SOLOS los miles
 // con puntito mientras se escribe: "15000000" → "15.000.000".
 
@@ -182,6 +200,9 @@ interface CatalogoApi {
   proveedores: string[];
   tiposPorProveedor: Record<string, string[]>;
   tipos: string[];
+  // Task 113 v6: tipos de producto CREADOS por los usuarios desde esta
+  // pantalla (no están en la BASE todavía; salen marcados con (nuevo)).
+  tiposExtra: string[];
   // Task 113 v4: los % de cada par (fabricante, tipo), resueltos en el
   // servidor desde la BASE (promedio de los productos del par + respaldo
   // del panel del admin). Números LEGIBLES (10 = 10%).
@@ -203,6 +224,7 @@ const CATALOGO_VACIO: CatalogoApi = {
   proveedores: [],
   tiposPorProveedor: {},
   tipos: [],
+  tiposExtra: [],
   porcentajes: [],
 };
 
@@ -307,16 +329,22 @@ export function PlanEspecial({
   userEmail = "",
   puedeVerTodo = false,
   puedeAprobarTodo = false,
+  sucursalEncargado = null,
 }: {
   // Email del usuario logueado (para saber cuáles presupuestos son suyos:
   // el dueño puede marcarlos APROBADO).
   userEmail?: string;
-  // true = encargado de sucursal / admin: el historial muestra TODOS los
-  // presupuestos de su sucursal (lo decide la API; acá solo ordena la
-  // pantalla con el historial ARRIBA, que es lo que el encargado busca).
+  // true = encargado de sucursal / admin: el historial muestra TODAS las
+  // sucursales con FILTRO por sucursal (Task 113 v6); para el encargado
+  // arranca filtrado en la SUYA (lo decide la API + prop de abajo).
   puedeVerTodo?: boolean;
-  // true = admin/supremo: puede aprobar cualquier presupuesto.
+  // true = admin/supremo: puede aprobar cualquier presupuesto (y
+  // verificar/generar orden en cualquiera).
   puedeAprobarTodo?: boolean;
+  // Sucursal del ENCARGADO logueado (ENCARGADOS_SUCURSAL): filtra su
+  // vista por defecto y le da el poder de VERIFICAR / generar la ORDEN
+  // DE COMPRA de los presupuestos de su sucursal (Task 113 v6).
+  sucursalEncargado?: string | null;
 }) {
   const {
     modoCosto,
@@ -353,6 +381,10 @@ export function PlanEspecial({
   const [catalogo, setCatalogo] = useState<CatalogoApi>(CATALOGO_VACIO);
   const [cambioUS, setCambioUS] = useState(6000);
   const [cargandoConfig, setCargandoConfig] = useState(true);
+  // Task 113 v6: modal de CREAR TIPO DE PRODUCTO (si no está catalogado).
+  const [modalCrearTipo, setModalCrearTipo] = useState(false);
+  const [nuevoTipoStr, setNuevoTipoStr] = useState("");
+  const [creandoTipo, setCreandoTipo] = useState(false);
   const hoy = useMemo(() => hoyISO(), []);
 
   const cargarConfig = async () => {
@@ -373,6 +405,8 @@ export function PlanEspecial({
             ? dataCat.tiposPorProveedor
             : {},
         tipos: Array.isArray(dataCat.tipos) ? dataCat.tipos : [],
+        // Task 113 v6: tipos CREADOS por los usuarios (salen con (nuevo)).
+        tiposExtra: Array.isArray(dataCat.tiposExtra) ? dataCat.tiposExtra : [],
         porcentajes: Array.isArray(dataCat.porcentajes) ? dataCat.porcentajes : [],
       });
       const resTasa = await fetch("/api/config-cambio");
@@ -398,8 +432,17 @@ export function PlanEspecial({
   const [vistaHistorial, setVistaHistorial] = useState<string>("MIS");
   const [sucursalHistorial, setSucursalHistorial] = useState<string | null>(null);
   const [cargandoHistorial, setCargandoHistorial] = useState(true);
+  // Task 113 v6 (pedido del dueño): FILTRO POR SUCURSAL del historial.
+  // El encargado/admin ve TODAS las sucursales; el filtro ("para que el
+  // pueda ver apenas en su sucursal también para facilitar") arranca en
+  // la sucursal del ENCARGADO y lo puede cambiar cuando quiera.
+  const [filtroSucursal, setFiltroSucursal] = useState<string>("");
+  const filtroInicializado = useRef(false);
   const [guardando, setGuardando] = useState(false);
   const [aprobandoId, setAprobandoId] = useState<string | null>(null);
+  // Task 113 v6: estado de VERIFICAR y de GENERAR ORDEN DE COMPRA.
+  const [verificandoId, setVerificandoId] = useState<string | null>(null);
+  const [ordenId, setOrdenId] = useState<string | null>(null);
   // Task 113 v4: el último presupuesto GUARDADO (para el botón IMPRIMIR
   // que aparece justo después de guardar) y el estado del PDF en curso.
   const [ultimoGuardado, setUltimoGuardado] = useState<{ id: string; numero: string } | null>(null);
@@ -410,10 +453,14 @@ export function PlanEspecial({
   const [modalAprobacion, setModalAprobacion] = useState<{ id: string; numero: string } | null>(null);
   const [idCtrStr, setIdCtrStr] = useState("");
 
-  const cargarHistorial = async () => {
+  // Carga el historial. Task 113 v6: con FILTRO de sucursal opcional
+  // (?sucursal=XXX) — el encargado/admin puede ver todas o una sola.
+  const cargarHistorial = async (filtroSucursalParam?: string) => {
     setCargandoHistorial(true);
     try {
-      const res = await fetch("/api/pedido-especial/presupuestos");
+      const filtro = String(filtroSucursalParam ?? (filtroSucursal || "")).trim();
+      const qs = filtro ? `?sucursal=${encodeURIComponent(filtro)}` : "";
+      const res = await fetch(`/api/pedido-especial/presupuestos${qs}`);
       const data = await res.json().catch(() => ({}));
       setHistorial(Array.isArray(data.presupuestos) ? data.presupuestos : []);
       if (typeof data.vista === "string") setVistaHistorial(data.vista);
@@ -428,6 +475,24 @@ export function PlanEspecial({
   useEffect(() => {
     cargarHistorial();
   }, []);
+
+  // Task 113 v6: el encargado arranca viendo SU sucursal (para
+  // facilitar — pedido del dueño); cambiando el filtro ve las demás.
+  // Se aplica UNA sola vez, cuando la API contesta quién es.
+  useEffect(() => {
+    if (filtroInicializado.current) return;
+    if (vistaHistorial === "TODAS" && sucursalHistorial) {
+      filtroInicializado.current = true;
+      setFiltroSucursal(sucursalHistorial);
+      cargarHistorial(sucursalHistorial);
+    }
+  }, [vistaHistorial, sucursalHistorial]);
+
+  // Cambiar el filtro de sucursal del historial ("" = TODAS).
+  const cambiarFiltroSucursal = (valor: string) => {
+    setFiltroSucursal(valor);
+    cargarHistorial(valor);
+  };
 
   // GUARDAR el presupuesto actual en el historial (queda GENERADO).
   // El servidor RECALCULA con los % de la BASE y da el número ESPECIAL-XX.
@@ -540,6 +605,116 @@ export function PlanEspecial({
   const puedeAprobarFila = (p: PresupuestoPedidoEspecial): boolean =>
     p.estado === "GENERADO" &&
     (puedeAprobarTodo || (!!miEmail && p.vendedorEmail === miEmail));
+
+  // ─── VERIFICADO (Task 113 v6, pedido del dueño) ───
+  // "primer el marca VERIFICADO OK": el ENCARGADO DE LA SUCURSAL del
+  // presupuesto (o admin/supremo, la excepción de siempre) confirma el
+  // presupuesto APROBADO — con el ID CTR ya a la vista en la fila.
+  const puedeVerificarFila = (p: PresupuestoPedidoEspecial): boolean =>
+    p.estado === "APROBADO" &&
+    (puedeAprobarTodo ||
+      (!!sucursalEncargado && !!p.sucursal && p.sucursal === sucursalEncargado));
+
+  // ─── ORDEN DE COMPRA (Task 113 v6, pedido del dueño) ───
+  // "despues que el tenga la opcion de generar ordem de compra": sobre
+  // el presupuesto VERIFICADO, mismo permiso que verificar. Si ya tiene
+  // orden, el botón sirve para VOLVER A VERLA (misma orden, mismo n°).
+  const puedeGenerarOrdenFila = (p: PresupuestoPedidoEspecial): boolean =>
+    p.estado === "VERIFICADO" &&
+    (puedeAprobarTodo ||
+      (!!sucursalEncargado && !!p.sucursal && p.sucursal === sucursalEncargado));
+
+  // MARCAR VERIFICADO (encargado/admin). Sin modal: es un paso de
+  // confirmación directo sobre el APROBADO que ya tiene su ID CTR.
+  const verificarPresupuesto = async (id: string) => {
+    if (verificandoId) return;
+    setVerificandoId(id);
+    try {
+      const res = await fetch("/api/pedido-especial/presupuestos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, accion: "verificar" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+      toast.success("Presupuesto marcado como VERIFICADO");
+      cargarHistorial();
+    } catch (error) {
+      toast.error(`No se pudo verificar: ${(error as Error).message}`);
+    } finally {
+      setVerificandoId(null);
+    }
+  };
+
+  // GENERAR ORDEN DE COMPRA (encargado/admin) — PDF nueva numerada
+  // OC-01, OC-02… de ESE presupuesto. Sale del SERVIDOR con los valores
+  // congelados; si ya tenía orden, re-descarga la misma.
+  const generarOrdenCompra = async (id: string) => {
+    if (ordenId) return;
+    setOrdenId(id);
+    try {
+      const res = await fetch("/api/pedido-especial/presupuestos/orden", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Error ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const ventana = window.open(url, "_blank");
+      if (!ventana) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "VIZA-Orden-Compra.pdf";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast.success("Orden de compra lista");
+      cargarHistorial();
+    } catch (error) {
+      toast.error(`No se pudo generar la orden: ${(error as Error).message}`);
+    } finally {
+      setOrdenId(null);
+    }
+  };
+
+  // ─── CREAR TIPO DE PRODUCTO (Task 113 v6, pedido del dueño) ───
+  // "en tipo de producto quiero que tenga opción de crear también si es
+  // que no temos cadastrado este tipo de producto": si el tipo no está
+  // en la BASE, se crea desde acá y queda disponible para todos.
+  const crearTipoProducto = async () => {
+    const nombre = nuevoTipoStr.trim();
+    if (!nombre || creandoTipo) return;
+    setCreandoTipo(true);
+    try {
+      const res = await fetch("/api/pedido-especial/catalogo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: nombre }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+      const creado = String(data?.tipo || nombre);
+      await cargarConfig();
+      setTipoProducto(creado);
+      setModalCrearTipo(false);
+      setNuevoTipoStr("");
+      toast.success(
+        data?.yaExistia
+          ? `El tipo ${creado} ya existía: quedó elegido`
+          : `Tipo ${creado} creado y elegido`
+      );
+    } catch (error) {
+      toast.error(`No se pudo crear el tipo: ${(error as Error).message}`);
+    } finally {
+      setCreandoTipo(false);
+    }
+  };
 
   // === Listas de PROVEEDOR y TIPO — ESTIRADAS DE LA BASE ===
   // Si el catálogo de la BASE todavía no cargó (o falla), respaldo con las
@@ -707,18 +882,30 @@ export function PlanEspecial({
   const fmtUS = (n: number) => "US$ " + n.toLocaleString("es-PY");
 
   // ═══ SECCIÓN HISTORIAL (Task 113 v3, pedido del dueño) ═══
-  // El encargado de sucursal ve el historial de SU sucursal con la
-  // situación de cada presupuesto (GENERADO / APROBADO). El vendedor ve
-  // el suyo y marca APROBADO los que quiera. Un solo JSX: para el
-  // encargado/admin va ARRIBA en la pantalla, para el vendedor ABAJO.
+  // El encargado de sucursal ve el historial de TODAS las sucursales con
+  // FILTRO por sucursal (Task 113 v6: arranca en la suya "para facilitar")
+  // y la situación de cada presupuesto (GENERADO / APROBADO / VERIFICADO
+  // + ORDEN GENERADA). El vendedor ve el suyo y marca APROBADO los que
+  // quiera. Un solo JSX: para el encargado/admin va ARRIBA en la
+  // pantalla, para el vendedor ABAJO.
   const tituloHistorial =
-    vistaHistorial === "SUCURSAL" && sucursalHistorial
-      ? ` · ${sucursalHistorial}`
+    filtroSucursal
+      ? ` · ${filtroSucursal}`
       : vistaHistorial === "TODAS"
         ? " · TODAS LAS SUCURSALES"
         : "";
+  // Opciones del filtro: TODAS + las sucursales que aparecen en el
+  // historial (incluida la propia del encargado, que la API le informa).
+  const sucursalesFiltro = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of historial) if (p.sucursal) set.add(p.sucursal);
+    if (sucursalEncargado) set.add(sucursalEncargado);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [historial, sucursalEncargado]);
   const generados = historial.filter((p) => p.estado === "GENERADO").length;
   const aprobados = historial.filter((p) => p.estado === "APROBADO").length;
+  const verificados = historial.filter((p) => p.estado === "VERIFICADO").length;
+  const ordenes = historial.filter((p) => p.ordenGenerada).length;
 
   const seccionHistorial = (
     <section className="bg-white rounded-2xl border-2 p-5 shadow-sm" style={{ borderColor: DORADO }}>
@@ -730,15 +917,40 @@ export function PlanEspecial({
           <History className="h-4 w-4" />
           HISTORIAL · PEDIDOS ESPECIALES{tituloHistorial}
         </h2>
-        <button
-          onClick={cargarHistorial}
-          disabled={cargandoHistorial}
-          className="text-[11px] font-semibold text-stone-500 hover:text-sky-700 transition-colors flex items-center gap-1 disabled:opacity-50"
-          title="Recargar el historial"
-        >
-          <RefreshCw className={`h-3 w-3 ${cargandoHistorial ? "animate-spin" : ""}`} />
-          Actualizar
-        </button>
+        <div className="flex items-center gap-3">
+          {/* FILTRO POR SUCURSAL (Task 113 v6, pedido del dueño: "hay
+              que crear un filtro nel historial para que el pueda ver
+              apenas en su sucursal también para facilitar") — solo para
+              quien ve todas las sucursales (encargado/admin). */}
+          {puedeVerTodo && sucursalesFiltro.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <Filter className="h-3.5 w-3.5 text-stone-400" />
+              <select
+                value={filtroSucursal}
+                onChange={(e) => cambiarFiltroSucursal(e.target.value)}
+                className="h-8 px-2 rounded-lg border border-stone-300 text-[11px] font-semibold bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+                title="Filtrar el historial por sucursal"
+              >
+                <option value="">TODAS LAS SUCURSALES</option>
+                {sucursalesFiltro.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                    {sucursalEncargado === s ? " (MI SUCURSAL)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            onClick={() => cargarHistorial()}
+            disabled={cargandoHistorial}
+            className="text-[11px] font-semibold text-stone-500 hover:text-sky-700 transition-colors flex items-center gap-1 disabled:opacity-50"
+            title="Recargar el historial"
+          >
+            <RefreshCw className={`h-3 w-3 ${cargandoHistorial ? "animate-spin" : ""}`} />
+            Actualizar
+          </button>
+        </div>
       </div>
 
       {cargandoHistorial ? (
@@ -773,6 +985,14 @@ export function PlanEspecial({
             <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-800">
               {aprobados} aprobado{aprobados !== 1 ? "s" : ""}
             </span>
+            <span className="px-2.5 py-1 rounded-full bg-sky-100 text-sky-800">
+              {verificados} verificado{verificados !== 1 ? "s" : ""}
+            </span>
+            {ordenes > 0 && (
+              <span className="px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-800">
+                {ordenes} orden{ordenes !== 1 ? "es" : ""} de compra
+              </span>
+            )}
           </div>
 
           <div className="rounded-xl border border-stone-200 overflow-x-auto">
@@ -839,16 +1059,38 @@ export function PlanEspecial({
                           >
                             APROBADO
                           </span>
+                        ) : p.estado === "VERIFICADO" ? (
+                          <span
+                            className="px-2 py-1 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300 whitespace-nowrap"
+                            title={
+                              p.fechaVerificado
+                                ? `Verificado el ${fmtFechaHora(p.fechaVerificado)}${p.verificadoPorNombre ? ` por ${p.verificadoPorNombre}` : ""}`
+                                : "Verificado por el encargado"
+                            }
+                          >
+                            VERIFICADO
+                          </span>
                         ) : (
                           <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
                             GENERADO
                           </span>
                         )}
+                        {/* Task 113 v6: la orden de compra ya generada —
+                            chip dorado con su número OC-XX. */}
+                        {p.ordenGenerada && p.ordenNumero && (
+                          <div
+                            className="mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-yellow-100 text-yellow-800 border border-yellow-300 whitespace-nowrap inline-block"
+                            title={p.ordenFecha ? `Orden generada el ${fmtFechaHora(p.ordenFecha)}` : "Orden de compra generada"}
+                          >
+                            ORDEN {p.ordenNumero}
+                          </div>
+                        )}
                       </td>
                       {/* Task 113 v5: el ID CTR (n° de crédito) que puso el
-                          vendedor al aprobar — el encargado lo verifica. */}
+                          vendedor al aprobar — el encargado lo verifica y
+                          lo sigue viendo cuando está VERIFICADO (v6). */}
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                        {p.estado === "APROBADO" && p.idCtr ? (
+                        {p.idCtr ? (
                           <span
                             className="font-mono font-bold text-stone-800 text-[11px] px-1.5 py-0.5 rounded bg-stone-100 border border-stone-200"
                             title={`N° de crédito (ID CTR) anotado al aprobar${p.fechaAprobado ? ` el ${fmtFechaHora(p.fechaAprobado)}` : ""}`}
@@ -873,6 +1115,52 @@ export function PlanEspecial({
                               className={`h-3.5 w-3.5 ${imprimiendoId === p.id ? "animate-pulse" : ""}`}
                             />
                           </button>
+                          {/* MARCAR VERIFICADO (Task 113 v6): el encargado
+                              de la sucursal (o admin) confirma el APROBADO
+                              — paso previo a la orden de compra. */}
+                          {puedeVerificarFila(p) ? (
+                            <button
+                              onClick={() => verificarPresupuesto(p.id)}
+                              disabled={verificandoId === p.id}
+                              className="h-7 px-3 rounded-lg font-bold text-[10px] flex items-center gap-1 border transition-colors hover:brightness-95 disabled:opacity-50 whitespace-nowrap"
+                              style={{
+                                backgroundColor: "rgba(2,132,199,0.08)",
+                                color: "#0369a1",
+                                borderColor: "rgba(2,132,199,0.4)",
+                              }}
+                              title="Marcar este presupuesto como VERIFICADO (con el ID CTR a la vista) — después podés generar la orden de compra"
+                            >
+                              <ShieldCheck className={`h-3 w-3 ${verificandoId === p.id ? "animate-pulse" : ""}`} />
+                              {verificandoId === p.id ? "VERIFICANDO…" : "MARCAR VERIFICADO"}
+                            </button>
+                          ) : null}
+                          {/* GENERAR ORDEN DE COMPRA (Task 113 v6): sobre
+                              el VERIFICADO, mismo permiso; si ya tiene
+                              orden, re-abre la misma (mismo n° OC-XX). */}
+                          {puedeGenerarOrdenFila(p) ? (
+                            <button
+                              onClick={() => generarOrdenCompra(p.id)}
+                              disabled={ordenId === p.id}
+                              className="h-7 px-3 rounded-lg font-bold text-[10px] flex items-center gap-1 border transition-colors hover:brightness-95 disabled:opacity-50 whitespace-nowrap"
+                              style={{
+                                backgroundColor: "rgba(217,184,107,0.15)",
+                                color: AZUL_OSCURO,
+                                borderColor: DORADO,
+                              }}
+                              title={
+                                p.ordenGenerada && p.ordenNumero
+                                  ? `Ver de nuevo la orden de compra ${p.ordenNumero}`
+                                  : "Generar la ORDEN DE COMPRA de este presupuesto (PDF numerado OC-XX)"
+                              }
+                            >
+                              <ShoppingCart className={`h-3 w-3 ${ordenId === p.id ? "animate-pulse" : ""}`} />
+                              {ordenId === p.id
+                                ? "GENERANDO…"
+                                : p.ordenGenerada && p.ordenNumero
+                                  ? `VER ORDEN (${p.ordenNumero})`
+                                  : "GENERAR ORDEN DE COMPRA"}
+                            </button>
+                          ) : null}
                           {puedeAprobarFila(p) ? (
                             <button
                               onClick={() => {
@@ -891,9 +1179,13 @@ export function PlanEspecial({
                               <CheckCircle2 className="h-3 w-3" />
                               {aprobandoId === p.id ? "APROBANDO…" : "MARCAR APROBADO"}
                             </button>
-                          ) : p.estado === "APROBADO" ? (
+                          ) : p.estado === "APROBADO" && !puedeVerificarFila(p) ? (
                             <span className="text-[10px] text-green-700 font-semibold whitespace-nowrap">
                               ✓ {p.fechaAprobado ? fmtFechaHora(p.fechaAprobado) : ""}
+                            </span>
+                          ) : p.estado === "VERIFICADO" && !puedeGenerarOrdenFila(p) ? (
+                            <span className="text-[10px] text-sky-700 font-semibold whitespace-nowrap">
+                              ✓ verificado
                             </span>
                           ) : null}
                         </div>
@@ -908,8 +1200,8 @@ export function PlanEspecial({
           <p className="text-[10px] text-stone-400 leading-relaxed">
             El VALOR guardado es el que se calculó en ese momento: si después cambian
             los valores de la BASE, el presupuesto guardado NO cambia.
-            {vistaHistorial === "SUCURSAL" &&
-              " Vés tu sucursal: solo lectura — la aprobación la hace el vendedor que lo generó."}
+            {puedeVerTodo &&
+              " Flujo: el vendedor lo APRUEBA con el ID CTR → vos lo marcás VERIFICADO → generás la ORDEN DE COMPRA. Usá el filtro de sucursal para ver solo la tuya."}
           </p>
         </div>
       )}
@@ -1049,22 +1341,39 @@ export function PlanEspecial({
             <select
               value={tipoProducto}
               onChange={(e) => setTipoProducto(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border border-stone-300 text-sm bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none disabled:bg-stone-100 disabled:text-stone-400"
-              disabled={tiposDelProveedor.length === 0}
+              className="w-full h-10 px-3 rounded-lg border border-stone-300 text-sm bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
             >
               <option value="">
                 {proveedor
                   ? tiposDelProveedor.length === 0
-                    ? "Sin tipos para este proveedor"
+                    ? "Sin tipos para este proveedor — CREAR NUEVO"
                     : "Elegir tipo…"
                   : "Primero el proveedor"}
               </option>
+              {/* Task 113 v6: los tipos CREADOS por los usuarios salen con
+                  (nuevo) — no están catalogados en la BASE todavía. */}
               {tiposDelProveedor.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {catalogo.tiposExtra.includes(t) ? `${t} (nuevo)` : t}
                 </option>
               ))}
             </select>
+            {/* CREAR TIPO (Task 113 v6, pedido del dueño: "quiero que
+                tenga opción de crear tanbien si es que no temos cadastrado
+                este tipo de producto"). */}
+            <button
+              type="button"
+              onClick={() => {
+                setNuevoTipoStr("");
+                setModalCrearTipo(true);
+              }}
+              className="mt-1.5 text-[11px] font-bold flex items-center gap-1 transition-colors hover:brightness-110"
+              style={{ color: AZUL }}
+              title="Crear un tipo de producto nuevo si no está en la lista"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              CREAR NUEVO TIPO
+            </button>
           </div>
         </div>
 
@@ -1565,6 +1874,82 @@ export function PlanEspecial({
               >
                 <CheckCircle2 className={`h-3.5 w-3.5 ${aprobandoId === modalAprobacion.id ? "animate-pulse" : ""}`} />
                 {aprobandoId === modalAprobacion.id ? "APROBANDO…" : "APROBAR"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODAL CREAR TIPO DE PRODUCTO (Task 113 v6, pedido del dueño) ═══
+          "en tipo de producto amigo quiero que tenga opcion de crear
+          tanbien si es que no temos cadastrado este tipo de producto".
+          El tipo creado queda para TODOS (tabla PedidoEspecialTipo) y se
+          calcula con el promedio general de la BASE. */}
+      {modalCrearTipo && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !creandoTipo && setModalCrearTipo(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border-2 w-full max-w-sm p-5"
+            style={{ borderColor: DORADO }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-sm font-extrabold uppercase tracking-wide flex items-center gap-2 mb-1"
+              style={{ color: AZUL }}
+            >
+              <Plus className="h-4 w-4" />
+              CREAR TIPO DE PRODUCTO
+            </h3>
+            <p className="text-xs text-stone-500 mb-4 leading-relaxed">
+              Si el tipo no está en la lista, escribilo acá y queda guardado
+              para todos. Se calcula con el promedio general de la BASE.
+            </p>
+
+            <label
+              htmlFor="nuevo-tipo-input"
+              className="text-[11px] font-semibold text-stone-500 uppercase block mb-1"
+            >
+              Nombre del tipo *
+            </label>
+            <input
+              id="nuevo-tipo-input"
+              type="text"
+              autoFocus
+              value={nuevoTipoStr}
+              maxLength={80}
+              onChange={(e) => setNuevoTipoStr(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && nuevoTipoStr.trim() && !creandoTipo) {
+                  crearTipoProducto();
+                }
+              }}
+              placeholder="Ej: HELADERAS"
+              className="w-full h-10 px-3 rounded-lg border-2 border-stone-300 text-sm font-semibold uppercase focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+            />
+
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button
+                onClick={() => setModalCrearTipo(false)}
+                disabled={creandoTipo}
+                className="h-9 px-4 rounded-lg font-bold text-[11px] border border-stone-300 text-stone-600 hover:bg-stone-50 transition-colors disabled:opacity-50"
+              >
+                CANCELAR
+              </button>
+              <button
+                onClick={crearTipoProducto}
+                disabled={!nuevoTipoStr.trim() || creandoTipo}
+                className="h-9 px-4 rounded-lg font-bold text-[11px] flex items-center gap-1.5 border transition-all hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  backgroundColor: AZUL,
+                  color: "#fff",
+                  borderColor: AZUL,
+                }}
+                title="Crear el tipo de producto y elegirlo"
+              >
+                <Plus className={`h-3.5 w-3.5 ${creandoTipo ? "animate-pulse" : ""}`} />
+                {creandoTipo ? "CREANDO…" : "CREAR Y ELEGIR"}
               </button>
             </div>
           </div>

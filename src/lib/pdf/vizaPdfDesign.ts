@@ -73,7 +73,22 @@ export function drawWave(doc: jsPDF, pageW: number) {
   fillPath(doc, P(180, 0), [C(300, 15, 400, 42, 490, 42), C(570, 42, 630, 25, 700, 25), C(800, 25, 930, 65, 1010, 110), C(1060, 150, 1100, 176, 1140, 168), C(1190, 160, 1215, 125, 1223, 98), L(1223, 0)], BLUE);
 }
 
-export function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: number, quoteNumber: string, subtitle: string, emision: Date, fmtDT: (d: Date) => string, fmtD: (d: Date) => string) {
+export function drawHeader(
+  doc: jsPDF,
+  pageW: number,
+  margin: number,
+  contentW: number,
+  quoteNumber: string,
+  subtitle: string,
+  emision: Date,
+  fmtDT: (d: Date) => string,
+  fmtD: (d: Date) => string,
+  // Task 113 v6 (ORDEN DE COMPRA): título y etiqueta del número son
+  // configurables; por defecto quedan EXACTAMENTE como siempre, así los
+  // otros presupuestos no cambian ni un pixel.
+  titulo: string = "PRESUPUESTO",
+  etiquetaNumero: string = "N° PRESUPUESTO"
+) {
   drawWave(doc, pageW);
   const lh = 40; const lw = lh * VIZA_LOGO_WORDMARK_RATIO;
   doc.addImage(VIZA_LOGO_WORDMARK_PNG, "PNG", margin, 34, lw, lh);
@@ -85,16 +100,20 @@ export function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: 
   doc.setTextColor(...BLUE); doc.text(", en un solo lugar.", margin + doc.getTextWidth(s1), 88);
   // Task 108: NUESTRAS SUCURSALES bien encima del título del plan (y=150).
   drawSucursalesTop(doc, margin, contentW, 150);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(21); doc.setTextColor(...BLUE);
-  doc.text("PRESUPUESTO", margin, 150);
-  const tw = doc.getTextWidth("PRESUPUESTO");
+  // "ORDEN DE COMPRA" es más largo que "PRESUPUESTO": baja el cuerpo
+  // para que el título + subtítulo no se peleen con el borde.
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(titulo.length > 14 ? 17 : 21);
+  doc.setTextColor(...BLUE);
+  doc.text(titulo, margin, 150);
+  const tw = doc.getTextWidth(titulo);
   doc.setFont("helvetica", "normal"); doc.setTextColor(...GOLD);
-  doc.text(subtitle, margin + tw + 8, 150);
+  if (subtitle) doc.text(subtitle, margin + tw + 8, 150);
   doc.setFillColor(...GOLD); doc.rect(margin, 160, 48, 2.5, "F");
   const gap = 10; const bw = (contentW - gap * 2) / 3; const by = 173; const bh = 42;
   const validez = new Date(emision); validez.setDate(validez.getDate() + VALIDEZ_DIAS);
   const boxes: [string, string][] = [
-    ["N° PRESUPUESTO", quoteNumber],
+    [etiquetaNumero, quoteNumber],
     ["FECHA DE EMISIÓN", fmtDT(emision)],
     ["VÁLIDO HASTA", fmtD(validez)],
   ];

@@ -342,7 +342,14 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
     doc.text(formatPYG(fila.total), margin + contentW - 10, y + 17.5, { align: "right" });
     y += rowPH;
 
-    // ═══ 2b) SAFRA: CRONOGRAMA DE PAGOS (igual que el PDF SAFRA) ═══
+    // ═══ 2b) SAFRA: CRONOGRAMA DE PAGOS — CONFORME EL PANEL ═══
+    // Task 113 v6 (pedido del dueño: "la parte de cálculos de abajo
+    // necesito que salga conforme el panel mismo"): la tabla del PDF
+    // muestra LAS MISMAS COLUMNAS que la pantalla del plan SAFRA:
+    // MES · CONCEPTO · PAGO · INTERÉS DEL MES · SALDO (+ FECHA DE PAGO,
+    // que en papel le sirve al cliente) y la MISMA fila final
+    // "Total del plan: X + Y interés". Los números salen del desglose
+    // congelado — exactamente los que vio el vendedor en la pantalla.
     if (plan === "safra" && cronograma.length > 0) {
       ensureSpace(60);
       y += 12;
@@ -355,23 +362,29 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
       doc.text("CRONOGRAMA DE PAGOS", margin + 14, y + 18);
       y += 36;
 
-      const cColN = 30;
-      const cColConcepto = 220;
-      const cColFecha = 130;
-      const cColValor = contentW - cColN - cColConcepto - cColFecha;
+      const cColN = 34;
+      const cColConcepto = 132;
+      const cColFecha = 92;
+      const cColPago = 88;
+      const cColInteres = 84;
+      // (La columna SALDO ocupa lo que queda de la tabla, a la derecha.)
 
       doc.setFillColor(...BLUE);
       doc.rect(margin, y, contentW, 22, "F");
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       let cc = margin + 6;
-      doc.text("#", cc, y + 14);
+      doc.text("MES", cc, y + 14);
       cc += cColN;
       doc.text("CONCEPTO", cc, y + 14);
       cc += cColConcepto;
       doc.text("FECHA DE PAGO", cc, y + 14);
-      doc.text("VALOR", margin + contentW - 6, y + 14, { align: "right" });
+      cc += cColFecha;
+      doc.text("PAGO", cc, y + 14, { align: "right" });
+      cc += cColPago;
+      doc.text("INTERÉS DEL MES", cc, y + 14, { align: "right" });
+      doc.text("SALDO", margin + contentW - 6, y + 14, { align: "right" });
       y += 22;
 
       let rowIdx = 0;
@@ -386,10 +399,10 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
           const esEntrada = f.mes === 0;
           const esPagoFinal = idxPago === ultimaIdx;
           const rowC = 26;
-          ensureSpace(rowC);
+          ensureSpace(rowC + 28);
           if (esEntrada || esPagoFinal) {
             // Destacado dorado para la ENTRADA y el PAGO FINAL (igual
-            // que el cronograma del PDF SAFRA).
+            // que el cronograma del plan en pantalla).
             doc.setFillColor(254, 243, 199);
             doc.rect(margin, y, contentW, rowC, "F");
           } else if (rowIdx % 2 === 0) {
@@ -402,7 +415,7 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
           doc.setTextColor(...GOLD);
           doc.text(String(rowIdx + 1), cp, y + 16);
           cp += cColN;
-          doc.setFontSize(10);
+          doc.setFontSize(9.5);
           doc.setTextColor(28, 25, 23);
           doc.text(
             esEntrada
@@ -415,12 +428,29 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
           );
           cp += cColConcepto;
           doc.setFont("helvetica", "normal");
+          doc.setFontSize(8.5);
           doc.setTextColor(120, 113, 108);
           doc.text(formatDateEs(fechaMes(emision, f.mes)), cp, y + 16);
+          cp += cColFecha;
+          // PAGO / INTERÉS / SALDO — las mismas columnas del panel.
           doc.setFont("helvetica", "bold");
+          doc.setFontSize(9);
           doc.setTextColor(...DARK);
           doc.text(
             formatPYG(f.pagoMostrado > 0 ? f.pagoMostrado : f.pago),
+            cp + cColPago,
+            y + 16,
+            { align: "right" }
+          );
+          cp += cColPago;
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(180, 83, 9);
+          doc.text(formatPYG(f.interes), cp + cColInteres, y + 16, {
+            align: "right",
+          });
+          doc.setTextColor(120, 113, 108);
+          doc.text(
+            formatPYG(Math.max(0, f.saldoFinal)),
             margin + contentW - 6,
             y + 16,
             { align: "right" }
@@ -428,6 +458,35 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
           y += rowC;
           rowIdx += 1;
         });
+
+      // Fila final IGUAL QUE EL PANEL: "Total del plan:" + total +
+      // "+ intereses" (los mismos números del cuadro de abajo).
+      ensureSpace(26);
+      doc.setFillColor(245, 245, 244);
+      doc.rect(margin, y, contentW, 24, "F");
+      doc.setDrawColor(...LINE);
+      doc.setLineWidth(0.7);
+      doc.line(margin, y + 24, margin + contentW, y + 24);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(...GREY);
+      const xTotalPlan = margin + 6 + cColN + cColConcepto + cColFecha;
+      doc.text("TOTAL DEL PLAN:", xTotalPlan, y + 15.5, { align: "right" });
+      doc.setFontSize(10);
+      doc.setTextColor(...BLUE);
+      doc.text(formatPYG(fila.total), xTotalPlan + cColPago, y + 15.5, {
+        align: "right",
+      });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GREY);
+      doc.text(
+        `+ ${formatPYG(fila.totalIntereses || 0)} interés`,
+        xTotalPlan + cColPago + cColInteres,
+        y + 15.5,
+        { align: "right" }
+      );
+      y += 24;
       y += 6;
     }
 

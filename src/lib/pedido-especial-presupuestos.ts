@@ -140,6 +140,32 @@ export async function ensureTablaPedidoEspecialPresupuestos(): Promise<boolean> 
       // ALTER fallido no invalida la tabla: las lecturas devuelven lista
       // vacía (P2022) y el sistema sigue funcionando igual.
     }
+    // Task 113 v6 (VERIFICADO + ORDEN DE COMPRA, pedido del dueño): el
+    // encargado marca VERIFICADO el APROBADO y después genera la ORDEN
+    // DE COMPRA. Mismo escudo: ALTERs idempotentes, nunca tocan datos.
+    try {
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "fechaVerificado" TIMESTAMP(3)`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "verificadoPorEmail" TEXT NOT NULL DEFAULT ''`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "verificadoPorNombre" TEXT NOT NULL DEFAULT ''`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "ordenGenerada" BOOLEAN NOT NULL DEFAULT FALSE`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "ordenNumero" TEXT NOT NULL DEFAULT ''`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "ordenFecha" TIMESTAMP(3)`
+      );
+    } catch {
+      // Igual que arriba: sin esas columnas las lecturas devuelven vacío
+      // y el resto del sistema sigue funcionando.
+    }
     estadoTabla = "lista";
     return true;
   } catch {
@@ -194,11 +220,17 @@ export interface PresupuestoPedidoEspecial {
   total: number;
   totalIntereses: number;
   detalle: DetallePresupuesto | null;
-  estado: string; // "GENERADO" | "APROBADO"
+  estado: string; // "GENERADO" | "APROBADO" | "VERIFICADO"
   // Task 113 v5: N° de crédito ("ID CTR") anotado al APROBAR (vacío en
   // GENERADO). El encargado de sucursal lo verifica en el historial.
   idCtr: string;
   fechaAprobado: string | null;
+  // Task 113 v6: VERIFICADO del encargado + ORDEN DE COMPRA generada.
+  fechaVerificado: string | null;
+  verificadoPorNombre: string;
+  ordenGenerada: boolean;
+  ordenNumero: string;
+  ordenFecha: string | null;
   createdAt: string;
 }
 
@@ -234,6 +266,11 @@ function aFila(f: {
   estado: string;
   idCtr: string;
   fechaAprobado: Date | null;
+  fechaVerificado: Date | null;
+  verificadoPorNombre: string;
+  ordenGenerada: boolean;
+  ordenNumero: string;
+  ordenFecha: Date | null;
   createdAt: Date;
 }): PresupuestoPedidoEspecial {
   let detalle: DetallePresupuesto | null = null;
@@ -272,26 +309,38 @@ function aFila(f: {
     estado: f.estado,
     idCtr: f.idCtr ?? "",
     fechaAprobado: f.fechaAprobado ? new Date(f.fechaAprobado).toISOString() : null,
+    fechaVerificado: f.fechaVerificado ? new Date(f.fechaVerificado).toISOString() : null,
+    verificadoPorNombre: f.verificadoPorNombre ?? "",
+    ordenGenerada: !!f.ordenGenerada,
+    ordenNumero: f.ordenNumero ?? "",
+    ordenFecha: f.ordenFecha ? new Date(f.ordenFecha).toISOString() : null,
     createdAt: new Date(f.createdAt).toISOString(),
   };
 }
 
 // ─── HISTORIAL (GET) — NUNCA lanza, NUNCA rompe ───
-//   · esAdmin            → TODOS los presupuestos
-//   · sucursalEncargado  → los de SU sucursal + los propios
-//   · resto (vendedor)   → SOLO los propios
+// Task 113 v6 (pedido del dueño): "el encargado de sucursal va poder ver
+// de todas las sucursales pero hay que crear un filtro nel historial
+// para que el pueda ver apenas en su sucursal también para facilitar".
+//   · esAdmin            → TODOS los presupuestos (filtro opcional)
+//   · sucursalEncargado  → TODAS las sucursales (filtro opcional; la
+//     pantalla arranca filtrada en la SUYA para facilitarle)
+//   · resto (vendedor)   → SOLO los propios (el filtro no aplica)
 export async function listarPresupuestos(opts: {
   email: string;
   esAdmin: boolean;
   sucursalEncargado: string | null;
+  sucursalFiltro?: string | null; // "" = TODAS (sin filtro)
 }): Promise<PresupuestoPedidoEspecial[]> {
   const email = String(opts.email || "").trim().toLowerCase();
+  const filtro = String(opts.sucursalFiltro || "").trim();
   const intentar = async (): Promise<PresupuestoPedidoEspecial[]> => {
-    const where = opts.esAdmin
-      ? {}
-      : opts.sucursalEncargado
-        ? { OR: [{ sucursal: opts.sucursalEncargado }, { vendedorEmail: email }] }
-        : { vendedorEmail: email };
+    const puedeVerTodo = opts.esAdmin || !!opts.sucursalEncargado;
+    const where = !puedeVerTodo
+      ? { vendedorEmail: email } // vendedor: solo lo propio
+      : filtro
+        ? { sucursal: filtro } // encargado/admin con filtro de sucursal
+        : {}; // encargado/admin: TODAS las sucursales
     const filas = await db.pedidoEspecialPresupuesto.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -629,5 +678,156 @@ export async function aprobarPresupuesto(
   } catch (error) {
     console.error("aprobarPresupuesto (reintento):", error);
     return { ok: false, error: "No se pudo actualizar el presupuesto.", status: 500 };
+  }
+}
+
+// ─── MARCAR VERIFICADO (encargado de sucursal) — Task 113 v6 ───
+// El dueño: "después que el encargado vea APROBADO en el presupuesto
+// quiero que tenga la opción de generar ORDEN DE COMPRA de este
+// presupuesto en específico… primer el marca VERIFICADO OK y después
+// que el tenga la opción de generar orden de compra".
+// O sea: APROBADO → VERIFICADO lo marca el ENCARGADO DE LA SUCURSAL del
+// presupuesto (o admin/supremo, la excepción de siempre). El ID CTR ya
+// quedó anotado por el vendedor al aprobar — el encargado lo tiene a la
+// vista en el historial al momento de verificar.
+// Unidireccional como los demás estados: no se vuelve atrás.
+export type ResultadoVerificado =
+  | { ok: true; presupuesto: PresupuestoPedidoEspecial }
+  | { ok: false; error: string; status: number };
+
+export async function verificarPresupuesto(
+  id: string,
+  usuario: { email: string; nombre: string; esAdmin: boolean; sucursalEncargado: string | null }
+): Promise<ResultadoVerificado> {
+  const idLimpio = String(id || "").trim();
+  if (!idLimpio) return { ok: false, error: "Falta el presupuesto.", status: 400 };
+  const email = String(usuario.email || "").trim().toLowerCase();
+
+  const intentar = async (): Promise<ResultadoVerificado> => {
+    const fila = await db.pedidoEspecialPresupuesto.findUnique({ where: { id: idLimpio } });
+    if (!fila) return { ok: false, error: "Presupuesto no encontrado.", status: 404 };
+    // Permiso: encargado de LA SUCURSAL del presupuesto, o admin/supremo.
+    const esDeSuSucursal =
+      !!usuario.sucursalEncargado && fila.sucursal === usuario.sucursalEncargado;
+    if (!usuario.esAdmin && !esDeSuSucursal) {
+      return {
+        ok: false,
+        error: "Solo el encargado de la sucursal (o un admin) puede marcarlo VERIFICADO.",
+        status: 403,
+      };
+    }
+    if (fila.estado === "VERIFICADO") {
+      return { ok: true, presupuesto: aFila(fila) }; // ya está: idempotente
+    }
+    if (fila.estado !== "APROBADO") {
+      return {
+        ok: false,
+        error: "Solo se verifica un presupuesto APROBADO (el vendedor primero lo marca aprobado con el ID CTR).",
+        status: 409,
+      };
+    }
+    const f = await db.pedidoEspecialPresupuesto.update({
+      where: { id: idLimpio },
+      data: {
+        estado: "VERIFICADO",
+        fechaVerificado: new Date(),
+        verificadoPorEmail: email,
+        verificadoPorNombre: String(usuario.nombre || "").slice(0, 120),
+      },
+    });
+    return { ok: true, presupuesto: aFila(f) };
+  };
+
+  try {
+    return await intentar();
+  } catch (error) {
+    if (!esErrorTablaFaltante(error)) {
+      console.error("verificarPresupuesto:", error);
+      return { ok: false, error: "No se pudo actualizar el presupuesto.", status: 500 };
+    }
+    if (!(await ensureTablaPedidoEspecialPresupuestos())) {
+      return { ok: false, error: "Presupuesto no encontrado.", status: 404 };
+    }
+  }
+  try {
+    return await intentar();
+  } catch (error) {
+    console.error("verificarPresupuesto (reintento):", error);
+    return { ok: false, error: "No se pudo actualizar el presupuesto.", status: 500 };
+  }
+}
+
+// ─── GENERAR ORDEN DE COMPRA (encargado de sucursal) — Task 113 v6 ───
+// "después que el tenga la opción de generar orden de compra": sobre el
+// presupuesto VERIFICADO, el encargado de la sucursal (o admin/supremo)
+// genera LA ORDEN DE COMPRA de ese presupuesto en específico. La orden
+// queda numerada OC-01, OC-02… (QuoteSequence plan "OC", cuenta por
+// usuario) y el número + la fecha quedan en la fila: si la vuelve a
+// pedir, sale SIEMPRE la misma orden (idempotente).
+// Devuelve la fila actualizada (con el número de orden) o error; el PDF
+// lo arma la ruta /api/pedido-especial/presupuestos/orden con la lib
+// src/lib/pdf/orden-compra-pdf.ts.
+export type ResultadoOrden =
+  | { ok: true; presupuesto: PresupuestoPedidoEspecial }
+  | { ok: false; error: string; status: number };
+
+export async function generarOrdenPresupuesto(
+  id: string,
+  usuario: { id: string; email: string; esAdmin: boolean; sucursalEncargado: string | null }
+): Promise<ResultadoOrden> {
+  const idLimpio = String(id || "").trim();
+  if (!idLimpio) return { ok: false, error: "Falta el presupuesto.", status: 400 };
+  const email = String(usuario.email || "").trim().toLowerCase();
+
+  const intentar = async (): Promise<ResultadoOrden> => {
+    const fila = await db.pedidoEspecialPresupuesto.findUnique({ where: { id: idLimpio } });
+    if (!fila) return { ok: false, error: "Presupuesto no encontrado.", status: 404 };
+    // Mismo permiso que VERIFICAR: encargado de la sucursal o admin.
+    const esDeSuSucursal =
+      !!usuario.sucursalEncargado && fila.sucursal === usuario.sucursalEncargado;
+    if (!usuario.esAdmin && !esDeSuSucursal) {
+      return {
+        ok: false,
+        error: "Solo el encargado de la sucursal (o un admin) puede generar la orden de compra.",
+        status: 403,
+      };
+    }
+    // Ya tiene orden: se devuelve tal cual (misma orden, mismo número).
+    if (fila.ordenGenerada && fila.ordenNumero) {
+      return { ok: true, presupuesto: aFila(fila) };
+    }
+    if (fila.estado !== "VERIFICADO") {
+      return {
+        ok: false,
+        error: "Primero hay que marcarlo VERIFICADO: la orden de compra sale del presupuesto verificado.",
+        status: 409,
+      };
+    }
+    // Número de orden OC-XX (cuenta propia por usuario, como ESPECIAL-XX).
+    const ordenNumero = await nextSequentialQuoteNumber("OC", usuario.id || null);
+    const ahora = new Date();
+    const f = await db.pedidoEspecialPresupuesto.update({
+      where: { id: idLimpio },
+      data: { ordenGenerada: true, ordenNumero, ordenFecha: ahora },
+    });
+    return { ok: true, presupuesto: aFila(f) };
+  };
+
+  try {
+    return await intentar();
+  } catch (error) {
+    if (!esErrorTablaFaltante(error)) {
+      console.error("generarOrdenPresupuesto:", error);
+      return { ok: false, error: "No se pudo generar la orden de compra.", status: 500 };
+    }
+    if (!(await ensureTablaPedidoEspecialPresupuestos())) {
+      return { ok: false, error: "Presupuesto no encontrado.", status: 404 };
+    }
+  }
+  try {
+    return await intentar();
+  } catch (error) {
+    console.error("generarOrdenPresupuesto (reintento):", error);
+    return { ok: false, error: "No se pudo generar la orden de compra.", status: 500 };
   }
 }

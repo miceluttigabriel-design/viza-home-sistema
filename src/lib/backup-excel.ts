@@ -583,6 +583,12 @@ export async function generateBackupExcel(): Promise<BackupResult> {
       numero: f.numero,
       estado: f.estado,
       idCtr: (f as { idCtr?: string }).idCtr ?? "", // Task 113 v5: n° de crédito (ID CTR)
+      fechaVerificado: f.fechaVerificado ? new Date(f.fechaVerificado).toISOString() : "", // Task 113 v6
+      verificadoPorEmail: (f as { verificadoPorEmail?: string }).verificadoPorEmail ?? "", // Task 113 v6
+      verificadoPorNombre: (f as { verificadoPorNombre?: string }).verificadoPorNombre ?? "", // Task 113 v6
+      ordenGenerada: !!(f as { ordenGenerada?: boolean }).ordenGenerada, // Task 113 v6
+      ordenNumero: (f as { ordenNumero?: string }).ordenNumero ?? "", // Task 113 v6
+      ordenFecha: f.ordenFecha ? new Date(f.ordenFecha).toISOString() : "", // Task 113 v6
       vendedorEmail: f.vendedorEmail,
       vendedorNombre: f.vendedorNombre,
       sucursal: f.sucursal,
@@ -620,6 +626,12 @@ export async function generateBackupExcel(): Promise<BackupResult> {
           { header: "numero", key: "numero" },
           { header: "estado", key: "estado" },
           { header: "idCtr", key: "idCtr" }, // Task 113 v5: n° de crédito
+          { header: "fechaVerificado", key: "fechaVerificado", width: 24 }, // Task 113 v6
+          { header: "verificadoPorEmail", key: "verificadoPorEmail", width: 24 }, // Task 113 v6
+          { header: "verificadoPorNombre", key: "verificadoPorNombre", width: 26 }, // Task 113 v6
+          { header: "ordenGenerada", key: "ordenGenerada" }, // Task 113 v6
+          { header: "ordenNumero", key: "ordenNumero" }, // Task 113 v6
+          { header: "ordenFecha", key: "ordenFecha", width: 24 }, // Task 113 v6
           { header: "vendedorEmail", key: "vendedorEmail" },
           { header: "vendedorNombre", key: "vendedorNombre" },
           { header: "sucursal", key: "sucursal" },

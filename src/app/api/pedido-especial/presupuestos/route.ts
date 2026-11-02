@@ -6,22 +6,32 @@
 //  situación de los mismos, si fue generado y si está como aprobado…
 //  el vendedor va a tener una opción de marcar como aprobado".
 //
-// GET   → HISTORIAL según quién pregunta:
+// GET   → HISTORIAL según quién pregunta (Task 113 v6, pedido del dueño:
+//         "el encargado de sucursal va poder ver de todas las sucursales
+//         pero hay que crear un filtro nel historial para que el pueda
+//         ver apenas en su sucursal también para facilitar"):
 //           · admin / supremo_admin → TODOS
-//           · encargado de sucursal (ENCARGADOS_SUCURSAL) → los de SU
-//             sucursal (+ los propios), SOLO LECTURA
-//           · cualquier otro → SOLO los propios
-//         Cualquier usuario logueado (no es nada secreto: el vendedor
-//         ve el suyo, el encargado el de su sucursal).
+//           · encargado de sucursal (ENCARGADOS_SUCURSAL) → TODAS las
+//             sucursales, con FILTRO opcional ?sucursal=KATUETE (la
+//             pantalla arranca filtrada en la SUYA para facilitarle)
+//           · cualquier otro → SOLO los propios (el filtro no aplica)
+//         Cualquier usuario logueado (no es nada secreto).
 //
 // POST  → GUARDAR un presupuesto nuevo (queda GENERADO). El servidor
 //         RECALCULA con los % de la Base y la tasa activa (no confía
 //         en el cliente) y le da número ESPECIAL-XX. Los usuarios de
 //         solo lectura (consulta) no pueden guardar.
 //
-// PUT   → MARCAR COMO APROBADO (GENERADO → APROBADO). Solo el
-//         VENDEDOR que lo generó o un admin; el encargado solo lo VE
-//         aprobado (tal cual pidió el dueño).
+// PUT   → ACCIONES sobre un presupuesto:
+//           · { id, accion: "aprobar", idCtr } → GENERADO → APROBADO
+//             (solo el vendedor que lo generó o un admin; el ID CTR es
+//             obligatorio).
+//           · { id, accion: "verificar" } → APROBADO → VERIFICADO
+//             (solo el encargado de la sucursal o un admin — Task 113
+//             v6: "primer el marca VERIFICADO OK y después que el tenga
+//             la opción de generar orden de compra").
+//         Sin accion se entiende "aprobar" (compatibilidad con la
+//         pantalla ya desplegada).
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -31,10 +41,11 @@ import {
   listarPresupuestos,
   crearPresupuesto,
   aprobarPresupuesto,
+  verificarPresupuesto,
   validarDatosPresupuesto,
 } from "@/lib/pedido-especial-presupuestos";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -43,18 +54,28 @@ export async function GET() {
     const role = (session.user as any)?.role;
     const esAdmin = role === "admin" || role === "supremo_admin";
     const email = (session.user?.email || "").trim().toLowerCase();
-    // Encargado de sucursal (mismo criterio del CRM): ve el historial de
-    // SU sucursal. Los admins ya ven todo.
+    // Encargado de sucursal (mismo criterio del CRM). Task 113 v6: ve
+    // TODAS las sucursales; el FILTRO de sucursal es para facilitarle.
     const sucursalEncargado = esAdmin
       ? null
       : (ENCARGADOS_SUCURSAL[email] ?? null);
     const esEncargado = !!sucursalEncargado && !esAdmin;
 
-    const presupuestos = await listarPresupuestos({ email, esAdmin, sucursalEncargado });
+    // Filtro ?sucursal=XXX (vacío/ausente = TODAS para quien puede ver
+    // todo; para el vendedor la API lo ignora: solo ve lo propio).
+    const url = new URL(req.url);
+    const sucursalFiltro = String(url.searchParams.get("sucursal") || "").trim().slice(0, 80);
+
+    const presupuestos = await listarPresupuestos({
+      email,
+      esAdmin,
+      sucursalEncargado,
+      sucursalFiltro,
+    });
 
     return NextResponse.json({
       presupuestos,
-      vista: esAdmin ? "TODAS" : esEncargado ? "SUCURSAL" : "MIS",
+      vista: esAdmin || esEncargado ? "TODAS" : "MIS",
       sucursal: sucursalEncargado,
     });
   } catch (error) {
@@ -110,9 +131,24 @@ export async function PUT(req: Request) {
     const role = (session.user as any)?.role;
     const esAdmin = role === "admin" || role === "supremo_admin";
     const email = (session.user?.email || "").trim().toLowerCase();
+    const nombre = String((session.user as any)?.name || session.user?.name || "");
+    const sucursalEncargado = esAdmin ? null : (ENCARGADOS_SUCURSAL[email] ?? null);
     const body = await req.json().catch(() => null);
     const id = String((body as any)?.id || "");
-    // Task 113 v5 (pedido del dueño): el ID CTR viaja con la aprobación y
+    const accion = String((body as any)?.accion || "aprobar").trim().toLowerCase();
+
+    // MARCAR VERIFICADO (Task 113 v6): el encargado de la sucursal
+    // (o admin) confirma el presupuesto APROBADO — paso previo a la
+    // ORDEN DE COMPRA.
+    if (accion === "verificar") {
+      const r = await verificarPresupuesto(id, { email, nombre, esAdmin, sucursalEncargado });
+      if (!r.ok) {
+        return NextResponse.json({ error: r.error }, { status: r.status });
+      }
+      return NextResponse.json({ presupuesto: r.presupuesto });
+    }
+
+    // MARCAR APROBADO (Task 113 v5): el ID CTR viaja con la aprobación y
     // la API lo EXIGE (campo obligatorio — el n° de crédito que después
     // verifica el encargado de sucursal).
     const idCtr = String((body as any)?.idCtr || "");
