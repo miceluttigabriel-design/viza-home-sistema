@@ -15,11 +15,20 @@
 //     · proveedores       → DISTINCT fabricante (orden alfabético)
 //     · tiposPorProveedor → { fabricante: [tipos…] } (solo pares reales)
 //     · tipos             → DISTINCT tipo (orden alfabético)
+//     · porcentajes       → Task 113 v4: un registro por par (fabricante,
+//       tipo) con los % resueltos DE LA BASE (promedio de los productos
+//       del par — la misma regla de márgenes automáticas de la casa;
+//       respaldo: los % del panel del admin si algún campo no aparece en
+//       la BASE). Así el vendedor NO carga ni ve %: elige proveedor +
+//       tipo y los % de la BASE se aplican solos, como pidió el dueño
+//       ("vas a usar todas las lógicas de la BASE, lo único manual es
+//       el costo").
 //   Si la consulta falla devuelve listas vacías — NUNCA rompe la app.
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { mapaPorcentajesDeLaBase } from "@/lib/pedido-especial-porcentajes";
 
 export interface ParCatalogo {
   fabricante: string;
@@ -57,14 +66,25 @@ export async function GET() {
       tipos.add(tip);
     }
 
+    // Task 113 v4: los % de cada par, estirados de la BASE (promedios
+    // reales de los productos + respaldo del panel). NUNCA lanza: en
+    // fallo devuelve [] y la pantalla calcula con lo que tenga.
+    const porcentajes = await mapaPorcentajesDeLaBase();
+
     return NextResponse.json({
       proveedores,
       tiposPorProveedor,
       tipos: Array.from(tipos).sort((a, b) => a.localeCompare(b)),
+      porcentajes,
     });
   } catch (error) {
     console.error("GET /api/pedido-especial/catalogo:", error);
     // NUNCA rompe: la UI muestra las listas de la config como respaldo.
-    return NextResponse.json({ proveedores: [], tiposPorProveedor: {}, tipos: [] });
+    return NextResponse.json({
+      proveedores: [],
+      tiposPorProveedor: {},
+      tipos: [],
+      porcentajes: [],
+    });
   }
 }

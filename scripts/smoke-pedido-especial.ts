@@ -1,4 +1,4 @@
-// Smoke test Task 113 v2 — fórmulas del PEDIDO ESPECIAL contra valores
+// Smoke test Task 113 v2/v4 — fórmulas del PEDIDO ESPECIAL contra valores
 // calculados A MANO con la lógica REAL de cada plan del sistema:
 //   · CONTADO / CUOTAS  → Excel de la BASE (margen acumulativo por tramos
 //                          + redondeo a miles), igual que la importación.
@@ -11,6 +11,8 @@
 //   · CHEQUE             → store/cheque.ts: tasa 1.5% MOTO / 3% resto,
 //                          plazo promedio (días/30), cheques iguales al
 //                          millar superior.
+// Task 113 v4: los % que salen SOLOS de la BASE (promedio por proveedor
+// + tipo con cascada tipo → general, fracción × 100, parseo SAFRA).
 // Correr: bun scripts/smoke-pedido-especial.ts
 import {
   calcularPedidoEspecial,
@@ -22,6 +24,11 @@ import {
   redondeoComercial,
   formatearMontoInput,
 } from "../src/lib/pedido-especial-calc";
+import {
+  calcularPromediosPorcentajes,
+  parseSafraStr,
+  type FilaPorcentajeProducto,
+} from "../src/lib/pedido-especial-porcentajes";
 
 let fallas = 0;
 function check(nombre: string, obtenido: unknown, esperado: unknown) {
@@ -249,6 +256,86 @@ check("fmt+parse 15.000.000", parseCostoPantalla(formatearMontoInput("15000000")
 check("fmt+parse 2.500,50", parseCostoPantalla(formatearMontoInput("2500,50")), 2500.5);
 check("fmt+parse 1.000", parseCostoPantalla(formatearMontoInput("1000")), 1000);
 check("fmt+parse 0,", parseCostoPantalla(formatearMontoInput("0,")), null);
+
+// ════════════════════════════════════════════════════════════════════
+// TASK 113 v4 — LOS % QUE SALEN SOLOS DE LA BASE (calculados a mano)
+// Caso real de la planilla: CHACOMER GINASIA / ABDOMINALERA tiene
+// AB=0.05, Y=0.04, Z=0.05, AA=0.04, CL=7 (en fracción, SAFRA legible).
+// ════════════════════════════════════════════════════════════════════
+const filasV4: FilaPorcentajeProducto[] = [
+  // Par A (2 productos, mismo %): CHACOMER GINASIA / ABDOMINALERA
+  { fabricante: "CHACOMER GINASIA", tipo: "ABDOMINALERA", marginContado: 0.05, pct1A6: 0.04, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: null, safra: "7" },
+  { fabricante: "CHACOMER GINASIA", tipo: "ABDOMINALERA", marginContado: 0.05, pct1A6: 0.04, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: 0.05, safra: "7" },
+  // Par B (mismo TIPO, otro proveedor, otro %): COEXMA / ABLANDADOR CARNE
+  { fabricante: "COEXMA S.R.L.", tipo: "ABLANDADOR CARNE", marginContado: 0.25, pct1A6: 0.04, pct7A13: 0.04, pct14A30: 0.04, margenTecnico: null, safra: "6" },
+  // Par C (TIPO único con técnico): INVERFIN / VAZIO
+  { fabricante: "INVERFIN S.A.E.C.A.", tipo: "VAZIO", marginContado: 0.15, pct1A6: 0.05, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: 0.10, safra: "null" },
+];
+const mapaV4 = calcularPromediosPorcentajes(filasV4);
+
+// resolverGrupo es interna; se prueba a través de los promedios con la
+// MISMA cascada que usa el servidor (par → tipo → global → respaldo).
+// Para eso re-implementamos la lectura legible igual que el lib:
+const legible = (frac: number) => Math.round(frac * 1_000_000) / 10_000;
+const cascada = (par: number, tipo: number, global: number) =>
+  legible(par > 0 ? par : tipo > 0 ? tipo : global > 0 ? global : 0);
+const parA = mapaV4.porPar.get("CHACOMER GINASIA||ABDOMINALERA");
+const tipoAblandador = mapaV4.porTipo.get("ABLANDADOR CARNE");
+const globalV4 = mapaV4.global;
+if (parA && tipoAblandador && globalV4) {
+  // Promedio del par A: contado 5% legible, tramos 4/5/4, SAFRA 7:
+  check("V4 parA contado", cascada(parA.m, tipoAblandador.m, globalV4.m), 5);
+  check("V4 parA 1A6", cascada(parA.y, tipoAblandador.y, globalV4.y), 4);
+  check("V4 parA 7A13", cascada(parA.z, tipoAblandador.z, globalV4.z), 5);
+  check("V4 parA 14A30", cascada(parA.aa, tipoAblandador.aa, globalV4.aa), 4);
+  check("V4 parA safra", parA.safra, 7);
+  // Técnico: solo 1 de 2 productos del par A lo tiene → promedio 5%:
+  check("V4 parA tecnico", legible(parA.tecnico), 5);
+} else {
+  check("V4 grupos presentes", false, true);
+}
+
+// CASCADA: par B sin técnico → cae al TIPO (no tiene) → al GLOBAL
+// (promedio de los técnicos de toda la BASE: (0.05 + 0.10)/2 = 0.075 → 7.5):
+const parB = mapaV4.porPar.get("COEXMA S.R.L.||ABLANDADOR CARNE");
+if (parB) {
+  check("V4 cascada tecnico global", cascada(parB.tecnico, tipoAblandador?.tecnico ?? 0, globalV4.tecnico), 7.5);
+  // Contado del par B = 25% (el del propio par, NO el promedio global):
+  check("V4 parB contado propio", cascada(parB.m, tipoAblandador?.m ?? 0, globalV4.m), 25);
+}
+
+// SAFRA con texto "null" → 0 (y sin respaldo no tumba nada):
+const parC = mapaV4.porPar.get("INVERFIN S.A.E.C.A.||VAZIO");
+check("V4 parC safra null→0", parC?.safra, 0);
+check("V4 parC tecnico", legible(parC?.tecnico ?? 0), 10);
+
+// Agrupación tolerante (espacios/case): "motos" y " MOTOS " son el MISMO tipo:
+const mapaNorm = calcularPromediosPorcentajes([
+  { fabricante: "kenton", tipo: "motos", marginContado: 0.10, pct1A6: 0.02, pct7A13: 0.015, pct14A30: 0.01, margenTecnico: null, safra: null },
+  { fabricante: "KENTON", tipo: "MOTOS", marginContado: 0.20, pct1A6: 0.02, pct7A13: 0.015, pct14A30: 0.01, margenTecnico: null, safra: null },
+]);
+const parNorm = mapaNorm.porPar.get("KENTON||MOTOS");
+check("V4 normalización agrupa", parNorm?.count, 2);
+check("V4 promedio contado", Math.round((parNorm?.m ?? 0) * 1000) / 1000, 0.15);
+
+// parseSafraStr: misma regla del plan real:
+check("V4 safra '7'", parseSafraStr("7"), 7);
+check("V4 safra '7,5'", parseSafraStr("7,5"), 7.5);
+check("V4 safra 'null'", parseSafraStr("null"), 0);
+check("V4 safra ''", parseSafraStr(""), 0);
+check("V4 safra 'abc'", parseSafraStr("abc"), 0);
+
+// Y el margen aplicado al CONTADO con los % legibles de la BASE:
+// costo 2.000.000 + 5% → 2.100.000 (la combinación real de la planilla):
+const rV4 = calcularPedidoEspecial({
+  costo: 2000000, modoCosto: "gs", cambioUS: 6000,
+  pctContado: 5, pct1A6: 4, pct7A13: 5, pct14A30: 4,
+  pctTecnico: 5, pctSafra: 7,
+  plan: "contado", cuotas: 0, diasSinEntrega: null,
+  safraEntrada: 0, safraMeses: 6, chequesCantidad: 0, chequesFechas: [],
+  esMoto: false, fechaEmision: "2026-11-03",
+});
+check("V4 contado con % de la BASE", rV4?.valorContado, 2100000);
 
 if (fallas > 0) {
   console.error(`\n${fallas} VERIFICACIONES FALLARON`);

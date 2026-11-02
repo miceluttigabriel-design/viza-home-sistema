@@ -14,6 +14,7 @@ import {
   Landmark,
   History,
   CheckCircle2,
+  Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePedidoEspecialStore } from "@/store/pedido-especial";
@@ -53,12 +54,18 @@ import { formatPYG } from "@/lib/format";
 //      del SAFRA, tasa 1.5%/3% mensual del CHEQUE).
 // Task 113 v3 (pedido del dueño): además de calcular en pantalla, el
 // vendedor puede GUARDAR el presupuesto → queda en el HISTORIAL con
-// situación GENERADO, y puede MARCARLO APROBADO con un botón. El
-// encargado de sucursal ve el historial de SU sucursal con la situación
-// de cada uno (el número ESPECIAL-01, 02… sale del servidor junto con
-// el recálculo con los % de la Base: lo guardado siempre es lo visto).
-// El vendedor NO ve ni escribe los %: vienen SIEMPRE de la Base del
-// admin, como el precio de la BASE en el cotizador de siempre.
+// situación GENERADO, puede MARCARLO APROBADO y puede IMPRIMIRLO (PDF
+// con el mismo diseño VIZA del resto de los presupuestos). El encargado
+// de sucursal ve el historial de SU sucursal con la situación de cada
+// uno (el número ESPECIAL-01, 02… sale del servidor junto con el
+// recálculo: lo guardado siempre es lo visto).
+// Task 113 v4 (pedido del dueño): los % NO se cargan a mano — salen
+// SOLOS de la BASE (promedio real de los productos del proveedor + tipo
+// elegidos, calculado en el servidor; la MISMA regla de márgenes
+// automáticas de la casa). El dueño: "vas a usar TODAS las lógicas de
+// la BASE, lo único que cambia es que el costo lo ponemos manualmente".
+// También v4: fuera los textos técnicos de la pantalla (fórmulas, %,
+// tasas, plazos): el vendedor solo ve costo, datos y resultado.
 // El campo de costo (y la entrada del SAFRA) formatean SOLOS los miles
 // con puntito mientras se escribe: "15000000" → "15.000.000".
 
@@ -169,9 +176,29 @@ interface CatalogoApi {
   proveedores: string[];
   tiposPorProveedor: Record<string, string[]>;
   tipos: string[];
+  // Task 113 v4: los % de cada par (fabricante, tipo), resueltos en el
+  // servidor desde la BASE (promedio de los productos del par + respaldo
+  // del panel del admin). Números LEGIBLES (10 = 10%).
+  porcentajes: PorcentajesApi[];
 }
 
-const CATALOGO_VACIO: CatalogoApi = { proveedores: [], tiposPorProveedor: {}, tipos: [] };
+interface PorcentajesApi {
+  fabricante: string;
+  tipo: string;
+  pctContado: number;
+  pct1A6: number;
+  pct7A13: number;
+  pct14A30: number;
+  pctTecnico: number;
+  pctSafra: number;
+}
+
+const CATALOGO_VACIO: CatalogoApi = {
+  proveedores: [],
+  tiposPorProveedor: {},
+  tipos: [],
+  porcentajes: [],
+};
 
 // Los 6 planes, en el orden en que se muestran (todos los de VIZA).
 const PLANES: PlanPedidoEspecial[] = [
@@ -340,6 +367,7 @@ export function PlanEspecial({
             ? dataCat.tiposPorProveedor
             : {},
         tipos: Array.isArray(dataCat.tipos) ? dataCat.tipos : [],
+        porcentajes: Array.isArray(dataCat.porcentajes) ? dataCat.porcentajes : [],
       });
       const resTasa = await fetch("/api/config-cambio");
       const dataTasa = await resTasa.json().catch(() => ({}));
@@ -366,6 +394,10 @@ export function PlanEspecial({
   const [cargandoHistorial, setCargandoHistorial] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [aprobandoId, setAprobandoId] = useState<string | null>(null);
+  // Task 113 v4: el último presupuesto GUARDADO (para el botón IMPRIMIR
+  // que aparece justo después de guardar) y el estado del PDF en curso.
+  const [ultimoGuardado, setUltimoGuardado] = useState<{ id: string; numero: string } | null>(null);
+  const [imprimiendoId, setImprimiendoId] = useState<string | null>(null);
 
   const cargarHistorial = async () => {
     setCargandoHistorial(true);
@@ -387,9 +419,9 @@ export function PlanEspecial({
   }, []);
 
   // GUARDAR el presupuesto actual en el historial (queda GENERADO).
-  // El servidor RECALCULA con los % de la Base y da el número ESPECIAL-XX.
+  // El servidor RECALCULA con los % de la BASE y da el número ESPECIAL-XX.
   const guardarPresupuesto = async () => {
-    if (!resultadoOk || !combinacionElegida || guardando) return;
+    if (!resultadoOk || guardando) return;
     setGuardando(true);
     try {
       const res = await fetch("/api/pedido-especial/presupuestos", {
@@ -413,12 +445,53 @@ export function PlanEspecial({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
-      toast.success(`Presupuesto ${data?.presupuesto?.numero || "ESPECIAL"} guardado (GENERADO)`);
+      const guardado = { id: String(data?.presupuesto?.id || ""), numero: String(data?.presupuesto?.numero || "ESPECIAL") };
+      setUltimoGuardado(guardado);
+      toast.success(`Presupuesto ${guardado.numero} guardado (GENERADO)`);
       cargarHistorial();
     } catch (error) {
       toast.error(`No se pudo guardar: ${(error as Error).message}`);
     } finally {
       setGuardando(false);
+    }
+  };
+
+  // IMPRIMIR el presupuesto guardado (Task 113 v4, pedido del dueño:
+  // "después de guardar presupuesto que él tenga la opción de imprimir
+  // presupuesto, el que él guardó"). El PDF sale del SERVIDOR con el
+  // valor congelado de la base y el diseño VIZA de siempre.
+  const imprimirPresupuesto = async (id: string) => {
+    if (imprimiendoId) return;
+    setImprimiendoId(id);
+    try {
+      const res = await fetch("/api/pedido-especial/presupuestos/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Error ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      // Se abre en pestaña nueva (imprimir como cualquier PDF); si el
+      // navegador bloquea la pestaña, se descarga directo.
+      const ventana = window.open(url, "_blank");
+      if (!ventana) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "VIZA-Pedido-Especial.pdf";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast.success("Presupuesto listo para imprimir");
+    } catch (error) {
+      toast.error(`No se pudo imprimir: ${(error as Error).message}`);
+    } finally {
+      setImprimiendoId(null);
     }
   };
 
@@ -479,12 +552,39 @@ export function PlanEspecial({
     [combinaciones, proveedor, tipoProducto]
   );
 
+  // ═══ LOS % DE LA BASE, SOLOS (Task 113 v4, pedido del dueño) ═══
+  // "Vas a usar TODAS las lógicas de la BASE, lo único que cambia es que
+  // el costo lo ponemos manualmente". Los % vienen del catálogo de la
+  // BASE: promedio REAL de los productos del proveedor + tipo elegidos
+  // (misma regla de márgenes automáticas de la casa, calculada en el
+  // servidor). Respaldo por campo: la config del panel del admin, solo
+  // si algún % no aparece en la BASE.
+  const porcentajesElegidos = useMemo(() => {
+    const par = catalogo.porcentajes.find(
+      (p) => p.fabricante === proveedor && p.tipo === tipoProducto
+    );
+    const cfg = combinacionElegida;
+    const elegir = (deLaBase: number | undefined, delPanel: number | undefined) => {
+      const base = Number(deLaBase) || 0;
+      if (base > 0) return base;
+      return Number(delPanel) || 0;
+    };
+    return {
+      pctContado: elegir(par?.pctContado, cfg?.pctContado),
+      pct1A6: elegir(par?.pct1A6, cfg?.pct1A6),
+      pct7A13: elegir(par?.pct7A13, cfg?.pct7A13),
+      pct14A30: elegir(par?.pct14A30, cfg?.pct14A30),
+      pctTecnico: elegir(par?.pctTecnico, cfg?.pctTecnico),
+      pctSafra: elegir(par?.pctSafra, cfg?.pctSafra),
+    };
+  }, [catalogo, proveedor, tipoProducto, combinacionElegida]);
+
   // === Parámetros específicos del plan elegido ===
   const esMoto = useMemo(() => esTipoMoto(tipoProducto), [tipoProducto]);
   const diasSinEntrega = useMemo(() => diasHastaFecha(fechaInicioPago), [fechaInicioPago]);
   const safraEntrada = useMemo(() => parseCosto(safraEntradaStr) || 0, [safraEntradaStr]);
 
-  // === Cálculo EN VIVO (recalcula solo si el admin cambia un %) ===
+  // === Cálculo EN VIVO (recalcula solo si cambian los % de la BASE) ===
   const costo = parseCosto(costoStr);
   const resultado = useMemo(() => {
     if (!costo) return null;
@@ -492,12 +592,12 @@ export function PlanEspecial({
       costo,
       modoCosto,
       cambioUS,
-      pctContado: combinacionElegida?.pctContado ?? 0,
-      pct1A6: combinacionElegida?.pct1A6 ?? 0,
-      pct7A13: combinacionElegida?.pct7A13 ?? 0,
-      pct14A30: combinacionElegida?.pct14A30 ?? 0,
-      pctTecnico: combinacionElegida?.pctTecnico ?? 0,
-      pctSafra: combinacionElegida?.pctSafra ?? 0,
+      pctContado: porcentajesElegidos.pctContado,
+      pct1A6: porcentajesElegidos.pct1A6,
+      pct7A13: porcentajesElegidos.pct7A13,
+      pct14A30: porcentajesElegidos.pct14A30,
+      pctTecnico: porcentajesElegidos.pctTecnico,
+      pctSafra: porcentajesElegidos.pctSafra,
       plan,
       cuotas,
       diasSinEntrega,
@@ -510,7 +610,7 @@ export function PlanEspecial({
     });
   }, [
     costo,
-    combinacionElegida,
+    porcentajesElegidos,
     modoCosto,
     cambioUS,
     plan,
@@ -539,11 +639,6 @@ export function PlanEspecial({
   if (!proveedor) faltantes.push("el proveedor");
   if (!tipoProducto) faltantes.push("el tipo de producto");
   if (!descripcion.trim()) faltantes.push("la descripción");
-  if (costo && proveedor && tipoProducto && !combinacionElegida) {
-    faltantes.push(
-      "los % de esta combinación (el admin los carga en Panel Admin → Base → PEDIDO ESPECIAL; apretá ACTUALIZAR después de cargarlos)"
-    );
-  }
   if (plan === "cuotas_sin_entrega") {
     if (!fechaInicioPago) faltantes.push("la fecha de inicio de pago");
     else if (diasSinEntrega !== null && diasSinEntrega < 0)
@@ -730,26 +825,40 @@ export function PlanEspecial({
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        {puedeAprobarFila(p) ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* IMPRIMIR (Task 113 v4): el PDF del presupuesto
+                              guardado, con el diseño VIZA de siempre. */}
                           <button
-                            onClick={() => aprobarPresupuesto(p.id)}
-                            disabled={aprobandoId === p.id}
-                            className="h-7 px-3 rounded-lg font-bold text-[10px] flex items-center gap-1 border transition-colors hover:brightness-95 disabled:opacity-50 whitespace-nowrap"
-                            style={{
-                              backgroundColor: "rgba(22,163,74,0.08)",
-                              color: "#166534",
-                              borderColor: "rgba(22,163,74,0.4)",
-                            }}
-                            title="Marcar este presupuesto como APROBADO (el encargado lo ve aprobado)"
+                            onClick={() => imprimirPresupuesto(p.id)}
+                            disabled={imprimiendoId === p.id}
+                            className="h-7 w-7 rounded-lg border border-stone-200 flex items-center justify-center text-stone-500 hover:text-sky-700 hover:border-sky-300 transition-colors disabled:opacity-50 shrink-0"
+                            title={`Imprimir el presupuesto ${p.numero} (PDF)`}
                           >
-                            <CheckCircle2 className="h-3 w-3" />
-                            {aprobandoId === p.id ? "APROBANDO…" : "MARCAR APROBADO"}
+                            <Printer
+                              className={`h-3.5 w-3.5 ${imprimiendoId === p.id ? "animate-pulse" : ""}`}
+                            />
                           </button>
-                        ) : p.estado === "APROBADO" ? (
-                          <span className="text-[10px] text-green-700 font-semibold whitespace-nowrap">
-                            ✓ {p.fechaAprobado ? fmtFechaHora(p.fechaAprobado) : ""}
-                          </span>
-                        ) : null}
+                          {puedeAprobarFila(p) ? (
+                            <button
+                              onClick={() => aprobarPresupuesto(p.id)}
+                              disabled={aprobandoId === p.id}
+                              className="h-7 px-3 rounded-lg font-bold text-[10px] flex items-center gap-1 border transition-colors hover:brightness-95 disabled:opacity-50 whitespace-nowrap"
+                              style={{
+                                backgroundColor: "rgba(22,163,74,0.08)",
+                                color: "#166534",
+                                borderColor: "rgba(22,163,74,0.4)",
+                              }}
+                              title="Marcar este presupuesto como APROBADO (el encargado lo ve aprobado)"
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              {aprobandoId === p.id ? "APROBANDO…" : "MARCAR APROBADO"}
+                            </button>
+                          ) : p.estado === "APROBADO" ? (
+                            <span className="text-[10px] text-green-700 font-semibold whitespace-nowrap">
+                              ✓ {p.fechaAprobado ? fmtFechaHora(p.fechaAprobado) : ""}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -759,8 +868,8 @@ export function PlanEspecial({
           </div>
 
           <p className="text-[10px] text-stone-400 leading-relaxed">
-            El VALOR guardado es el que se calculó en ese momento (con los % de la Base
-            de ese día): si después cambian los %, el presupuesto del historial NO cambia.
+            El VALOR guardado es el que se calculó en ese momento: si después cambian
+            los valores de la BASE, el presupuesto guardado NO cambia.
             {vistaHistorial === "SUCURSAL" &&
               " Vés tu sucursal: solo lectura — la aprobación la hace el vendedor que lo generó."}
           </p>
@@ -814,7 +923,7 @@ export function PlanEspecial({
             onClick={cargarConfig}
             disabled={cargandoConfig}
             className="text-[11px] font-semibold text-stone-500 hover:text-sky-700 transition-colors flex items-center gap-1 disabled:opacity-50"
-            title="Recargar proveedores, tipos y % desde la BASE (por si el admin cargó algo nuevo)"
+            title="Recargar proveedores, tipos y % desde la BASE"
           >
             <RefreshCw className={`h-3 w-3 ${cargandoConfig ? "animate-spin" : ""}`} />
             Actualizar
@@ -934,10 +1043,6 @@ export function PlanEspecial({
             placeholder="Ej: Moto Zanella 110 Z1 Base 2025 roja"
             className="w-full h-10 px-3 rounded-lg border border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
           />
-          <p className="text-[11px] text-stone-400 mt-1">
-            Los % se aplican SOLOS según el proveedor + tipo elegidos (cargados
-            en la Base del admin). El vendedor no los toca.
-          </p>
         </div>
       </section>
 
@@ -989,29 +1094,19 @@ export function PlanEspecial({
                       className="h-10 px-3 rounded-lg border border-stone-300 text-sm bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
                     />
                   </div>
-                  <p className="text-[11px] text-stone-500 leading-snug basis-full">
-                    Misma regla del cotizador: 0-30 días = mismo valor que CON
-                    ENTREGA · 31-60 días = recargo del 3% · más de 60 días no se
-                    permite.
-                    {diasSinEntrega !== null && diasSinEntrega >= 0 && diasSinEntrega <= 60 && (
-                      <strong style={{ color: AZUL }}>
-                        {" "}
-                        Elegiste {diasSinEntrega} días →{" "}
-                        {diasSinEntrega <= 30 ? "sin recargo" : "recargo 3%"}.
-                      </strong>
-                    )}
-                  </p>
+                  {plan === "cuotas_sin_entrega" && (
+                    <p
+                      className="text-[11px] font-semibold leading-snug basis-full"
+                      style={{ color: AZUL }}
+                    >
+                      {diasSinEntrega !== null && diasSinEntrega >= 0 && diasSinEntrega <= 60
+                        ? `Elegiste ${diasSinEntrega} días → ${diasSinEntrega <= 30 ? "sin recargo" : "recargo 3%"}.`
+                        : ""}
+                    </p>
+                  )}
                 </>
               )}
             </div>
-          )}
-
-          {plan === "mayorista" && (
-            <p className="text-[11px] text-stone-500 leading-snug">
-              Valor TÉCNICO de la BASE: <strong>Costo Gs × (1 + % técnico)</strong> —
-              el % técnico se carga por combinación en la Base (sin cuotas, igual
-              que el plan MAYORISTA de siempre).
-            </p>
           )}
 
           {plan === "safra" && (
@@ -1044,11 +1139,6 @@ export function PlanEspecial({
                   ))}
                 </select>
               </div>
-              <p className="text-[11px] text-stone-500 leading-snug basis-full">
-                Misma lógica del plan SAFRA: interés MENSUAL sobre el saldo
-                restante con la tasa de la combinación — menos meses = menos
-                intereses. El último refuerzo ajusta para que el plan CUADRE.
-              </p>
             </div>
           )}
 
@@ -1104,13 +1194,6 @@ export function PlanEspecial({
                   })}
                 </div>
               )}
-              <p className="text-[11px] text-stone-500 leading-snug">
-                Misma lógica del plan CON CHEQUE: todos los cheques con el MISMO
-                valor; tasa mensual 1.5% si el TIPO es MOTO
-                {esMoto ? " (tu tipo lo es)" : ""} / 3% resto
-                {tipoProducto && !esMoto ? " (tu tipo no lo es)" : ""} · plazo
-                máximo 180 días.
-              </p>
             </div>
           )}
         </div>
@@ -1201,8 +1284,7 @@ export function PlanEspecial({
               {plan === "cheque" && (
                 <p className="text-sm font-semibold mt-2" style={{ color: AZUL }}>
                   Total a pagar: {formatPYG(resultadoOk.total)} ({resultadoOk.cheques.length} ×{" "}
-                  {formatPYG(resultadoOk.cheques[0]?.valor || 0)}) · Tasa{" "}
-                  {esMoto ? "1.5%" : "3%"} mensual
+                  {formatPYG(resultadoOk.cheques[0]?.valor || 0)})
                 </p>
               )}
             </div>
@@ -1283,7 +1365,8 @@ export function PlanEspecial({
               </div>
             )}
 
-            {/* Desglose (interno del vendedor, no viaja a ningún lado) */}
+            {/* Desglose de lo que el vendedor ingresó (solo sus datos:
+                Task 113 v4 — fuera los % / tasas / plazos internos) */}
             <div className="rounded-xl border border-stone-200 divide-y divide-stone-100 text-sm">
               {fila(
                 "Costo ingresado",
@@ -1295,79 +1378,45 @@ export function PlanEspecial({
                   `US$ ${(costo || 0).toLocaleString("es-PY")} × Gs ${resultadoOk.cambioUSUsado.toLocaleString("es-PY")}`
                 )}
               {plan === "mayorista"
-                ? fila("Costo Gs (col G de la BASE)", formatPYG(resultadoOk.costoGs))
-                : fila("Costo base (redondeado a miles)", formatPYG(resultadoOk.costoProd))}
-              {fila("Combinación aplicada", `${proveedor} · ${tipoProducto}`)}
+                ? fila("Costo (Gs)", formatPYG(resultadoOk.costoGs))
+                : fila("Costo base (Gs)", formatPYG(resultadoOk.costoProd))}
+              {fila("Proveedor · Tipo", `${proveedor} · ${tipoProducto}`)}
               {fila("Descripción", (
                 <span className="max-w-[60%] truncate inline-block align-bottom" title={descripcion}>
                   {descripcion}
                 </span>
               ))}
-              {(plan === "contado" ||
-                plan === "cuotas_con_entrega" ||
-                plan === "cuotas_sin_entrega" ||
-                plan === "safra" ||
-                plan === "cheque") &&
-                fila("% contado de la combinación", `${resultadoOk.margenAplicado} %`)}
-              {plan === "cuotas_con_entrega" &&
-                fila("Margen de la cuota (tramos 1-6/7-13/14-30)", `${resultadoOk.margenAplicado} %`)}
-              {plan === "cuotas_sin_entrega" && (
-                <>
-                  {fila("Recargo SIN ENTREGA", `${resultadoOk.recargoSinEntregaPct} %`)}
-                  {fechaInicioPago && fila("Inicio de la 1ª cuota", fechaCorta(fechaInicioPago))}
-                </>
-              )}
-              {plan === "mayorista" &&
-                fila("% técnico de la combinación", `${resultadoOk.margenAplicado} %`)}
-              {plan === "safra" && (
-                <>
-                  {fila("Tasa SAFRA (interés mensual)", `${combinacionElegida?.pctSafra ?? 0} %`)}
-                  {fila("Entrada", formatPYG(safraEntrada))}
-                  {fila("Refuerzos", `${safraMeses} mensual${safraMeses === 1 ? "" : "es"}`)}
-                  {fila("Total intereses", formatPYG(resultadoOk.totalIntereses))}
-                </>
-              )}
-              {plan === "cheque" && (
-                <>
-                  {fila("Tasa mensual", `${resultadoOk.tasaChequePct} % (${esMoto ? "MOTO" : "GENERAL"})`)}
-                  {fila("Plazo promedio", `${resultadoOk.plazoPromedioMeses.toFixed(1)} meses`)}
-                  {fila("Base financiada (valor contado)", formatPYG(resultadoOk.valorContado))}
-                </>
-              )}
             </div>
 
-            <p className="text-[11px] text-stone-400 leading-relaxed">
-              {plan === "contado" &&
-                "MISMA fórmula de la BASE: costo a miles × (1 + % contado). Cálculo en pantalla únicamente: no genera PDF ni guarda registros."}
-              {(plan === "cuotas_con_entrega" || plan === "cuotas_sin_entrega") &&
-                "MISMA fórmula de la BASE (márgenes por tramo 1-6 / 7-13 / 14-30 y redondeo a miles, igual que el cotizador). Cálculo en pantalla únicamente: no genera PDF ni guarda registros."}
-              {plan === "mayorista" &&
-                "MISMA fórmula de la BASE (col CV): Valor Técnico = Costo Gs × (1 + % técnico), como el plan MAYORISTA. Cálculo en pantalla únicamente."}
-              {plan === "safra" &&
-                "MISMA lógica del plan SAFRA: interés mensual sobre el saldo restante, refuerzos al millar superior y último pago ajustado para que cuadre. Cálculo en pantalla únicamente."}
-              {plan === "cheque" &&
-                "MISMA lógica del plan CON CHEQUE: base = valor contado, plazo promedio (días/30) y cheques con el mismo valor al millar superior. Cálculo en pantalla únicamente."}
-            </p>
-
-            {/* ── GUARDAR EN EL HISTORIAL (Task 113 v3, pedido del dueño) ──
-                Queda con situación GENERADO y número ESPECIAL-XX; después
-                el vendedor lo marca APROBADO y el encargado de su sucursal
-                lo ve aprobado en el historial. */}
+            {/* ── GUARDAR + IMPRIMIR (Task 113 v3/v4, pedidos del dueño) ──
+                Guardar → queda GENERADO con número ESPECIAL-XX; después
+                el botón IMPRIMIR saca el PDF del presupuesto guardado. */}
             <div
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3"
+              className="flex flex-wrap items-center justify-end gap-3 rounded-xl border border-dashed px-4 py-3"
               style={{ borderColor: DORADO, background: "rgba(217,184,107,0.07)" }}
             >
-              <p className="text-[11px] text-stone-600 leading-snug max-w-md">
-                Al guardar queda en el <strong style={{ color: AZUL }}>HISTORIAL</strong> con
-                situación <strong>GENERADO</strong>. Después lo podés marcar{" "}
-                <strong>APROBADO</strong> y el encargado de tu sucursal lo ve aprobado.
-              </p>
+              {ultimoGuardado && (
+                <button
+                  onClick={() => imprimirPresupuesto(ultimoGuardado.id)}
+                  disabled={imprimiendoId === ultimoGuardado.id}
+                  className="h-10 px-5 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 bg-white"
+                  style={{ color: AZUL, borderColor: DORADO }}
+                  title={`Imprimir el presupuesto ${ultimoGuardado.numero} que acabás de guardar`}
+                >
+                  <Printer
+                    className={`h-4 w-4 ${imprimiendoId === ultimoGuardado.id ? "animate-pulse" : ""}`}
+                  />
+                  {imprimiendoId === ultimoGuardado.id
+                    ? "PREPARANDO…"
+                    : `IMPRIMIR PRESUPUESTO${ultimoGuardado.numero ? ` (${ultimoGuardado.numero})` : ""}`}
+                </button>
+              )}
               <button
                 onClick={guardarPresupuesto}
-                disabled={!resultadoOk || !combinacionElegida || guardando}
+                disabled={!resultadoOk || guardando}
                 className="h-10 px-5 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 style={{ backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }}
-                title="Guardar este presupuesto en el historial (queda GENERADO)"
+                title="Guardar este presupuesto en el historial"
               >
                 <CheckCircle2 className={`h-4 w-4 ${guardando ? "animate-pulse" : ""}`} />
                 {guardando ? "GUARDANDO…" : "GUARDAR PRESUPUESTO"}

@@ -43,6 +43,7 @@ import {
   type ChequeEspecial,
 } from "@/lib/pedido-especial-calc";
 import { listarCombinaciones } from "@/lib/pedido-especial";
+import { porcentajesDeLaBase } from "@/lib/pedido-especial-porcentajes";
 import { getTasasCambio } from "@/lib/tasas-cambio";
 import { nextSequentialQuoteNumber } from "@/lib/quote-number";
 import { leerMapaSucursales } from "@/lib/sucursal-usuario";
@@ -365,8 +366,11 @@ export type ResultadoCreacion =
   | { ok: false; error: string; status: number };
 
 // ─── CREAR un presupuesto del historial (POST) ───
-// 1. Toma los % de la COMBINACIÓN de la Base (fuente de verdad — si la
-//    combinación no tiene % cargados, no guarda nada).
+// 1. Toma los % de la BASE para ese proveedor + tipo (Task 113 v4, pedido
+//    del dueño: "vas a usar TODAS las lógicas de la BASE, lo único que
+//    cambia es que el costo lo ponemos manualmente") — promedio real de
+//    los productos del par, con el respaldo del panel del admin. Ya NO
+//    exige una combinación cargada: los % de la BASE salen solos.
 // 2. Toma la tasa US$→Gs ACTIVA de la Base (no confía en la del cliente).
 // 3. RECALCULA en el servidor con la MISMA función de la pantalla, así
 //    lo guardado es exactamente lo que el vendedor vio.
@@ -377,18 +381,42 @@ export async function crearPresupuesto(
   usuario: { id: string; email: string; nombre: string }
 ): Promise<ResultadoCreacion> {
   try {
-    // 1) % de la combinación (Base del admin).
-    const combinaciones = await listarCombinaciones();
-    const comb = combinaciones.find(
-      (c) => c.proveedor === datos.proveedor && c.tipoProducto === datos.tipoProducto
-    );
-    if (!comb) {
-      return {
-        ok: false,
-        error:
-          "Esa combinación de proveedor + tipo todavía no tiene % cargados en la Base. Avisale al admin.",
-        status: 400,
-      };
+    // 1) % de la BASE para la combinación (con respaldo del panel del
+    //    admin solo si algún % no aparece en la BASE). Respaldo doble:
+    //    si la consulta de la BASE falla, usa la config cargada (o ceros).
+    let porc: {
+      pctContado: number;
+      pct1A6: number;
+      pct7A13: number;
+      pct14A30: number;
+      pctTecnico: number;
+      pctSafra: number;
+    };
+    try {
+      porc = await porcentajesDeLaBase(datos.proveedor, datos.tipoProducto);
+    } catch {
+      const combinaciones = await listarCombinaciones();
+      const comb = combinaciones.find(
+        (c) =>
+          c.proveedor === datos.proveedor && c.tipoProducto === datos.tipoProducto
+      );
+      porc = comb
+        ? {
+            pctContado: comb.pctContado,
+            pct1A6: comb.pct1A6,
+            pct7A13: comb.pct7A13,
+            pct14A30: comb.pct14A30,
+            pctTecnico: comb.pctTecnico,
+            pctSafra: comb.pctSafra,
+          }
+        : {
+            pctContado: 0,
+            pct1A6: 0,
+            pct7A13: 0,
+            pct14A30: 0,
+            pctTecnico: 0,
+            pctSafra: 0,
+          };
     }
 
     // 2) Tasa activa (server-side, con fallback seguro a 6000).
@@ -409,12 +437,12 @@ export async function crearPresupuesto(
       costo: datos.costo,
       modoCosto: datos.modoCosto,
       cambioUS,
-      pctContado: comb.pctContado,
-      pct1A6: comb.pct1A6,
-      pct7A13: comb.pct7A13,
-      pct14A30: comb.pct14A30,
-      pctTecnico: comb.pctTecnico,
-      pctSafra: comb.pctSafra,
+      pctContado: porc.pctContado,
+      pct1A6: porc.pct1A6,
+      pct7A13: porc.pct7A13,
+      pct14A30: porc.pct14A30,
+      pctTecnico: porc.pctTecnico,
+      pctSafra: porc.pctSafra,
       plan: datos.plan,
       cuotas: datos.cuotas,
       diasSinEntrega,
@@ -475,12 +503,12 @@ export async function crearPresupuesto(
           cambioUS,
           plan: datos.plan,
           cuotas: resultado.cuotas,
-          pctContado: comb.pctContado,
-          pct1A6: comb.pct1A6,
-          pct7A13: comb.pct7A13,
-          pct14A30: comb.pct14A30,
-          pctTecnico: comb.pctTecnico,
-          pctSafra: comb.pctSafra,
+          pctContado: porc.pctContado,
+          pct1A6: porc.pct1A6,
+          pct7A13: porc.pct7A13,
+          pct14A30: porc.pct14A30,
+          pctTecnico: porc.pctTecnico,
+          pctSafra: porc.pctSafra,
           valorContado: resultado.valorContado,
           cuotaValor: resultado.cuotaValor,
           valorTecnico: resultado.valorTecnico,
