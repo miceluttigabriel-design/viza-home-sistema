@@ -1,0 +1,1467 @@
+From 15dcedb82fcefeaec71383c5869704d826b79c4b Mon Sep 17 00:00:00 2001
+From: Z User <z@container>
+Date: Mon, 2 Nov 2026 18:44:22 +0000
+Subject: [PATCH] PEDIDO ESPECIAL: PDF IGUAL AL PRESUPUESTO + ID CTR
+ OBLIGATORIO AL APROBAR (Task 113 v5)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- El PDF del presupuesto guardado sale con el MISMO formato del
+  PRESUPUESTO DE VENTA: tabla PRODUCTOS DE LA COTIZACION (# / COD /
+  PRODUCTO / CANT. / P. CONTADO / SUBTOTAL) + cuadro TOTAL CONTADO +
+  OPCIONES DE FINANCIACION (PLAN - CUOTAS - VALOR POR CUOTA - TOTAL DEL
+  PLAN) con la fila del plan elegido (etiqueta CONTADO / CON ENTREGA /
+  SIN ENTREGA / MAYORISTA / SAFRA / CON CHEQUE, primera fila dorada).
+  SAFRA dibuja el CRONOGRAMA DE PAGOS (igual que el PDF SAFRA, PAGO
+  FINAL dorado) y CHEQUE su tabla de cheques. Footer en todas las
+  paginas + Pagina i de n. Dibujo puro en src/lib/pdf/pedido-especial-pdf.ts
+- ID CTR OBLIGATORIO para MARCAR APROBADO (pedido del dueño): columna
+  nueva idCtr (tabla auto-gestionada, ALTER idempotente), la API lo
+  exige (400 si falta), modal en pantalla con campo obligatorio y
+  columna ID CTR en el historial para que el encargado lo verifique.
+- Backup Excel: columna idCtr en la hoja Pedido Especial Historico.
+- Visibilidad del historial (ya vigente): vendedor = propios,
+  encargado = su sucursal, admin/supremo = todos.
+- Prueba de humo: scripts/t113-test-pdf.ts (bun) genera los 6 planes y
+  verifica el margen (contado 10% -> 3.300.000; cuotas 6 -> 22%).
+---
+ prisma/schema.prisma                          |   9 +
+ scripts/t113-test-pdf.ts                      | 167 ++++++
+ .../pedido-especial/presupuestos/pdf/route.ts | 298 +---------
+ .../api/pedido-especial/presupuestos/route.ts |   6 +-
+ src/components/viza/plan-especial.tsx         | 129 +++-
+ src/lib/backup-excel.ts                       |   2 +
+ src/lib/pdf/pedido-especial-pdf.ts            | 555 ++++++++++++++++++
+ src/lib/pedido-especial-presupuestos.ts       |  38 +-
+ 8 files changed, 929 insertions(+), 275 deletions(-)
+ create mode 100644 scripts/t113-test-pdf.ts
+ create mode 100644 src/lib/pdf/pedido-especial-pdf.ts
+
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index f6b46d7..601e5f2 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -549,6 +549,10 @@ model PedidoEspecialConfig {
+ //   · GENERADO → recién guardado (el cálculo quedó congelado)
+ //   · APROBADO → el vendedor lo marcó aprobado; el encargado de su
+ //     sucursal lo ve como aprobado en el historial.
++// Task 113 v5 (pedido del dueño): para MARCAR APROBADO el campo ID CTR
++// es OBLIGATORIO: ahí el vendedor anota el N° de CRÉDITO con el que
++// salió el pedido, y el encargado de sucursal lo verifica después
++// (queda guardado en `idCtr` y se muestra en el historial).
+ // El encargado de sucursal (lista ENCARGADOS_SUCURSAL) ve el
+ // historial de SU sucursal SOLO LECTURA; el vendedor ve el propio
+ // con el botón MARCAR APROBADO; admin/supremo ven todo.
+@@ -596,6 +600,11 @@ model PedidoEspecialPresupuesto {
+   // poder re-mostrar el plan idéntico más adelante.
+   detalle        String    @default("")
+   estado         String    @default("GENERADO") // GENERADO | APROBADO
++  // Task 113 v5 (pedido del dueño): N° de CRÉDITO ("ID CTR") que el
++  // vendedor ESCRIBE OBLIGATORIAMENTE al marcar el presupuesto como
++  // APROBADO — después el encargado de sucursal lo verifica. Va vacío
++  // mientras el presupuesto está GENERADO.
++  idCtr          String    @default("")
+   fechaAprobado  DateTime?
+   createdAt      DateTime  @default(now())
+   updatedAt      DateTime  @updatedAt
+diff --git a/scripts/t113-test-pdf.ts b/scripts/t113-test-pdf.ts
+new file mode 100644
+index 0000000..74e7fd3
+--- /dev/null
++++ b/scripts/t113-test-pdf.ts
+@@ -0,0 +1,167 @@
++// ============================================================
++// T113 v5 — PRUEBA DE HUMO DEL PDF DEL PEDIDO ESPECIAL
++// Genera un PDF por CADA plan con números REALES de
++// calcularPedidoEspecial() y verifica que: no lanza, el buffer
++// pesa y las páginas existen. Corre con: bun scripts/t113-test-pdf.ts
++// ============================================================
++import { writeFileSync, mkdirSync } from "fs";
++import { calcularPedidoEspecial } from "../src/lib/pedido-especial-calc";
++import { buildPedidoEspecialPdf } from "../src/lib/pdf/pedido-especial-pdf";
++
++const OUT = "/tmp/pdf-test";
++mkdirSync(OUT, { recursive: true });
++
++// Caso base: costo Gs 3.000.000, % contado 10, tramos 2/3/4,
++// técnico 8, safra 7 — como la BASE.
++const base = {
++  costo: 3_000_000,
++  modoCosto: "gs" as const,
++  cambioUS: 6000,
++  pctContado: 10,
++  pct1A6: 2,
++  pct7A13: 3,
++  pct14A30: 4,
++  pctTecnico: 8,
++  pctSafra: 7,
++  fechaEmision: "2026-11-03",
++  esMoto: false,
++};
++
++const planes = [
++  { plan: "contado", cuotas: 1, nombre: "contado" },
++  { plan: "cuotas_con_entrega", cuotas: 6, nombre: "cuotas-con-entrega" },
++  {
++    plan: "cuotas_sin_entrega",
++    cuotas: 12,
++    nombre: "cuotas-sin-entrega",
++    diasSinEntrega: 45,
++    extraDetalle: { fechaInicioPago: "2026-12-18" },
++  },
++  { plan: "mayorista", cuotas: 1, nombre: "mayorista" },
++  {
++    plan: "safra",
++    cuotas: 6,
++    nombre: "safra",
++    safraEntrada: 500_000,
++    safraMeses: 6,
++    extraDetalle: { safraEntrada: 500_000, safraMeses: 6 },
++  },
++  {
++    plan: "cheque",
++    cuotas: 4,
++    nombre: "cheque",
++    chequesCantidad: 4,
++    chequesFechas: ["2026-12-03", "2027-01-02", "2027-02-01", "2027-03-03"],
++  },
++] as any[];
++
++let fallos = 0;
++for (const caso of planes) {
++  const resultado = calcularPedidoEspecial({
++    ...base,
++    plan: caso.plan,
++    cuotas: caso.cuotas,
++    diasSinEntrega: caso.diasSinEntrega ?? null,
++    safraEntrada: caso.safraEntrada ?? 0,
++    safraMeses: caso.safraMeses ?? 1,
++    chequesCantidad: caso.chequesCantidad ?? 1,
++    chequesFechas: caso.chequesFechas ?? [],
++  });
++  if (!resultado) {
++    console.error(`❌ ${caso.plan}: el cálculo devolvió null`);
++    fallos++;
++    continue;
++  }
++
++  const doc = buildPedidoEspecialPdf({
++    numero: "ESPECIAL-01",
++    vendedorEmail: "vendedor@viza.com.py",
++    vendedorNombre: "Gabriel Micelutti",
++    sucursal: "CASA CENTRAL",
++    proveedor: "GAFRA",
++    tipoProducto: caso.plan === "cheque" ? "MOTOS" : "ELECTRO",
++    descripcion: "Producto pedido especial de prueba — plan " + caso.plan,
++    plan: caso.plan,
++    cuotas: resultado.cuotas,
++    valorContado: resultado.valorContado,
++    cuotaValor: resultado.cuotaValor,
++    valorTecnico: resultado.valorTecnico,
++    total: resultado.total,
++    totalIntereses: resultado.totalIntereses,
++    createdAt: new Date("2026-11-03T10:30:00"),
++    detalle: {
++      ...caso.extraDetalle,
++      safraEntrada: caso.extraDetalle?.safraEntrada ?? 0,
++      safraMeses: caso.extraDetalle?.safraMeses ?? 0,
++      cronograma: resultado.cronograma,
++      cheques: resultado.cheques,
++    },
++  });
++
++  const buf = Buffer.from(doc.output("arraybuffer"));
++  const paginas = doc.getNumberOfPages();
++  const ok = buf.length > 4000 && paginas >= 1;
++  if (!ok) fallos++;
++  console.log(
++    `${ok ? "✅" : "❌"} ${caso.nombre.padEnd(20)} total=${resultado.total.toLocaleString("es-PY")} Gs · ${paginas} pág · ${(buf.length / 1024).toFixed(1)} KB`
++  );
++  writeFileSync(`${OUT}/pedido-especial-${caso.nombre}.pdf`, buf);
++}
++
++// También el CONTADO con US$ (conversión) para ver el cuadro TOTAL CONTADO.
++const rUsd = calcularPedidoEspecial({
++  ...base,
++  costo: 2500,
++  modoCosto: "usd",
++  plan: "contado",
++  cuotas: 1,
++  diasSinEntrega: null,
++  safraEntrada: 0,
++  safraMeses: 1,
++  chequesCantidad: 1,
++  chequesFechas: [],
++} as any);
++if (rUsd) {
++  const doc = buildPedidoEspecialPdf({
++    numero: "ESPECIAL-02",
++    vendedorEmail: "vendedor@viza.com.py",
++    vendedorNombre: "Gabriel Micelutti",
++    sucursal: "KATUETE",
++    proveedor: "SHOW",
++    tipoProducto: "ELECTRO",
++    descripcion: "Pedido en dólares — contado",
++    plan: "contado",
++    cuotas: 1,
++    valorContado: rUsd.valorContado,
++    cuotaValor: 0,
++    valorTecnico: 0,
++    total: rUsd.total,
++    totalIntereses: 0,
++    createdAt: new Date("2026-11-03T10:30:00"),
++    detalle: null,
++  });
++  const buf = Buffer.from(doc.output("arraybuffer"));
++  writeFileSync(`${OUT}/pedido-especial-contado-usd.pdf`, buf);
++  console.log(`✅ contado-usd          total=${rUsd.total.toLocaleString("es-PY")} Gs · ${doc.getNumberOfPages()} pág · ${(buf.length / 1024).toFixed(1)} KB`);
++}
++
++// Verificación del margen (el dueño: "que aplique la margen conforme"):
++// contado = costoProd × (1 + 10/100) = 3.300.000 (a miles).
++const rContado = calcularPedidoEspecial({ ...base, plan: "contado", cuotas: 1 } as any);
++if (!rContado || rContado.total !== 3_300_000 || rContado.margenAplicado !== 10) {
++  console.error(`❌ MARGEN contado: esperado 3.300.000 con margen 10, salió ${rContado?.total} / ${rContado?.margenAplicado}`);
++  fallos++;
++} else {
++  console.log(`✅ MARGEN contado OK: 3.000.000 × (1+10%) = 3.300.000 (margen 10%)`);
++}
++// cuotas 6: margen = 10 + 6×2 = 22 → total = 3.000.000×1.22 = 3.660.000, cuota = 610.000
++const rCuotas = calcularPedidoEspecial({ ...base, plan: "cuotas_con_entrega", cuotas: 6 } as any);
++if (!rCuotas || rCuotas.margenAplicado !== 22 || rCuotas.cuotaValor !== 610_000) {
++  console.error(`❌ MARGEN cuotas: esperado margen 22 y cuota 610.000, salió ${rCuotas?.margenAplicado} / ${rCuotas?.cuotaValor}`);
++  fallos++;
++} else {
++  console.log(`✅ MARGEN cuotas OK: 10% + 6×2% = 22% → cuota 610.000 (a miles)`);
++}
++
++console.log(fallos === 0 ? "\n🎉 TODO OK" : `\n💥 ${fallos} fallos`);
++process.exit(fallos === 0 ? 0 : 1);
+diff --git a/src/app/api/pedido-especial/presupuestos/pdf/route.ts b/src/app/api/pedido-especial/presupuestos/pdf/route.ts
+index d0239e1..854c9e2 100644
+--- a/src/app/api/pedido-especial/presupuestos/pdf/route.ts
++++ b/src/app/api/pedido-especial/presupuestos/pdf/route.ts
+@@ -1,13 +1,16 @@
+-// ─── PEDIDO ESPECIAL — IMPRIMIR PRESUPUESTO GUARDADO (Task 113 v4) ───
++// ─── PEDIDO ESPECIAL — IMPRIMIR PRESUPUESTO GUARDADO (Task 113 v5) ───
+ //
+ // El dueño pidió: "después de guardar presupuesto que él tenga la opción
+-// de IMPRIMIR PRESUPUESTO, el que él guardó".
++// de IMPRIMIR PRESUPUESTO, el que él guardó" y "el formato del plan que
++// sale en el pedido especial quiero que salga IGUAL del presupuesto".
+ //
+ // POST /api/pedido-especial/presupuestos/pdf  { id }
+ //   → arma el PDF del presupuesto GUARDADO (con su número ESPECIAL-XX y
+-//     el valor congelado de la base), con el MISMO diseño VIZA de los
+-//     demás presupuestos (logo + wave + cajas N°/FECHA/VÁLIDO + franja
+-//     del vendedor + barra de contacto).
++//     el valor congelado de la base) con el MISMO formato del
++//     PRESUPUESTO DE VENTA: tabla de productos + TOTAL CONTADO +
++//     OPCIONES DE FINANCIACIÓN (PLAN · CUOTAS · VALOR POR CUOTA · TOTAL
++//     DEL PLAN) + cronograma/cheques para SAFRA/CHEQUE. Todo el dibujo
++//     vive en src/lib/pdf/pedido-especial-pdf.ts (función pura).
+ //
+ // QUIÉN PUEDE IMPRIMIR (mismo alcance del historial):
+ //   · el VENDEDOR que lo generó (sus propios presupuestos),
+@@ -19,30 +22,12 @@
+ import { NextResponse } from "next/server";
+ import { getServerSession } from "next-auth";
+ import { authOptions } from "@/lib/auth";
+-import { jsPDF } from "jspdf";
+ import { db } from "@/lib/db";
+ import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+-import {
+-  BLUE,
+-  DARK,
+-  GOLD,
+-  GREY,
+-  LIGHT,
+-  LINE,
+-  ZEBRA,
+-  drawFooter,
+-  drawHeader,
+-  drawVendedor,
+-  yVendedorSobreFooter,
+-  formatPYG,
+-  formatDateEs,
+-  formatDateTimeEs,
+-} from "@/lib/pdf/vizaPdfDesign";
+-import {
+-  NOMBRE_PLAN,
+-  type PlanPedidoEspecial,
+-  type FilaCronogramaEspecial,
+-  type ChequeEspecial,
++import { buildPedidoEspecialPdf } from "@/lib/pdf/pedido-especial-pdf";
++import type {
++  ChequeEspecial,
++  FilaCronogramaEspecial,
+ } from "@/lib/pedido-especial-calc";
+ 
+ interface DetallePdf {
+@@ -112,247 +97,26 @@ export async function POST(req: Request) {
+       detalle = {};
+     }
+ 
+-    const plan = String(fila.plan) as PlanPedidoEspecial;
+-    const nombrePlan = NOMBRE_PLAN[plan] || String(fila.plan).toUpperCase();
+-    const emision = new Date(fila.createdAt);
+-    if (isNaN(emision.getTime())) emision.setTime(Date.now());
+-
+-    // ── Documento (A4 vertical, mismo esqueleto del resto) ──
+-    const doc = new jsPDF({ unit: "pt", format: "a4" });
+-    const pageW = doc.internal.pageSize.getWidth();
+-    const pageH = doc.internal.pageSize.getHeight();
+-    const margin = 42;
+-    const contentW = pageW - margin * 2;
+-
+-    const headerBottom = drawHeader(
+-      doc,
+-      pageW,
+-      margin,
+-      contentW,
+-      fila.numero,
+-      "PEDIDO ESPECIAL",
+-      emision,
+-      formatDateTimeEs,
+-      formatDateEs
+-    );
+-
+-    // Franja del vendedor + barra de contacto reservadas abajo.
+-    const yVend = yVendedorSobreFooter(pageH);
+-    const yLimite = yVend - 14;
+-
+-    let y = headerBottom + 22;
+-    const ensureSpace = (min: number) => {
+-      if (y + min > yLimite) {
+-        doc.addPage();
+-        y = 56;
+-      }
+-    };
+-
+-    // Título de sección con la línea dorada (mismo estilo del resto).
+-    const tituloSeccion = (texto: string) => {
+-      doc.setFont("helvetica", "bold");
+-      doc.setFontSize(10.5);
+-      doc.setTextColor(...BLUE);
+-      doc.text(texto, margin, y);
+-      doc.setDrawColor(...GOLD);
+-      doc.setLineWidth(1.2);
+-      doc.line(margin, y + 5, margin + contentW, y + 5);
+-    };
+-
+-    // ── PRODUCTO (lo que se vende) ──
+-    tituloSeccion("PRODUCTO");
+-    y += 20;
+-    const cajaH = 64;
+-    doc.setFillColor(...LIGHT);
+-    doc.roundedRect(margin, y, contentW, cajaH, 8, 8, "F");
+-    doc.setFillColor(...GOLD);
+-    doc.rect(margin, y + 8, 3, cajaH - 16, "F");
+-    doc.setFont("helvetica", "bold");
+-    doc.setFontSize(12.5);
+-    doc.setTextColor(...DARK);
+-    const descLineas = doc.splitTextToSize(
+-      (fila.descripcion || "—").toUpperCase(),
+-      contentW - 40
+-    ) as string[];
+-    doc.text(descLineas.slice(0, 2), margin + 16, y + 24);
+-    doc.setFont("helvetica", "normal");
+-    doc.setFontSize(9.5);
+-    doc.setTextColor(...GREY);
+-    doc.text(
+-      `Proveedor: ${fila.proveedor}   ·   Tipo: ${fila.tipoProducto}`,
+-      margin + 16,
+-      y + cajaH - 14
+-    );
+-    y += cajaH + 22;
+-
+-    // ── PLAN DE PAGOS ──
+-    ensureSpace(120);
+-    tituloSeccion(`PLAN ${nombrePlan}`);
+-    y += 22;
+-
+-    const lineaParam = (etiqueta: string, valor: string) => {
+-      ensureSpace(20);
+-      doc.setFont("helvetica", "normal");
+-      doc.setFontSize(10);
+-      doc.setTextColor(...GREY);
+-      doc.text(etiqueta, margin + 2, y);
+-      doc.setFont("helvetica", "bold");
+-      doc.setTextColor(...DARK);
+-      doc.text(valor, margin + contentW - 2, y, { align: "right" });
+-      y += 19;
+-    };
+-
+-    // Datos por plan (sin costo, sin %: el presupuesto es para el cliente).
+-    if (plan === "cuotas_con_entrega" || plan === "cuotas_sin_entrega") {
+-      lineaParam("Cantidad de cuotas", String(fila.cuotas));
+-      lineaParam("Valor de cada cuota", formatPYG(fila.cuotaValor));
+-      if (plan === "cuotas_sin_entrega" && detalle.fechaInicioPago) {
+-        lineaParam("Inicio de pago", formatDateEs(detalle.fechaInicioPago));
+-      }
+-    } else if (plan === "safra") {
+-      if ((detalle.safraEntrada ?? 0) > 0) {
+-        lineaParam("Entrada", formatPYG(detalle.safraEntrada || 0));
+-      }
+-      lineaParam(
+-        "Refuerzos mensuales",
+-        `${detalle.safraMeses || fila.cuotas || 1} ${(detalle.safraMeses || fila.cuotas || 1) === 1 ? "mes" : "meses"}`
+-      );
+-    } else if (plan === "cheque") {
+-      lineaParam("Cantidad de cheques", String(detalle.cheques?.length || fila.cuotas || 0));
+-    }
+-
+-    // Tabla del cronograma SAFRA (MES · CONCEPTO · PAGO — igual que el plan real).
+-    if (plan === "safra" && detalle.cronograma && detalle.cronograma.length > 0) {
+-      ensureSpace(40);
+-      const colsX = {
+-        mes: margin + 10,
+-        concepto: margin + 60,
+-        pago: margin + contentW - 10,
+-      };
+-      doc.setFillColor(...BLUE);
+-      doc.roundedRect(margin, y, contentW, 22, 4, 4, "F");
+-      doc.setFont("helvetica", "bold");
+-      doc.setFontSize(8.5);
+-      doc.setTextColor(255, 255, 255);
+-      doc.text("MES", colsX.mes, y + 14);
+-      doc.text("CONCEPTO", colsX.concepto, y + 14);
+-      doc.text("PAGO", colsX.pago, y + 14, { align: "right" });
+-      y += 22;
+-
+-      detalle.cronograma.forEach((f, i) => {
+-        const rowH = 20;
+-        ensureSpace(rowH + 8);
+-        if (i % 2 === 0) {
+-          doc.setFillColor(...ZEBRA);
+-          doc.rect(margin, y, contentW, rowH, "F");
+-        }
+-        doc.setFont("helvetica", "normal");
+-        doc.setFontSize(9);
+-        doc.setTextColor(...DARK);
+-        doc.text(String(f.mes), colsX.mes, y + 13);
+-        doc.setFont("helvetica", "bold");
+-        doc.text(f.concepto, colsX.concepto, y + 13);
+-        doc.text(formatPYG(f.pagoMostrado), colsX.pago, y + 13, { align: "right" });
+-        doc.setDrawColor(...LINE);
+-        doc.setLineWidth(0.5);
+-        doc.line(margin, y + rowH, margin + contentW, y + rowH);
+-        y += rowH;
+-      });
+-      y += 14;
+-    }
+-
+-    // Tabla de CHEQUES (N° · VENCIMIENTO · VALOR — igual que el plan real).
+-    if (plan === "cheque" && detalle.cheques && detalle.cheques.length > 0) {
+-      ensureSpace(40);
+-      const colsX = {
+-        num: margin + 10,
+-        venc: margin + 120,
+-        valor: margin + contentW - 10,
+-      };
+-      doc.setFillColor(...BLUE);
+-      doc.roundedRect(margin, y, contentW, 22, 4, 4, "F");
+-      doc.setFont("helvetica", "bold");
+-      doc.setFontSize(8.5);
+-      doc.setTextColor(255, 255, 255);
+-      doc.text("N° CHEQUE", colsX.num, y + 14);
+-      doc.text("VENCIMIENTO", colsX.venc, y + 14);
+-      doc.text("VALOR", colsX.valor, y + 14, { align: "right" });
+-      y += 22;
+-
+-      detalle.cheques.forEach((c, i) => {
+-        const rowH = 20;
+-        ensureSpace(rowH + 8);
+-        if (i % 2 === 0) {
+-          doc.setFillColor(...ZEBRA);
+-          doc.rect(margin, y, contentW, rowH, "F");
+-        }
+-        doc.setFont("helvetica", "normal");
+-        doc.setFontSize(9);
+-        doc.setTextColor(...DARK);
+-        doc.text(String(c.numero), colsX.num, y + 13);
+-        doc.text(formatDateEs(c.fecha), colsX.venc, y + 13);
+-        doc.setFont("helvetica", "bold");
+-        doc.text(formatPYG(c.valor), colsX.valor, y + 13, { align: "right" });
+-        doc.setDrawColor(...LINE);
+-        doc.setLineWidth(0.5);
+-        doc.line(margin, y + rowH, margin + contentW, y + rowH);
+-        y += rowH;
+-      });
+-      y += 14;
+-    }
+-
+-    // ── CUADRO DEL TOTAL (azul + banda dorada, como el resto) ──
+-    ensureSpace(80);
+-    y += 8;
+-    const sumBoxW = 320;
+-    const sumBoxH = 56;
+-    const sumBoxX = pageW - margin - sumBoxW;
+-    doc.setFillColor(...BLUE);
+-    doc.roundedRect(sumBoxX, y, sumBoxW, sumBoxH, 6, 6, "F");
+-    doc.setFillColor(...GOLD);
+-    doc.rect(sumBoxX, y, sumBoxW, 3, "F");
+-
+-    const totalLabel =
+-      plan === "contado"
+-        ? "VALOR AL CONTADO:"
+-        : plan === "cuotas_con_entrega" || plan === "cuotas_sin_entrega"
+-          ? "TOTAL DEL PLAN:"
+-          : plan === "mayorista"
+-            ? "TOTAL MAYORISTA (VALOR TÉCNICO):"
+-            : plan === "safra"
+-              ? "TOTAL DEL PLAN SAFRA:"
+-              : "TOTAL A PAGAR:";
+-    doc.setFont("helvetica", "normal");
+-    doc.setFontSize(10);
+-    doc.setTextColor(217, 184, 107);
+-    doc.text(totalLabel, sumBoxX + 14, y + 25);
+-    doc.setFont("helvetica", "bold");
+-    doc.setFontSize(16);
+-    doc.setTextColor(255, 255, 255);
+-    doc.text(formatPYG(fila.total), sumBoxX + sumBoxW - 14, y + 25, { align: "right" });
+-
+-    // Aclaración chica bajo el cuadro (solo lo necesario, sin internals).
+-    const nota =
+-      plan === "cuotas_con_entrega" || plan === "cuotas_sin_entrega"
+-        ? `${fila.cuotas} cuotas de ${formatPYG(fila.cuotaValor)}`
+-        : plan === "cheque"
+-          ? `${detalle.cheques?.length || fila.cuotas} cheques de ${formatPYG(detalle.cheques?.[0]?.valor || 0)}`
+-          : plan === "safra" && (fila.totalIntereses ?? 0) > 0
+-            ? `Incluye ${formatPYG(fila.totalIntereses)} de intereses`
+-            : "";
+-    if (nota) {
+-      doc.setFont("helvetica", "normal");
+-      doc.setFontSize(8.5);
+-      doc.setTextColor(...GREY);
+-      doc.text(nota, sumBoxX + 14, y + 44);
+-    }
+-
+-    // ── VENDEDOR (franja abajo de todo) + FOOTER VIZA ──
+-    drawVendedor(doc, margin, yVend, contentW, {
+-      nombre: fila.vendedorNombre || fila.vendedorEmail,
+-      sucursal: fila.sucursal || undefined,
++    // El PDF completo (productos + financiación + cronograma) se dibuja
++    // en la lib compartida: mismo formato del presupuesto de siempre.
++    const doc = buildPedidoEspecialPdf({
++      numero: fila.numero,
++      vendedorEmail: fila.vendedorEmail,
++      vendedorNombre: fila.vendedorNombre,
++      sucursal: fila.sucursal,
++      proveedor: fila.proveedor,
++      tipoProducto: fila.tipoProducto,
++      descripcion: fila.descripcion,
++      plan: fila.plan,
++      cuotas: fila.cuotas,
++      valorContado: fila.valorContado,
++      cuotaValor: fila.cuotaValor,
++      valorTecnico: fila.valorTecnico,
++      total: fila.total,
++      totalIntereses: fila.totalIntereses,
++      createdAt: fila.createdAt,
++      detalle,
+     });
+-    drawFooter(doc, pageW, pageH, margin, contentW, "Pedido Especial");
+ 
+     const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+     const nombreArchivo = `VIZA-Pedido-Especial-${String(fila.numero || "").replace(/[^\w.-]/g, "")}.pdf`;
+diff --git a/src/app/api/pedido-especial/presupuestos/route.ts b/src/app/api/pedido-especial/presupuestos/route.ts
+index bf8052f..421c7ee 100644
+--- a/src/app/api/pedido-especial/presupuestos/route.ts
++++ b/src/app/api/pedido-especial/presupuestos/route.ts
+@@ -112,7 +112,11 @@ export async function PUT(req: Request) {
+     const email = (session.user?.email || "").trim().toLowerCase();
+     const body = await req.json().catch(() => null);
+     const id = String((body as any)?.id || "");
+-    const r = await aprobarPresupuesto(id, { email, esAdmin });
++    // Task 113 v5 (pedido del dueño): el ID CTR viaja con la aprobación y
++    // la API lo EXIGE (campo obligatorio — el n° de crédito que después
++    // verifica el encargado de sucursal).
++    const idCtr = String((body as any)?.idCtr || "");
++    const r = await aprobarPresupuesto(id, { email, esAdmin }, idCtr);
+     if (!r.ok) {
+       return NextResponse.json({ error: r.error }, { status: r.status });
+     }
+diff --git a/src/components/viza/plan-especial.tsx b/src/components/viza/plan-especial.tsx
+index 309e708..6edbe3b 100644
+--- a/src/components/viza/plan-especial.tsx
++++ b/src/components/viza/plan-especial.tsx
+@@ -66,6 +66,12 @@ import { formatPYG } from "@/lib/format";
+ // la BASE, lo único que cambia es que el costo lo ponemos manualmente".
+ // También v4: fuera los textos técnicos de la pantalla (fórmulas, %,
+ // tasas, plazos): el vendedor solo ve costo, datos y resultado.
++// Task 113 v5 (pedido del dueño): 1) para MARCAR APROBADO el campo
++// "ID CTR" es OBLIGATORIO (el n° de crédito que después el encargado
++// de sucursal verifica — columna propia en el historial); 2) el PDF
++// del presupuesto guardado sale con el MISMO formato del PRESUPUESTO
++// DE VENTA (tabla de productos + TOTAL CONTADO + OPCIONES DE
++// FINANCIACIÓN, ver src/lib/pdf/pedido-especial-pdf.ts).
+ // El campo de costo (y la entrada del SAFRA) formatean SOLOS los miles
+ // con puntito mientras se escribe: "15000000" → "15.000.000".
+ 
+@@ -398,6 +404,11 @@ export function PlanEspecial({
+   // que aparece justo después de guardar) y el estado del PDF en curso.
+   const [ultimoGuardado, setUltimoGuardado] = useState<{ id: string; numero: string } | null>(null);
+   const [imprimiendoId, setImprimiendoId] = useState<string | null>(null);
++  // Task 113 v5 (pedido del dueño): para MARCAR APROBADO se exige el
++  // "ID CTR" (n° de crédito) — modal con campo OBLIGATORIO; el encargado
++  // de sucursal lo verifica después en el historial.
++  const [modalAprobacion, setModalAprobacion] = useState<{ id: string; numero: string } | null>(null);
++  const [idCtrStr, setIdCtrStr] = useState("");
+ 
+   const cargarHistorial = async () => {
+     setCargandoHistorial(true);
+@@ -496,18 +507,27 @@ export function PlanEspecial({
+   };
+ 
+   // MARCAR COMO APROBADO (el vendedor que lo generó, o un admin).
+-  const aprobarPresupuesto = async (id: string) => {
++  // Task 113 v5: el ID CTR es OBLIGATORIO — la pantalla lo pide en el
++  // modal y la API lo rechaza si falta (doble cinturón).
++  const aprobarPresupuesto = async (id: string, idCtr: string) => {
++    const idCtrLimpio = String(idCtr || "").trim();
++    if (!idCtrLimpio) {
++      toast.error("El ID CTR es obligatorio: escribí el número de crédito");
++      return;
++    }
+     if (aprobandoId) return;
+     setAprobandoId(id);
+     try {
+       const res = await fetch("/api/pedido-especial/presupuestos", {
+         method: "PUT",
+         headers: { "Content-Type": "application/json" },
+-        body: JSON.stringify({ id }),
++        body: JSON.stringify({ id, idCtr: idCtrLimpio }),
+       });
+       const data = await res.json().catch(() => ({}));
+       if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+-      toast.success("Presupuesto marcado como APROBADO");
++      toast.success(`Presupuesto marcado como APROBADO (ID CTR: ${idCtrLimpio})`);
++      setModalAprobacion(null);
++      setIdCtrStr("");
+       cargarHistorial();
+     } catch (error) {
+       toast.error(`No se pudo aprobar: ${(error as Error).message}`);
+@@ -768,6 +788,7 @@ export function PlanEspecial({
+                   <th className="text-left px-3 py-2 font-bold whitespace-nowrap">PLAN</th>
+                   <th className="text-right px-3 py-2 font-bold whitespace-nowrap">VALOR</th>
+                   <th className="text-center px-3 py-2 font-bold whitespace-nowrap">SITUACIÓN</th>
++                  <th className="text-left px-3 py-2 font-bold whitespace-nowrap">ID CTR</th>
+                   <th className="text-right px-3 py-2 font-bold whitespace-nowrap"></th>
+                 </tr>
+               </thead>
+@@ -824,6 +845,20 @@ export function PlanEspecial({
+                           </span>
+                         )}
+                       </td>
++                      {/* Task 113 v5: el ID CTR (n° de crédito) que puso el
++                          vendedor al aprobar — el encargado lo verifica. */}
++                      <td className="px-3 py-2.5 whitespace-nowrap">
++                        {p.estado === "APROBADO" && p.idCtr ? (
++                          <span
++                            className="font-mono font-bold text-stone-800 text-[11px] px-1.5 py-0.5 rounded bg-stone-100 border border-stone-200"
++                            title={`N° de crédito (ID CTR) anotado al aprobar${p.fechaAprobado ? ` el ${fmtFechaHora(p.fechaAprobado)}` : ""}`}
++                          >
++                            {p.idCtr}
++                          </span>
++                        ) : (
++                          <span className="text-stone-300">—</span>
++                        )}
++                      </td>
+                       <td className="px-3 py-2.5 text-right">
+                         <div className="flex items-center justify-end gap-1.5">
+                           {/* IMPRIMIR (Task 113 v4): el PDF del presupuesto
+@@ -840,7 +875,10 @@ export function PlanEspecial({
+                           </button>
+                           {puedeAprobarFila(p) ? (
+                             <button
+-                              onClick={() => aprobarPresupuesto(p.id)}
++                              onClick={() => {
++                                setIdCtrStr("");
++                                setModalAprobacion({ id: p.id, numero: p.numero });
++                              }}
+                               disabled={aprobandoId === p.id}
+                               className="h-7 px-3 rounded-lg font-bold text-[10px] flex items-center gap-1 border transition-colors hover:brightness-95 disabled:opacity-50 whitespace-nowrap"
+                               style={{
+@@ -848,7 +886,7 @@ export function PlanEspecial({
+                                 color: "#166534",
+                                 borderColor: "rgba(22,163,74,0.4)",
+                               }}
+-                              title="Marcar este presupuesto como APROBADO (el encargado lo ve aprobado)"
++                              title="Marcar este presupuesto como APROBADO (pide el ID CTR: el n° de crédito que verifica el encargado)"
+                             >
+                               <CheckCircle2 className="h-3 w-3" />
+                               {aprobandoId === p.id ? "APROBANDO…" : "MARCAR APROBADO"}
+@@ -1451,6 +1489,87 @@ export function PlanEspecial({
+           cuando entra); para el vendedor va ABAJO (calcula → guarda →
+           ve lo suyo). */}
+       {!puedeVerTodo && seccionHistorial}
++
++      {/* ═══ MODAL ID CTR (Task 113 v5, pedido del dueño) ═══
++          "para marcar como aprobado quiero que agregue un campo
++          obligatorio escrito ID CTR para poner el numero de credito
++          que despues el encargado va verificar". El botón APROBAR no
++          se habilita hasta que el campo tenga algo escrito. */}
++      {modalAprobacion && (
++        <div
++          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
++          onClick={() => !aprobandoId && setModalAprobacion(null)}
++        >
++          <div
++            className="bg-white rounded-2xl shadow-xl border-2 w-full max-w-sm p-5"
++            style={{ borderColor: DORADO }}
++            onClick={(e) => e.stopPropagation()}
++          >
++            <h3
++              className="text-sm font-extrabold uppercase tracking-wide flex items-center gap-2 mb-1"
++              style={{ color: AZUL }}
++            >
++              <CheckCircle2 className="h-4 w-4" />
++              MARCAR COMO APROBADO
++            </h3>
++            <p className="text-xs text-stone-500 mb-4 leading-relaxed">
++              Presupuesto{" "}
++              <span className="font-bold" style={{ color: AZUL_OSCURO }}>
++                {modalAprobacion.numero}
++              </span>
++              : escribí el <span className="font-bold text-stone-700">ID CTR</span> (el
++              número de crédito con el que salió el pedido). Después el encargado de
++              tu sucursal lo verifica en el historial.
++            </p>
++
++            <label
++              htmlFor="id-ctr-input"
++              className="text-[11px] font-semibold text-stone-500 uppercase block mb-1"
++            >
++              ID CTR (n° de crédito) *
++            </label>
++            <input
++              id="id-ctr-input"
++              type="text"
++              autoFocus
++              value={idCtrStr}
++              maxLength={40}
++              onChange={(e) => setIdCtrStr(e.target.value)}
++              onKeyDown={(e) => {
++                if (e.key === "Enter" && idCtrStr.trim() && aprobandoId !== modalAprobacion.id) {
++                  aprobarPresupuesto(modalAprobacion.id, idCtrStr);
++                }
++              }}
++              placeholder="Ej: 12345"
++              className="w-full h-10 px-3 rounded-lg border-2 border-stone-300 text-sm font-semibold focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
++            />
++
++            <div className="flex items-center justify-end gap-2 mt-4">
++              <button
++                onClick={() => setModalAprobacion(null)}
++                disabled={aprobandoId === modalAprobacion.id}
++                className="h-9 px-4 rounded-lg font-bold text-[11px] border border-stone-300 text-stone-600 hover:bg-stone-50 transition-colors disabled:opacity-50"
++              >
++                CANCELAR
++              </button>
++              <button
++                onClick={() => aprobarPresupuesto(modalAprobacion.id, idCtrStr)}
++                disabled={!idCtrStr.trim() || aprobandoId === modalAprobacion.id}
++                className="h-9 px-4 rounded-lg font-bold text-[11px] flex items-center gap-1.5 border transition-all hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
++                style={{
++                  backgroundColor: "#16a34a",
++                  color: "#fff",
++                  borderColor: "#16a34a",
++                }}
++                title="Marcar APROBADO con el ID CTR anotado"
++              >
++                <CheckCircle2 className={`h-3.5 w-3.5 ${aprobandoId === modalAprobacion.id ? "animate-pulse" : ""}`} />
++                {aprobandoId === modalAprobacion.id ? "APROBANDO…" : "APROBAR"}
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
+     </div>
+   );
+ }
+diff --git a/src/lib/backup-excel.ts b/src/lib/backup-excel.ts
+index 89b109f..c8d4ffb 100644
+--- a/src/lib/backup-excel.ts
++++ b/src/lib/backup-excel.ts
+@@ -582,6 +582,7 @@ export async function generateBackupExcel(): Promise<BackupResult> {
+       id: f.id,
+       numero: f.numero,
+       estado: f.estado,
++      idCtr: (f as { idCtr?: string }).idCtr ?? "", // Task 113 v5: n° de crédito (ID CTR)
+       vendedorEmail: f.vendedorEmail,
+       vendedorNombre: f.vendedorNombre,
+       sucursal: f.sucursal,
+@@ -618,6 +619,7 @@ export async function generateBackupExcel(): Promise<BackupResult> {
+           { header: "id", key: "id" },
+           { header: "numero", key: "numero" },
+           { header: "estado", key: "estado" },
++          { header: "idCtr", key: "idCtr" }, // Task 113 v5: n° de crédito
+           { header: "vendedorEmail", key: "vendedorEmail" },
+           { header: "vendedorNombre", key: "vendedorNombre" },
+           { header: "sucursal", key: "sucursal" },
+diff --git a/src/lib/pdf/pedido-especial-pdf.ts b/src/lib/pdf/pedido-especial-pdf.ts
+new file mode 100644
+index 0000000..5f3526a
+--- /dev/null
++++ b/src/lib/pdf/pedido-especial-pdf.ts
+@@ -0,0 +1,555 @@
++// ============================================================
++// PEDIDO ESPECIAL — PDF DEL PRESUPUESTO GUARDADO (Task 113 v5)
++//
++// El dueño pidió: "el formato del plan que sale en el pedido especial
++// quiero que salga IGUAL del presupuesto". O sea: el PDF del pedido
++// especial tiene que verse como el PRESUPUESTO DE VENTA de siempre
++// (src/app/api/quotes/pdf/route.ts) — MISMA estructura, MISMA tabla
++// de financiación, MISMO cuadro de total:
++//
++//   1. PRODUCTOS DE LA COTIZACIÓN → tabla # | COD | PRODUCTO |
++//      CANT. | P. CONTADO | SUBTOTAL + cuadro TOTAL CONTADO (azul con
++//      banda dorada, igual que el presupuesto).
++//   2. OPCIONES DE FINANCIACIÓN → la MISMA tabla del presupuesto
++//      (PLAN · CUOTAS · VALOR POR CUOTA · TOTAL DEL PLAN) con la fila
++//      del plan elegido: letra + etiqueta redondeada (CONTADO dorado /
++//      CON ENTREGA azul / SIN ENTREGA dorado / MAYORISTA / SAFRA / CON
++//      CHEQUE), primera fila con fondo dorado claro y cinta dorada.
++//   3. Planes con calendario: SAFRA dibuja el CRONOGRAMA DE PAGOS
++//      (igual que el PDF SAFRA del sistema) y CHEQUE su tabla de
++//      cheques (igual que el PDF CON CHEQUE).
++//   4. Al plan CONTADO no se le dibuja la sección de financiación
++//      (misma regla "soloContado" del presupuesto: sería repetir el
++//      TOTAL CONTADO de arriba).
++//   5. Franja del VENDEDOR abajo de todo + barra de contacto VIZA en
++//      TODAS las páginas + "Página i de n" (igual que el presupuesto).
++//
++// El PDF es para el CLIENTE: NO muestra costo, ni %, ni márgenes (eso
++// es interno del vendedor) — solo producto, plan y valores a pagar.
++//
++// Función PURA (recibe la fila congelada del historial y devuelve el
++// jsPDF doc): así la ruta solo autentica y la prueba de humo puede
++// generar los 6 planes sin tocar la base ni la sesión.
++// ============================================================
++import { jsPDF } from "jspdf";
++import {
++  BLUE,
++  DARK,
++  GOLD,
++  GOLD_LIGHT,
++  GREY,
++  LIGHT,
++  LINE,
++  ZEBRA,
++  drawFooter,
++  drawHeader,
++  drawSectionTitle,
++  drawVendedor,
++  formatDateTimeEs,
++  formatDateEs,
++  formatPYG,
++  yVendedorSobreFooter,
++} from "./vizaPdfDesign";
++import type {
++  ChequeEspecial,
++  FilaCronogramaEspecial,
++} from "@/lib/pedido-especial-calc";
++
++// Fila mínima que el PDF necesita (tal cual sale de la tabla
++// PedidoEspecialPresupuesto, ya con el detalle parseado).
++export interface FilaPedidoEspecialPdf {
++  numero: string;
++  vendedorEmail: string;
++  vendedorNombre: string;
++  sucursal: string;
++  proveedor: string;
++  tipoProducto: string;
++  descripcion: string;
++  plan: string;
++  cuotas: number;
++  valorContado: number;
++  cuotaValor: number;
++  valorTecnico: number;
++  total: number;
++  totalIntereses: number;
++  createdAt: Date | string;
++  detalle: {
++    fechaInicioPago?: string;
++    safraEntrada?: number;
++    safraMeses?: number;
++    cronograma?: FilaCronogramaEspecial[];
++    cheques?: ChequeEspecial[];
++  } | null;
++}
++
++// Nombre del plan en el PDF (igual que en la pantalla).
++const PLANES_NOMBRE: Record<string, string> = {
++  contado: "CONTADO",
++  cuotas_con_entrega: "CUOTAS CON ENTREGA",
++  cuotas_sin_entrega: "CUOTAS SIN ENTREGA",
++  mayorista: "MAYORISTA",
++  safra: "SAFRA",
++  cheque: "CON CHEQUE",
++};
++
++// Fecha del refuerzo N del cronograma SAFRA: emisión + N meses
++// (los refuerzos son MENSUALES, igual que el plan SAFRA real).
++function fechaMes(emision: Date, mes: number): Date {
++  return new Date(emision.getFullYear(), emision.getMonth() + mes, emision.getDate());
++}
++
++export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
++  const plan = String(fila.plan || "contado");
++  const esPlanContado = plan === "contado";
++
++  const doc = new jsPDF({ unit: "pt", format: "a4" });
++  const pageW = doc.internal.pageSize.getWidth();
++  const pageH = doc.internal.pageSize.getHeight();
++  const margin = 42;
++  const contentW = pageW - margin * 2;
++
++  const emision = new Date(fila.createdAt);
++  if (isNaN(emision.getTime())) emision.setTime(Date.now());
++
++  // ── Encabezado VIZA (el mismo del resto de los presupuestos) ──
++  const headerBottom = drawHeader(
++    doc,
++    pageW,
++    margin,
++    contentW,
++    fila.numero,
++    "PEDIDO ESPECIAL",
++    emision,
++    formatDateTimeEs,
++    formatDateEs
++  );
++
++  // Franja del vendedor + barra de contacto reservadas abajo (igual
++  // que el presupuesto: el contenido NUNCA pasa de ahí).
++  const yVend = yVendedorSobreFooter(pageH);
++  const yLimite = yVend - 14;
++
++  let y = headerBottom + 22;
++  const ensureSpace = (min: number) => {
++    if (y + min > yLimite) {
++      doc.addPage();
++      y = 56;
++    }
++  };
++
++  // ═══ 1) PRODUCTOS DE LA COTIZACIÓN (igual que el presupuesto) ═══
++  drawSectionTitle(doc, "PRODUCTOS DE LA COTIZACIÓN", margin, y, contentW);
++  y += 14;
++
++  const colN = 22;
++  const colSku = 58;
++  const colCant = 46;
++  const colPU = 100;
++  const colSub = 100;
++  const colName = contentW - colN - colSku - colCant - colPU - colSub;
++
++  // Header de la tabla (azul, mismas columnas del presupuesto).
++  doc.setFillColor(...BLUE);
++  doc.rect(margin, y, contentW, 22, "F");
++  doc.setTextColor(255, 255, 255);
++  doc.setFont("helvetica", "bold");
++  doc.setFontSize(8.5);
++  let xx = margin + 8;
++  doc.text("#", xx, y + 14.5);
++  xx += colN;
++  doc.text("COD", xx, y + 14.5);
++  xx += colSku;
++  doc.text("PRODUCTO", xx, y + 14.5);
++  xx += colName;
++  doc.text("CANT.", xx, y + 14.5);
++  xx += colCant;
++  doc.text("P. CONTADO", xx, y + 14.5);
++  doc.text("SUBTOTAL", margin + contentW - 10, y + 14.5, { align: "right" });
++  y += 22;
++
++  // UNA fila: el producto del pedido especial (sin SKU de la BASE:
++  // el COD es "PEDIDO" y la cantidad es 1).
++  const rowH = 26;
++  ensureSpace(rowH + 4);
++  doc.setFillColor(...ZEBRA);
++  doc.rect(margin, y, contentW, rowH, "F");
++  doc.setDrawColor(...LINE);
++  doc.setLineWidth(0.5);
++  doc.line(margin, y + rowH, margin + contentW, y + rowH);
++
++  let xxx = margin + 8;
++  doc.setTextColor(...GREY);
++  doc.setFont("helvetica", "normal");
++  doc.setFontSize(8);
++  doc.text("1", xxx, y + 11.5);
++  xxx += colN;
++  doc.text("PEDIDO", xxx, y + 11.5);
++  xxx += colSku;
++  doc.setTextColor(...DARK);
++  doc.setFont("helvetica", "bold");
++  doc.setFontSize(8);
++  const nameLines = doc.splitTextToSize(
++    (fila.descripcion || "—").toUpperCase(),
++    colName - 6
++  ) as string[];
++  doc.text(nameLines.slice(0, 2), xxx, y + 11.5);
++  xxx += colName;
++  doc.setFont("helvetica", "normal");
++  doc.setFontSize(8.5);
++  doc.text("1", xxx + 6, y + 11.5);
++  xxx += colCant;
++  doc.setTextColor(...DARK);
++  doc.text(formatPYG(fila.valorContado), xxx, y + 11.5);
++  xxx += colPU;
++  doc.setFont("helvetica", "bold");
++  doc.setTextColor(...BLUE);
++  doc.text(formatPYG(fila.valorContado), margin + contentW - 10, y + 11.5, {
++    align: "right",
++  });
++  y += rowH;
++
++  // Cuadro TOTAL CONTADO (idéntico al del presupuesto: azul + banda
++  // dorada abajo, valor a la derecha).
++  ensureSpace(70);
++  y += 8;
++  const totalBoxW = 280;
++  const totalBoxX = pageW - margin - totalBoxW;
++  const totalBoxH = 28;
++  doc.setFillColor(...BLUE);
++  doc.rect(totalBoxX, y, totalBoxW, totalBoxH, "F");
++  doc.setFillColor(...GOLD);
++  doc.rect(totalBoxX, y + totalBoxH, totalBoxW, 3, "F");
++  doc.setFont("helvetica", "bold");
++  doc.setFontSize(9);
++  doc.setTextColor(255, 255, 255);
++  doc.text("TOTAL CONTADO", totalBoxX + 14, y + 17.5);
++  doc.setFontSize(12);
++  doc.text(formatPYG(fila.valorContado), totalBoxX + totalBoxW - 14, y + 17.5, {
++    align: "right",
++  });
++  y += totalBoxH + 2 + 16;
++
++  // ═══ 2) OPCIONES DE FINANCIACIÓN (la MISMA tabla del presupuesto) ═══
++  // Al CONTADO no va: el TOTAL CONTADO de arriba ya ES el total (misma
++  // regla "soloContado" del presupuesto de siempre).
++  if (!esPlanContado) {
++    ensureSpace(120);
++    drawSectionTitle(doc, "OPCIONES DE FINANCIACIÓN", margin, y, contentW);
++    y += 14;
++
++    const pColBadge = 100;
++    const pColCuotas = 140;
++    const pColValor = 150;
++
++    // Header de la tabla (PLAN · CUOTAS · VALOR POR CUOTA · TOTAL DEL PLAN).
++    doc.setFillColor(...BLUE);
++    doc.rect(margin, y, contentW, 22, "F");
++    doc.setTextColor(255, 255, 255);
++    doc.setFont("helvetica", "bold");
++    doc.setFontSize(8.5);
++    let pp = margin + 10;
++    doc.text("PLAN", pp, y + 14.5);
++    pp += pColBadge;
++    doc.text("CUOTAS", pp, y + 14.5);
++    pp += pColCuotas;
++    doc.text("VALOR POR CUOTA", pp, y + 14.5);
++    doc.text("TOTAL DEL PLAN", margin + contentW - 10, y + 14.5, { align: "right" });
++    y += 22;
++
++    // Fila única del plan elegido — primera fila: fondo dorado claro +
++    // cinta dorada a la izquierda (exactamente como el presupuesto).
++    const rowPH = 27;
++    ensureSpace(rowPH);
++    doc.setFillColor(...GOLD_LIGHT);
++    doc.rect(margin, y, contentW, rowPH, "F");
++    doc.setFillColor(...GOLD);
++    doc.rect(margin, y, 3, rowPH, "F");
++    doc.setDrawColor(...LINE);
++    doc.setLineWidth(0.5);
++    doc.line(margin, y + rowPH, margin + contentW, y + rowPH);
++
++    // Etiqueta redondeada del plan (mismo píldora del presupuesto:
++    // 70 × 13.5, esquinas 6.75, texto 6.8 bold centrado).
++    const badge = (label: string, fill: [number, number, number], text: [number, number, number]) => {
++      doc.setFillColor(...fill);
++      doc.roundedRect(margin + 10 + 16, y + 7.5, 70, 13.5, 6.75, 6.75, "F");
++      doc.setFont("helvetica", "bold");
++      doc.setFontSize(6.8);
++      doc.setTextColor(...text);
++      doc.text(label, margin + 10 + 16 + 35, y + 17, { align: "center" });
++    };
++
++    // Texto de la columna CUOTAS + valor de la columna VALOR POR CUOTA.
++    const cheques = fila.detalle?.cheques || [];
++    const cronograma = fila.detalle?.cronograma || [];
++    const nCuotas = Math.max(1, Math.floor(fila.cuotas || 1));
++    const plural = (n: number, s: string, p: string) => (n === 1 ? s : p);
++
++    let textoCuotas = "";
++    let valorPorCuota = 0;
++    if (plan === "cuotas_con_entrega") {
++      badge("CON ENTREGA", BLUE, [255, 255, 255]);
++      textoCuotas =
++        nCuotas === 1
++          ? "1 ENTRADA"
++          : `1 ENTRADA + ${nCuotas - 1} ${plural(nCuotas - 1, "CUOTA", "CUOTAS")}`;
++      valorPorCuota = fila.cuotaValor;
++    } else if (plan === "cuotas_sin_entrega") {
++      badge("SIN ENTREGA", GOLD, BLUE);
++      textoCuotas = `${nCuotas} ${plural(nCuotas, "CUOTA", "CUOTAS")}`;
++      valorPorCuota = fila.cuotaValor;
++    } else if (plan === "mayorista") {
++      badge("MAYORISTA", BLUE, [255, 255, 255]);
++      textoCuotas = "1 PAGO";
++      valorPorCuota = fila.valorTecnico;
++    } else if (plan === "safra") {
++      badge("SAFRA", BLUE, [255, 255, 255]);
++      const entrada = Math.max(0, fila.detalle?.safraEntrada || 0);
++      const meses = Math.max(1, Math.floor(fila.detalle?.safraMeses || nCuotas || 1));
++      textoCuotas =
++        entrada > 0
++          ? `ENTRADA + ${meses} ${plural(meses, "REFUERZO", "REFUERZOS")}`
++          : `${meses} ${plural(meses, "REFUERZO", "REFUERZOS")}`;
++      // Valor típico del refuerzo (el primero pagado; el PAGO FINAL sale
++      // con su interés en el cronograma de abajo).
++      const primerRefuerzo = cronograma.find((f) => f.mes >= 1 && f.pago > 0);
++      valorPorCuota = primerRefuerzo ? primerRefuerzo.pagoMostrado || primerRefuerzo.pago : 0;
++    } else if (plan === "cheque") {
++      badge("CON CHEQUE", GOLD, BLUE);
++      const nCheques = cheques.length || nCuotas;
++      textoCuotas = `${nCheques} ${plural(nCheques, "CHEQUE", "CHEQUES")}`;
++      valorPorCuota = cheques[0]?.valor || 0;
++    } else {
++      badge(PLANES_NOMBRE[plan] || plan.toUpperCase(), BLUE, [255, 255, 255]);
++      textoCuotas = "1 PAGO";
++      valorPorCuota = fila.total;
++    }
++
++    // Letra del plan (A) + textos de la fila, mismo estilo del presupuesto.
++    doc.setFont("helvetica", "bold");
++    doc.setFontSize(11.5);
++    doc.setTextColor(...BLUE);
++    doc.text("A", margin + 10, y + 17.5);
++    doc.setFont("helvetica", "normal");
++    doc.setFontSize(9);
++    doc.setTextColor(...DARK);
++    doc.text(textoCuotas, margin + 10 + pColBadge, y + 17.5);
++    doc.setFont("helvetica", "bold");
++    doc.setFontSize(10.5);
++    doc.setTextColor(...BLUE);
++    doc.text(formatPYG(valorPorCuota), margin + 10 + pColBadge + pColCuotas, y + 17.5);
++    doc.setTextColor(...DARK);
++    doc.text(formatPYG(fila.total), margin + contentW - 10, y + 17.5, { align: "right" });
++    y += rowPH;
++
++    // ═══ 2b) SAFRA: CRONOGRAMA DE PAGOS (igual que el PDF SAFRA) ═══
++    if (plan === "safra" && cronograma.length > 0) {
++      ensureSpace(60);
++      y += 12;
++      // Banner azul redondeado (mismo del PDF SAFRA del sistema).
++      doc.setFillColor(...BLUE);
++      doc.roundedRect(margin, y, contentW, 28, 4, 4, "F");
++      doc.setFont("helvetica", "bold");
++      doc.setFontSize(13);
++      doc.setTextColor(255, 255, 255);
++      doc.text("CRONOGRAMA DE PAGOS", margin + 14, y + 18);
++      y += 36;
++
++      const cColN = 30;
++      const cColConcepto = 220;
++      const cColFecha = 130;
++      const cColValor = contentW - cColN - cColConcepto - cColFecha;
++
++      doc.setFillColor(...BLUE);
++      doc.rect(margin, y, contentW, 22, "F");
++      doc.setTextColor(255, 255, 255);
++      doc.setFont("helvetica", "bold");
++      doc.setFontSize(9);
++      let cc = margin + 6;
++      doc.text("#", cc, y + 14);
++      cc += cColN;
++      doc.text("CONCEPTO", cc, y + 14);
++      cc += cColConcepto;
++      doc.text("FECHA DE PAGO", cc, y + 14);
++      doc.text("VALOR", margin + contentW - 6, y + 14, { align: "right" });
++      y += 22;
++
++      let rowIdx = 0;
++      // Filas con pago real (igual que el PDF SAFRA: solo pagos > 0) y
++      // la ÚLTIMA siempre es el PAGO FINAL (ahí se cobra el interés del
++      // plan, ya incluido en pagoMostrado) — aunque el plan haya
++      // cuadrado antes de los meses elegidos y el cálculo la haya
++      // dejado con el rótulo genérico "Refuerzo".
++      const filasPago = cronograma.filter((f) => f.pago > 0 || f.pagoMostrado > 0);
++      const ultimaIdx = filasPago.length - 1;
++      filasPago.forEach((f, idxPago) => {
++          const esEntrada = f.mes === 0;
++          const esPagoFinal = idxPago === ultimaIdx;
++          const rowC = 26;
++          ensureSpace(rowC);
++          if (esEntrada || esPagoFinal) {
++            // Destacado dorado para la ENTRADA y el PAGO FINAL (igual
++            // que el cronograma del PDF SAFRA).
++            doc.setFillColor(254, 243, 199);
++            doc.rect(margin, y, contentW, rowC, "F");
++          } else if (rowIdx % 2 === 0) {
++            doc.setFillColor(245, 245, 244);
++            doc.rect(margin, y, contentW, rowC, "F");
++          }
++          let cp = margin + 6;
++          doc.setFont("helvetica", "bold");
++          doc.setFontSize(11);
++          doc.setTextColor(...GOLD);
++          doc.text(String(rowIdx + 1), cp, y + 16);
++          cp += cColN;
++          doc.setFontSize(10);
++          doc.setTextColor(28, 25, 23);
++          doc.text(
++            esEntrada
++              ? "ENTRADA INICIAL"
++              : esPagoFinal
++                ? "PAGO FINAL"
++                : String(f.concepto || "REFUERZO").toUpperCase(),
++            cp,
++            y + 16
++          );
++          cp += cColConcepto;
++          doc.setFont("helvetica", "normal");
++          doc.setTextColor(120, 113, 108);
++          doc.text(formatDateEs(fechaMes(emision, f.mes)), cp, y + 16);
++          doc.setFont("helvetica", "bold");
++          doc.setTextColor(...DARK);
++          doc.text(
++            formatPYG(f.pagoMostrado > 0 ? f.pagoMostrado : f.pago),
++            margin + contentW - 6,
++            y + 16,
++            { align: "right" }
++          );
++          y += rowC;
++          rowIdx += 1;
++        });
++      y += 6;
++    }
++
++    // ═══ 2c) CHEQUE: tabla de cheques (igual que el PDF CON CHEQUE) ═══
++    if (plan === "cheque" && cheques.length > 0) {
++      ensureSpace(60);
++      y += 12;
++      doc.setFont("helvetica", "bold");
++      doc.setFontSize(13);
++      doc.setTextColor(...DARK);
++      doc.text("PLAN CON CHEQUE", margin, y);
++      y += 18;
++
++      const chColN = 90;
++      const chColFecha = 170;
++      const chColValor = contentW - chColN - chColFecha;
++
++      doc.setFillColor(...BLUE);
++      doc.rect(margin, y, contentW, 22, "F");
++      doc.setTextColor(255, 255, 255);
++      doc.setFont("helvetica", "bold");
++      doc.setFontSize(9);
++      doc.text("N° CHEQUE", margin + 10, y + 14);
++      doc.text("FECHA DE VENCIMIENTO", margin + chColN, y + 14);
++      doc.text("VALOR DEL CHEQUE", margin + contentW - 10, y + 14, { align: "right" });
++      y += 22;
++
++      cheques.forEach((c, i) => {
++        const rowC = 24;
++        ensureSpace(rowC);
++        if (i % 2 === 0) {
++          doc.setFillColor(...ZEBRA);
++          doc.rect(margin, y, contentW, rowC, "F");
++        }
++        doc.setDrawColor(...LINE);
++        doc.setLineWidth(0.5);
++        doc.line(margin, y + rowC, margin + contentW, y + rowC);
++        doc.setFont("helvetica", "normal");
++        doc.setFontSize(9.5);
++        doc.setTextColor(...DARK);
++        doc.text(String(c.numero), margin + 10, y + 15);
++        doc.text(formatDateEs(c.fecha), margin + chColN, y + 15);
++        doc.setFont("helvetica", "bold");
++        doc.text(
++          formatPYG(c.valor),
++          margin + contentW - 10,
++          y + 15,
++          { align: "right" }
++        );
++        y += rowC;
++      });
++      y += 8;
++    }
++
++    // ═══ Cuadro del TOTAL DEL PLAN (azul + banda dorada, como el
++    // cuadro de TOTAL DEL PLAN SAFRA / TOTAL A PAGAR del sistema) ═══
++    ensureSpace(80);
++    y += 8;
++    const sumBoxW = 320;
++    const sumBoxH = 56;
++    const sumBoxX = pageW - margin - sumBoxW;
++    doc.setFillColor(...BLUE);
++    doc.roundedRect(sumBoxX, y, sumBoxW, sumBoxH, 6, 6, "F");
++    doc.setFillColor(...GOLD);
++    doc.rect(sumBoxX, y, sumBoxW, 3, "F");
++
++    const totalLabel =
++      plan === "cuotas_con_entrega" || plan === "cuotas_sin_entrega"
++        ? "TOTAL DEL PLAN:"
++        : plan === "mayorista"
++          ? "TOTAL MAYORISTA:"
++          : plan === "safra"
++            ? "TOTAL DEL PLAN SAFRA:"
++            : "TOTAL A PAGAR:";
++    doc.setFont("helvetica", "normal");
++    doc.setFontSize(10);
++    doc.setTextColor(217, 184, 107);
++    doc.text(totalLabel, sumBoxX + 14, y + 25);
++    doc.setFont("helvetica", "bold");
++    doc.setFontSize(16);
++    doc.setTextColor(255, 255, 255);
++    doc.text(formatPYG(fila.total), sumBoxX + sumBoxW - 14, y + 25, { align: "right" });
++
++    // Aclaración chica bajo el cuadro (los × cuota, sin internals).
++    const nota =
++      plan === "cuotas_con_entrega" || plan === "cuotas_sin_entrega"
++        ? `${nCuotas} ${plural(nCuotas, "cuota", "cuotas")} de ${formatPYG(fila.cuotaValor)}`
++        : plan === "cheque"
++          ? `${cheques.length || nCuotas} ${plural(cheques.length || nCuotas, "cheque", "cheques")} de ${formatPYG(cheques[0]?.valor || 0)}`
++          : plan === "safra" && (fila.totalIntereses || 0) > 0
++            ? `Incluye ${formatPYG(fila.totalIntereses)} de intereses`
++            : "";
++    if (nota) {
++      doc.setFont("helvetica", "normal");
++      doc.setFontSize(8.5);
++      doc.setTextColor(...GREY);
++      doc.text(nota, sumBoxX + 14, y + 44);
++    }
++  }
++
++  // ═══ 3) Franja del VENDEDOR + FOOTER en todas las páginas ═══
++  // Igual que el presupuesto: la franja abajo de todo, encima de la
++  // barra de contacto; el footer se dibuja en TODAS las páginas con
++  // su "Página i de n".
++  drawVendedor(doc, margin, yVend, contentW, {
++    nombre: fila.vendedorNombre || fila.vendedorEmail,
++    sucursal: fila.sucursal || undefined,
++  });
++
++  const totalPages = doc.getNumberOfPages();
++  for (let i = 1; i <= totalPages; i++) {
++    doc.setPage(i);
++    drawFooter(doc, pageW, pageH, margin, contentW, "Pedido Especial");
++    if (totalPages > 1) {
++      doc.setFont("helvetica", "normal");
++      doc.setFontSize(7.5);
++      doc.setTextColor(...GREY);
++      doc.text(`Página ${i} de ${totalPages}`, pageW - margin, pageH - 8, {
++        align: "right",
++      });
++    }
++  }
++
++  return doc;
++}
+diff --git a/src/lib/pedido-especial-presupuestos.ts b/src/lib/pedido-especial-presupuestos.ts
+index 37d2b4c..36bd768 100644
+--- a/src/lib/pedido-especial-presupuestos.ts
++++ b/src/lib/pedido-especial-presupuestos.ts
+@@ -110,6 +110,7 @@ export async function ensureTablaPedidoEspecialPresupuestos(): Promise<boolean>
+          "totalIntereses" DOUBLE PRECISION NOT NULL DEFAULT 0,
+          "detalle" TEXT NOT NULL DEFAULT '',
+          "estado" TEXT NOT NULL DEFAULT 'GENERADO',
++         "idCtr" TEXT NOT NULL DEFAULT '',
+          "fechaAprobado" TIMESTAMP(3),
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+@@ -128,6 +129,17 @@ export async function ensureTablaPedidoEspecialPresupuestos(): Promise<boolean>
+       `CREATE INDEX IF NOT EXISTS "PedidoEspecialPresupuesto_sucursal_idx"
+        ON "PedidoEspecialPresupuesto"("sucursal")`
+     );
++    // Task 113 v5 (ID CTR): si la tabla YA existía (deploys anteriores),
++    // la columna nueva se agrega SOLA. ADD COLUMN IF NOT EXISTS es
++    // idempotente e inofensivo — jamás toca datos existentes.
++    try {
++      await db.$executeRawUnsafe(
++        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "idCtr" TEXT NOT NULL DEFAULT ''`
++      );
++    } catch {
++      // ALTER fallido no invalida la tabla: las lecturas devuelven lista
++      // vacía (P2022) y el sistema sigue funcionando igual.
++    }
+     estadoTabla = "lista";
+     return true;
+   } catch {
+@@ -183,6 +195,9 @@ export interface PresupuestoPedidoEspecial {
+   totalIntereses: number;
+   detalle: DetallePresupuesto | null;
+   estado: string; // "GENERADO" | "APROBADO"
++  // Task 113 v5: N° de crédito ("ID CTR") anotado al APROBAR (vacío en
++  // GENERADO). El encargado de sucursal lo verifica en el historial.
++  idCtr: string;
+   fechaAprobado: string | null;
+   createdAt: string;
+ }
+@@ -217,6 +232,7 @@ function aFila(f: {
+   totalIntereses: number;
+   detalle: string;
+   estado: string;
++  idCtr: string;
+   fechaAprobado: Date | null;
+   createdAt: Date;
+ }): PresupuestoPedidoEspecial {
+@@ -254,6 +270,7 @@ function aFila(f: {
+     totalIntereses: f.totalIntereses,
+     detalle,
+     estado: f.estado,
++    idCtr: f.idCtr ?? "",
+     fechaAprobado: f.fechaAprobado ? new Date(f.fechaAprobado).toISOString() : null,
+     createdAt: new Date(f.createdAt).toISOString(),
+   };
+@@ -546,16 +563,33 @@ export async function crearPresupuesto(
+ // (el dueño: él los VE aprobados, solo lectura). Unidireccional:
+ // GENERADO → APROBADO (no se vuelve atrás, así el encargado puede
+ // confiar en lo que ve).
++// Task 113 v5 (pedido del dueño): el ID CTR es OBLIGATORIO para aprobar:
++// "para marcar como aprobado quiero que agregue un campo obligatorio
++// escrito ID CTR para poner el número de crédito que después el
++// encargado va verificar". Sin ID CTR la API rechaza la aprobación.
+ export type ResultadoAprobado =
+   | { ok: true; presupuesto: PresupuestoPedidoEspecial }
+   | { ok: false; error: string; status: number };
+ 
++// Largo máximo del ID CTR (n° de crédito).
++export const ID_CTR_MAX = 40;
++
+ export async function aprobarPresupuesto(
+   id: string,
+-  usuario: { email: string; esAdmin: boolean }
++  usuario: { email: string; esAdmin: boolean },
++  idCtr: string
+ ): Promise<ResultadoAprobado> {
+   const idLimpio = String(id || "").trim();
+   if (!idLimpio) return { ok: false, error: "Falta el presupuesto.", status: 400 };
++  // ID CTR OBLIGATORIO (Task 113 v5): sin número de crédito no se aprueba.
++  const idCtrLimpio = String(idCtr || "").trim().slice(0, ID_CTR_MAX);
++  if (!idCtrLimpio) {
++    return {
++      ok: false,
++      error: "El ID CTR es obligatorio: escribí el número de crédito para marcarlo APROBADO.",
++      status: 400,
++    };
++  }
+   const email = String(usuario.email || "").trim().toLowerCase();
+ 
+   const intentar = async (): Promise<ResultadoAprobado> => {
+@@ -574,7 +608,7 @@ export async function aprobarPresupuesto(
+     }
+     const f = await db.pedidoEspecialPresupuesto.update({
+       where: { id: idLimpio },
+-      data: { estado: "APROBADO", fechaAprobado: new Date() },
++      data: { estado: "APROBADO", fechaAprobado: new Date(), idCtr: idCtrLimpio },
+     });
+     return { ok: true, presupuesto: aFila(f) };
+   };
+-- 
+2.47.3
+
