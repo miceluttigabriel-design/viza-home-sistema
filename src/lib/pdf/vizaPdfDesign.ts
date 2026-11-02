@@ -16,17 +16,16 @@ export const FOOTER_H = 64;
 export const FOOTER_BOTTOM_GAP = 34;
 export const FOOTER_RESERVE = FOOTER_H + FOOTER_BOTTOM_GAP + 14;
 
-// ─── NUESTRAS SUCURSALES, bien encima del título (Task 108, pedido del dueño) ───
-// El dueño pidió reescribir la lista (antes la píldora del pie de la Task 106)
-// y ponerla "bien em cima del PRESUPUESTO DE VENTA", en TODOS los tipos de
-// presupuesto. Texto EXACTO que pasó:
-//   NUESTRAS SUCURSALES: ( Casa Central Katuete 1º Piso. Suc. Katuete /
-//   Nueva Esperanza / La Paloma / Saltos Del Guaira )
-// Se dibuja centrada, en AZUL VIZA bold, 12pt encima de la línea base del
-// título del plan ("PRESUPUESTO DE VENTA / SAFRA / CON CHEQUE / MAYORISTA").
-// Solo visual: no toca datos ni lógica.
+// ─── NUESTRAS SUCURSALES, bien encima del título (Task 108/109, del dueño) ───
+// Task 108: la lista vive "bien em cima del PRESUPUESTO DE VENTA", en TODOS
+// los tipos de presupuesto (antes era la píldora del pie de la Task 106).
+// Task 109 (pedido del dueño): SIN los paréntesis "( )" y el texto va del
+// lado IZQUIERDO (alineado al margen, donde arranca todo el documento).
+// Solo eso — nada más. Se dibuja en AZUL VIZA bold, 24pt encima de la línea
+// base del título del plan ("PRESUPUESTO DE VENTA / SAFRA / CON CHEQUE /
+// MAYORISTA"). Solo visual: no toca datos ni lógica.
 export const SUCURSALES_LINEA =
-  "NUESTRAS SUCURSALES: ( Casa Central Katuete 1º Piso. Suc. Katuete / Nueva Esperanza / La Paloma / Saltos Del Guaira )";
+  "NUESTRAS SUCURSALES: Casa Central Katuete 1º Piso. Suc. Katuete / Nueva Esperanza / La Paloma / Saltos Del Guaira";
 
 export function drawSucursalesTop(doc: jsPDF, x: number, w: number, yTitulo: number) {
   doc.setFont("helvetica", "bold");
@@ -40,10 +39,11 @@ export function drawSucursalesTop(doc: jsPDF, x: number, w: number, yTitulo: num
     tw = doc.getTextWidth(SUCURSALES_LINEA);
   }
   doc.setTextColor(...BLUE);
-  // 24pt encima de la BASELINE del título: el título es de 21pt (su tope
-  // llega ~15pt sobre su baseline) → quedan ~9pt de aire real entre la
-  // franja y el título, sin pisarlo y sin acercarse al eslogan.
-  doc.text(SUCURSALES_LINEA, x + w / 2, yTitulo - 24, { align: "center" });
+  // 24pt encima de la BASELINE del título (igual que Task 108): el título es
+  // de 21pt (su tope llega ~15pt sobre su baseline) → quedan ~9pt de aire
+  // real entre la franja y el título, sin pisarlo y sin acercarse al eslogan.
+  // Task 109: texto del lado IZQUIERDO (x = margen), ya no centrado.
+  doc.text(SUCURSALES_LINEA, x, yTitulo - 24, { align: "left" });
 }
 
 type Seg = ["L", number, number] | ["C", number, number, number, number, number, number];
