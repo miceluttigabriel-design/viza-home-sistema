@@ -39,6 +39,9 @@ import { calcularValorMayorista, esProductoAire } from "@/lib/margen-mayorista";
 import type { EtiquetaCreada } from "@/lib/etiquetas";
 import { puedeEditarTasaCambio } from "@/lib/permisos-cambio";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
+// Task 107 (pedido del dueño): el mini cuadrito de última actualización de stock
+// (el mismo del panel de ventas, Task 105) también DENTRO DE LA BASE.
+import { StockImportInfoCard } from "./stock-import-info-card";
 
 // Formatea una fracción decimal de porcentaje (0.25 = 25%) igual que la tabla
 // (valor × 100), pero compacto: 25%, 28%, 35.3%, 108.8% (sin ceros colgantes)
@@ -1655,6 +1658,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
               <LogOut className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Task 107 (pedido del dueño): MINI CUADRITO "última actualización de
+              stock" también DENTRO DE LA BASE — el MISMO componente del panel
+              de ventas (Task 105), para que los ADMIN vean la misma información:
+              fecha/hora de la última subida del Excel + productos nuevos +
+              actualizados. Lado IZQUIERDO del header (al lado de la cajita de
+              botones, antes del buscador), igual que en ventas. Solo lectura:
+              no recibe props, no toca datos, no cambia nada más de la base. */}
+          <StockImportInfoCard />
 
           {/* Buscador pegado arriba, al lado de la cajita de botones */}
           <div className="relative flex-1">
