@@ -4,8 +4,25 @@
   "buildCommand": "prisma generate && next build",
   "installCommand": "npm install",
   "functions": {
+    "src/app/api/cron/backup-excel/route.ts": {
+      "maxDuration": 60
+    },
     "src/app/api/**/route.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/backup-excel",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/backup-excel",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/backup-excel",
+      "schedule": "0 1 * * *"
+    }
+  ]
 }
