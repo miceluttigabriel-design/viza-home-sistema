@@ -112,7 +112,11 @@ export async function PUT(req: Request) {
     const email = (session.user?.email || "").trim().toLowerCase();
     const body = await req.json().catch(() => null);
     const id = String((body as any)?.id || "");
-    const r = await aprobarPresupuesto(id, { email, esAdmin });
+    // Task 113 v5 (pedido del dueño): el ID CTR viaja con la aprobación y
+    // la API lo EXIGE (campo obligatorio — el n° de crédito que después
+    // verifica el encargado de sucursal).
+    const idCtr = String((body as any)?.idCtr || "");
+    const r = await aprobarPresupuesto(id, { email, esAdmin }, idCtr);
     if (!r.ok) {
       return NextResponse.json({ error: r.error }, { status: r.status });
     }

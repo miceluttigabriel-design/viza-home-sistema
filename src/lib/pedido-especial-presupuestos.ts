@@ -110,6 +110,7 @@ export async function ensureTablaPedidoEspecialPresupuestos(): Promise<boolean> 
          "totalIntereses" DOUBLE PRECISION NOT NULL DEFAULT 0,
          "detalle" TEXT NOT NULL DEFAULT '',
          "estado" TEXT NOT NULL DEFAULT 'GENERADO',
+         "idCtr" TEXT NOT NULL DEFAULT '',
          "fechaAprobado" TIMESTAMP(3),
          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -128,6 +129,17 @@ export async function ensureTablaPedidoEspecialPresupuestos(): Promise<boolean> 
       `CREATE INDEX IF NOT EXISTS "PedidoEspecialPresupuesto_sucursal_idx"
        ON "PedidoEspecialPresupuesto"("sucursal")`
     );
+    // Task 113 v5 (ID CTR): si la tabla YA existía (deploys anteriores),
+    // la columna nueva se agrega SOLA. ADD COLUMN IF NOT EXISTS es
+    // idempotente e inofensivo — jamás toca datos existentes.
+    try {
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "idCtr" TEXT NOT NULL DEFAULT ''`
+      );
+    } catch {
+      // ALTER fallido no invalida la tabla: las lecturas devuelven lista
+      // vacía (P2022) y el sistema sigue funcionando igual.
+    }
     estadoTabla = "lista";
     return true;
   } catch {
@@ -183,6 +195,9 @@ export interface PresupuestoPedidoEspecial {
   totalIntereses: number;
   detalle: DetallePresupuesto | null;
   estado: string; // "GENERADO" | "APROBADO"
+  // Task 113 v5: N° de crédito ("ID CTR") anotado al APROBAR (vacío en
+  // GENERADO). El encargado de sucursal lo verifica en el historial.
+  idCtr: string;
   fechaAprobado: string | null;
   createdAt: string;
 }
@@ -217,6 +232,7 @@ function aFila(f: {
   totalIntereses: number;
   detalle: string;
   estado: string;
+  idCtr: string;
   fechaAprobado: Date | null;
   createdAt: Date;
 }): PresupuestoPedidoEspecial {
@@ -254,6 +270,7 @@ function aFila(f: {
     totalIntereses: f.totalIntereses,
     detalle,
     estado: f.estado,
+    idCtr: f.idCtr ?? "",
     fechaAprobado: f.fechaAprobado ? new Date(f.fechaAprobado).toISOString() : null,
     createdAt: new Date(f.createdAt).toISOString(),
   };
@@ -546,16 +563,33 @@ export async function crearPresupuesto(
 // (el dueño: él los VE aprobados, solo lectura). Unidireccional:
 // GENERADO → APROBADO (no se vuelve atrás, así el encargado puede
 // confiar en lo que ve).
+// Task 113 v5 (pedido del dueño): el ID CTR es OBLIGATORIO para aprobar:
+// "para marcar como aprobado quiero que agregue un campo obligatorio
+// escrito ID CTR para poner el número de crédito que después el
+// encargado va verificar". Sin ID CTR la API rechaza la aprobación.
 export type ResultadoAprobado =
   | { ok: true; presupuesto: PresupuestoPedidoEspecial }
   | { ok: false; error: string; status: number };
 
+// Largo máximo del ID CTR (n° de crédito).
+export const ID_CTR_MAX = 40;
+
 export async function aprobarPresupuesto(
   id: string,
-  usuario: { email: string; esAdmin: boolean }
+  usuario: { email: string; esAdmin: boolean },
+  idCtr: string
 ): Promise<ResultadoAprobado> {
   const idLimpio = String(id || "").trim();
   if (!idLimpio) return { ok: false, error: "Falta el presupuesto.", status: 400 };
+  // ID CTR OBLIGATORIO (Task 113 v5): sin número de crédito no se aprueba.
+  const idCtrLimpio = String(idCtr || "").trim().slice(0, ID_CTR_MAX);
+  if (!idCtrLimpio) {
+    return {
+      ok: false,
+      error: "El ID CTR es obligatorio: escribí el número de crédito para marcarlo APROBADO.",
+      status: 400,
+    };
+  }
   const email = String(usuario.email || "").trim().toLowerCase();
 
   const intentar = async (): Promise<ResultadoAprobado> => {
@@ -574,7 +608,7 @@ export async function aprobarPresupuesto(
     }
     const f = await db.pedidoEspecialPresupuesto.update({
       where: { id: idLimpio },
-      data: { estado: "APROBADO", fechaAprobado: new Date() },
+      data: { estado: "APROBADO", fechaAprobado: new Date(), idCtr: idCtrLimpio },
     });
     return { ok: true, presupuesto: aFila(f) };
   };

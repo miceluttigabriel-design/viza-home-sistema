@@ -582,6 +582,7 @@ export async function generateBackupExcel(): Promise<BackupResult> {
       id: f.id,
       numero: f.numero,
       estado: f.estado,
+      idCtr: (f as { idCtr?: string }).idCtr ?? "", // Task 113 v5: n° de crédito (ID CTR)
       vendedorEmail: f.vendedorEmail,
       vendedorNombre: f.vendedorNombre,
       sucursal: f.sucursal,
@@ -618,6 +619,7 @@ export async function generateBackupExcel(): Promise<BackupResult> {
           { header: "id", key: "id" },
           { header: "numero", key: "numero" },
           { header: "estado", key: "estado" },
+          { header: "idCtr", key: "idCtr" }, // Task 113 v5: n° de crédito
           { header: "vendedorEmail", key: "vendedorEmail" },
           { header: "vendedorNombre", key: "vendedorNombre" },
           { header: "sucursal", key: "sucursal" },

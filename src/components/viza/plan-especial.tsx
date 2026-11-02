@@ -66,6 +66,12 @@ import { formatPYG } from "@/lib/format";
 // la BASE, lo único que cambia es que el costo lo ponemos manualmente".
 // También v4: fuera los textos técnicos de la pantalla (fórmulas, %,
 // tasas, plazos): el vendedor solo ve costo, datos y resultado.
+// Task 113 v5 (pedido del dueño): 1) para MARCAR APROBADO el campo
+// "ID CTR" es OBLIGATORIO (el n° de crédito que después el encargado
+// de sucursal verifica — columna propia en el historial); 2) el PDF
+// del presupuesto guardado sale con el MISMO formato del PRESUPUESTO
+// DE VENTA (tabla de productos + TOTAL CONTADO + OPCIONES DE
+// FINANCIACIÓN, ver src/lib/pdf/pedido-especial-pdf.ts).
 // El campo de costo (y la entrada del SAFRA) formatean SOLOS los miles
 // con puntito mientras se escribe: "15000000" → "15.000.000".
 
@@ -398,6 +404,11 @@ export function PlanEspecial({
   // que aparece justo después de guardar) y el estado del PDF en curso.
   const [ultimoGuardado, setUltimoGuardado] = useState<{ id: string; numero: string } | null>(null);
   const [imprimiendoId, setImprimiendoId] = useState<string | null>(null);
+  // Task 113 v5 (pedido del dueño): para MARCAR APROBADO se exige el
+  // "ID CTR" (n° de crédito) — modal con campo OBLIGATORIO; el encargado
+  // de sucursal lo verifica después en el historial.
+  const [modalAprobacion, setModalAprobacion] = useState<{ id: string; numero: string } | null>(null);
+  const [idCtrStr, setIdCtrStr] = useState("");
 
   const cargarHistorial = async () => {
     setCargandoHistorial(true);
@@ -496,18 +507,27 @@ export function PlanEspecial({
   };
 
   // MARCAR COMO APROBADO (el vendedor que lo generó, o un admin).
-  const aprobarPresupuesto = async (id: string) => {
+  // Task 113 v5: el ID CTR es OBLIGATORIO — la pantalla lo pide en el
+  // modal y la API lo rechaza si falta (doble cinturón).
+  const aprobarPresupuesto = async (id: string, idCtr: string) => {
+    const idCtrLimpio = String(idCtr || "").trim();
+    if (!idCtrLimpio) {
+      toast.error("El ID CTR es obligatorio: escribí el número de crédito");
+      return;
+    }
     if (aprobandoId) return;
     setAprobandoId(id);
     try {
       const res = await fetch("/api/pedido-especial/presupuestos", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id, idCtr: idCtrLimpio }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
-      toast.success("Presupuesto marcado como APROBADO");
+      toast.success(`Presupuesto marcado como APROBADO (ID CTR: ${idCtrLimpio})`);
+      setModalAprobacion(null);
+      setIdCtrStr("");
       cargarHistorial();
     } catch (error) {
       toast.error(`No se pudo aprobar: ${(error as Error).message}`);
@@ -768,6 +788,7 @@ export function PlanEspecial({
                   <th className="text-left px-3 py-2 font-bold whitespace-nowrap">PLAN</th>
                   <th className="text-right px-3 py-2 font-bold whitespace-nowrap">VALOR</th>
                   <th className="text-center px-3 py-2 font-bold whitespace-nowrap">SITUACIÓN</th>
+                  <th className="text-left px-3 py-2 font-bold whitespace-nowrap">ID CTR</th>
                   <th className="text-right px-3 py-2 font-bold whitespace-nowrap"></th>
                 </tr>
               </thead>
@@ -824,6 +845,20 @@ export function PlanEspecial({
                           </span>
                         )}
                       </td>
+                      {/* Task 113 v5: el ID CTR (n° de crédito) que puso el
+                          vendedor al aprobar — el encargado lo verifica. */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {p.estado === "APROBADO" && p.idCtr ? (
+                          <span
+                            className="font-mono font-bold text-stone-800 text-[11px] px-1.5 py-0.5 rounded bg-stone-100 border border-stone-200"
+                            title={`N° de crédito (ID CTR) anotado al aprobar${p.fechaAprobado ? ` el ${fmtFechaHora(p.fechaAprobado)}` : ""}`}
+                          >
+                            {p.idCtr}
+                          </span>
+                        ) : (
+                          <span className="text-stone-300">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* IMPRIMIR (Task 113 v4): el PDF del presupuesto
@@ -840,7 +875,10 @@ export function PlanEspecial({
                           </button>
                           {puedeAprobarFila(p) ? (
                             <button
-                              onClick={() => aprobarPresupuesto(p.id)}
+                              onClick={() => {
+                                setIdCtrStr("");
+                                setModalAprobacion({ id: p.id, numero: p.numero });
+                              }}
                               disabled={aprobandoId === p.id}
                               className="h-7 px-3 rounded-lg font-bold text-[10px] flex items-center gap-1 border transition-colors hover:brightness-95 disabled:opacity-50 whitespace-nowrap"
                               style={{
@@ -848,7 +886,7 @@ export function PlanEspecial({
                                 color: "#166534",
                                 borderColor: "rgba(22,163,74,0.4)",
                               }}
-                              title="Marcar este presupuesto como APROBADO (el encargado lo ve aprobado)"
+                              title="Marcar este presupuesto como APROBADO (pide el ID CTR: el n° de crédito que verifica el encargado)"
                             >
                               <CheckCircle2 className="h-3 w-3" />
                               {aprobandoId === p.id ? "APROBANDO…" : "MARCAR APROBADO"}
@@ -1451,6 +1489,87 @@ export function PlanEspecial({
           cuando entra); para el vendedor va ABAJO (calcula → guarda →
           ve lo suyo). */}
       {!puedeVerTodo && seccionHistorial}
+
+      {/* ═══ MODAL ID CTR (Task 113 v5, pedido del dueño) ═══
+          "para marcar como aprobado quiero que agregue un campo
+          obligatorio escrito ID CTR para poner el numero de credito
+          que despues el encargado va verificar". El botón APROBAR no
+          se habilita hasta que el campo tenga algo escrito. */}
+      {modalAprobacion && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !aprobandoId && setModalAprobacion(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border-2 w-full max-w-sm p-5"
+            style={{ borderColor: DORADO }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-sm font-extrabold uppercase tracking-wide flex items-center gap-2 mb-1"
+              style={{ color: AZUL }}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              MARCAR COMO APROBADO
+            </h3>
+            <p className="text-xs text-stone-500 mb-4 leading-relaxed">
+              Presupuesto{" "}
+              <span className="font-bold" style={{ color: AZUL_OSCURO }}>
+                {modalAprobacion.numero}
+              </span>
+              : escribí el <span className="font-bold text-stone-700">ID CTR</span> (el
+              número de crédito con el que salió el pedido). Después el encargado de
+              tu sucursal lo verifica en el historial.
+            </p>
+
+            <label
+              htmlFor="id-ctr-input"
+              className="text-[11px] font-semibold text-stone-500 uppercase block mb-1"
+            >
+              ID CTR (n° de crédito) *
+            </label>
+            <input
+              id="id-ctr-input"
+              type="text"
+              autoFocus
+              value={idCtrStr}
+              maxLength={40}
+              onChange={(e) => setIdCtrStr(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && idCtrStr.trim() && aprobandoId !== modalAprobacion.id) {
+                  aprobarPresupuesto(modalAprobacion.id, idCtrStr);
+                }
+              }}
+              placeholder="Ej: 12345"
+              className="w-full h-10 px-3 rounded-lg border-2 border-stone-300 text-sm font-semibold focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+            />
+
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button
+                onClick={() => setModalAprobacion(null)}
+                disabled={aprobandoId === modalAprobacion.id}
+                className="h-9 px-4 rounded-lg font-bold text-[11px] border border-stone-300 text-stone-600 hover:bg-stone-50 transition-colors disabled:opacity-50"
+              >
+                CANCELAR
+              </button>
+              <button
+                onClick={() => aprobarPresupuesto(modalAprobacion.id, idCtrStr)}
+                disabled={!idCtrStr.trim() || aprobandoId === modalAprobacion.id}
+                className="h-9 px-4 rounded-lg font-bold text-[11px] flex items-center gap-1.5 border transition-all hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  backgroundColor: "#16a34a",
+                  color: "#fff",
+                  borderColor: "#16a34a",
+                }}
+                title="Marcar APROBADO con el ID CTR anotado"
+              >
+                <CheckCircle2 className={`h-3.5 w-3.5 ${aprobandoId === modalAprobacion.id ? "animate-pulse" : ""}`} />
+                {aprobandoId === modalAprobacion.id ? "APROBANDO…" : "APROBAR"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

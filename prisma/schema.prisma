@@ -549,6 +549,10 @@ model PedidoEspecialConfig {
 //   · GENERADO → recién guardado (el cálculo quedó congelado)
 //   · APROBADO → el vendedor lo marcó aprobado; el encargado de su
 //     sucursal lo ve como aprobado en el historial.
+// Task 113 v5 (pedido del dueño): para MARCAR APROBADO el campo ID CTR
+// es OBLIGATORIO: ahí el vendedor anota el N° de CRÉDITO con el que
+// salió el pedido, y el encargado de sucursal lo verifica después
+// (queda guardado en `idCtr` y se muestra en el historial).
 // El encargado de sucursal (lista ENCARGADOS_SUCURSAL) ve el
 // historial de SU sucursal SOLO LECTURA; el vendedor ve el propio
 // con el botón MARCAR APROBADO; admin/supremo ven todo.
@@ -596,6 +600,11 @@ model PedidoEspecialPresupuesto {
   // poder re-mostrar el plan idéntico más adelante.
   detalle        String    @default("")
   estado         String    @default("GENERADO") // GENERADO | APROBADO
+  // Task 113 v5 (pedido del dueño): N° de CRÉDITO ("ID CTR") que el
+  // vendedor ESCRIBE OBLIGATORIAMENTE al marcar el presupuesto como
+  // APROBADO — después el encargado de sucursal lo verifica. Va vacío
+  // mientras el presupuesto está GENERADO.
+  idCtr          String    @default("")
   fechaAprobado  DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
