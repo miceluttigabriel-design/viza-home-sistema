@@ -16,6 +16,36 @@ export const FOOTER_H = 64;
 export const FOOTER_BOTTOM_GAP = 34;
 export const FOOTER_RESERVE = FOOTER_H + FOOTER_BOTTOM_GAP + 14;
 
+// ─── NUESTRAS SUCURSALES, bien encima del título (Task 108, pedido del dueño) ───
+// El dueño pidió reescribir la lista (antes la píldora del pie de la Task 106)
+// y ponerla "bien em cima del PRESUPUESTO DE VENTA", en TODOS los tipos de
+// presupuesto. Texto EXACTO que pasó:
+//   NUESTRAS SUCURSALES: ( Casa Central Katuete 1º Piso. Suc. Katuete /
+//   Nueva Esperanza / La Paloma / Saltos Del Guaira )
+// Se dibuja centrada, en AZUL VIZA bold, 12pt encima de la línea base del
+// título del plan ("PRESUPUESTO DE VENTA / SAFRA / CON CHEQUE / MAYORISTA").
+// Solo visual: no toca datos ni lógica.
+export const SUCURSALES_LINEA =
+  "NUESTRAS SUCURSALES: ( Casa Central Katuete 1º Piso. Suc. Katuete / Nueva Esperanza / La Paloma / Saltos Del Guaira )";
+
+export function drawSucursalesTop(doc: jsPDF, x: number, w: number, yTitulo: number) {
+  doc.setFont("helvetica", "bold");
+  let size = 7.5;
+  doc.setFontSize(size);
+  let tw = doc.getTextWidth(SUCURSALES_LINEA);
+  const maxW = w;
+  if (tw > maxW) {
+    size = 6.5;
+    doc.setFontSize(size);
+    tw = doc.getTextWidth(SUCURSALES_LINEA);
+  }
+  doc.setTextColor(...BLUE);
+  // 24pt encima de la BASELINE del título: el título es de 21pt (su tope
+  // llega ~15pt sobre su baseline) → quedan ~9pt de aire real entre la
+  // franja y el título, sin pisarlo y sin acercarse al eslogan.
+  doc.text(SUCURSALES_LINEA, x + w / 2, yTitulo - 24, { align: "center" });
+}
+
 type Seg = ["L", number, number] | ["C", number, number, number, number, number, number];
 
 function fillPath(doc: jsPDF, start: [number, number], segs: Seg[], color: RGB) {
@@ -50,6 +80,8 @@ export function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: 
   const s1 = "Todo para tu hogar";
   doc.setTextColor(...GOLD); doc.text(s1, margin, 88);
   doc.setTextColor(...BLUE); doc.text(", en un solo lugar.", margin + doc.getTextWidth(s1), 88);
+  // Task 108: NUESTRAS SUCURSALES bien encima del título del plan (y=150).
+  drawSucursalesTop(doc, margin, contentW, 150);
   doc.setFont("helvetica", "bold"); doc.setFontSize(21); doc.setTextColor(...BLUE);
   doc.text("PRESUPUESTO", margin, 150);
   const tw = doc.getTextWidth("PRESUPUESTO");

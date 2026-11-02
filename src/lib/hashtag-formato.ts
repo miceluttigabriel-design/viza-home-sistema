@@ -1,20 +1,45 @@
 // ─── FORMATO DEL #HASHTAG PARA MOSTRAR (Task 83, pedido del dueño) ───
-// En la base el valor se guarda en Gs completos (ej: 200000 = 200.000).
-// En el panel de ventas (producto agregado a la cotización) y en el
-// presupuesto (PDF) el hashtag se muestra DEBAJO de la descripción del
-// producto en MILES, sin los ceros: 200.000 → "# 200 GS".
-// (El dueño: "en la base esta 200.000 vá poner 200 en el hastag … pero no
-// con todos los zeros").
+// Task 108 (pedido del dueño, ACTUALIZA la regla de unidad de Task 83):
+// el valor que el admin carga en el #HASHTAG es el NÚMERO DEL #, en MILES
+// de Gs: cargar "200" = 200.000 GS (el dueño: "nel presupuesto tiene que
+// salir # 200 ... dentro del buscador tiene que salir el valor real
+// ejemplo 200.000 GS y no 200 GS"). Reglas de muestra:
+//   · PRESUPUESTO (los 4 PDFs): "# 200"      (número del #, sin GS)
+//   · BUSCADOR (panel de ventas): "# 200.000 GS" (valor REAL en Gs)
+//   · Carrito/cotización: "# 200 GS" (miles, como Task 83)
+// Salvaguarda de compatibilidad: si el valor ya parece Gs completos
+// (>= 1000, ej: hashtags viejos cargados como 200000) se usa TAL CUAL
+// — así ambos criterios muestran lo mismo: # 200 en el PDF y 200.000 GS
+// en el buscador. Nunca más se ve "# 0,2".
 //
 // Lib client-safe: NO importa Prisma ni la base — se puede usar igual en
 // componentes React (panel de ventas) y en las rutas de los PDF.
 
-// 200000 → "200" · 1500000 → "1.500" · 250500 → "250,5" (máx 1 decimal)
+// Convierte el valor cargado a Gs REALES: 200 → 200.000 · 200000 → 200.000
+// (salvaguarda: < 1000 son miles → ×1000; >= 1000 ya son Gs → tal cual).
+// Valores < 1 (ej: 0.2) no son un hashtag real en ningún criterio → se
+// ignoran (vacío), nunca vuelve a mostrarse el viejo "# 0,2".
+export function valorGsRealesHashtag(valor: number | null | undefined): number | null {
+  if (valor === null || valor === undefined) return null;
+  if (!Number.isFinite(valor) || valor < 1) return null;
+  return valor < 1000 ? valor * 1000 : valor;
+}
+
+// 200 → "200" · 200000 → "200" · 1500000 → "1.500" · 250500 → "250,5" (máx 1 decimal)
 export function valorHashtagEnMiles(valor: number | null | undefined): string {
-  if (valor === null || valor === undefined) return "";
-  if (!Number.isFinite(valor) || valor <= 0) return "";
-  const miles = valor / 1000;
+  const gs = valorGsRealesHashtag(valor);
+  if (gs === null) return "";
+  const miles = gs / 1000;
   return miles.toLocaleString("es-PY", { maximumFractionDigits: 1 });
+}
+
+// Valor REAL en Gs con separador de miles, para el BUSCADOR (Task 108):
+// 200 → "200.000" · 200000 → "200.000" · 1500000 → "1.500.000"
+// El buscador lo muestra así: "# 200.000 GS valido hasta 30/11/2026".
+export function textoHashtagValorRealGs(valor: number | null | undefined): string {
+  const gs = valorGsRealesHashtag(valor);
+  if (gs === null) return "";
+  return gs.toLocaleString("es-PY");
 }
 
 // 200000 → "# 200 GS" · sin valor → "" (no se muestra nada)

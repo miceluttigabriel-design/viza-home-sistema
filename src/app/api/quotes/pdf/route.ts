@@ -15,7 +15,7 @@ import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../li
 // Task 103 (pedido del dueño): la franja del vendedor va ABAJO de todo,
 // encima de la barra de datos de Viza Home, y TODO el presupuesto entra
 // en UNA sola hoja (encabezado/footer compactos + filas más bajas).
-import { drawVendedor, yVendedorSobreFooter } from "../../../../lib/pdf/vizaPdfDesign";
+import { drawVendedor, yVendedorSobreFooter, drawSucursalesTop } from "../../../../lib/pdf/vizaPdfDesign";
 import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
 
 // Task 88 (pedido del dueño): el margen adicional del contado se muestra en
@@ -165,13 +165,9 @@ const DORADO_TXT: RGB = [138, 109, 47]; // #8a6d2f
 const VALIDEZ_DIAS = 10;
 // Task 103 (una sola hoja): footer compacto (alto 64→56, aire abajo 34→30)
 // y espacio reservado para la franja del vendedor (encima de esta barra).
-// Task 106 (pedido del dueño): alto 56→70 para que entre DENTRO de la barra
-// la franja blanca con NUESTRAS SUCURSALES de izquierda a derecha en el
-// orden exacto que pidió: Casa Central Katuete · Suc. Katuete · Suc. Nueva
-// Esperanza · Suc. La Paloma · Suc. Saltos Del Guaira. La franja del
-// vendedor y el contenido se reacomodan solos (yVendedorSobreFooter recibe
-// FOOTER_H). SOLO el PRESUPUESTO: los otros 3 planes no se tocan.
-const FOOTER_H = 70;
+// Task 108: FOOTER_H vuelve a 56 — la franja NUESTRAS SUCURSALES ya no vive
+// en el pie (se movió bien encima del título del plan); sobraba el alto extra.
+const FOOTER_H = 56;
 const FOOTER_BOTTOM_GAP = 30; // distancia del borde inferior de la barra al fin de página
 
 // Dibuja un path cerrado con curvas Bézier usando coordenadas absolutas.
@@ -252,6 +248,11 @@ function drawHeader(doc: jsPDF, pageW: number, margin: number, contentW: number,
   doc.text(s1, margin, 76);
   doc.setTextColor(...BLUE);
   doc.text(", en un solo lugar.", margin + doc.getTextWidth(s1), 76);
+
+  // Task 108 (pedido del dueño): NUESTRAS SUCURSALES bien ENCIMA del título
+  // "PRESUPUESTO DE VENTA" (y=130) — ya no en el pie (la píldora del pie de
+  // la Task 106 se retiró y FOOTER_H volvió a 56). En los 4 PDFs.
+  drawSucursalesTop(doc, margin, contentW, 130);
 
   // Título
   doc.setFont("helvetica", "bold");
@@ -346,34 +347,11 @@ function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: number, co
     { align: "center" }
   );
 
-  // ─── NUESTRAS SUCURSALES (Task 106, pedido del dueño) ───
-  // Franja blanca al pie de la barra, con las 5 sucursales de IZQUIERDA a
-  // DERECHA en el orden exacto que pidió ("Casa Central Katuete, Suc.
-  // Katuete, Suc. Nueva Esperanza, Suc. La Paloma y Suc. Saltos Del
-  // Guaira"). SOLO VISUAL: no toca datos ni lógica del presupuesto.
-  // Píldora blanca + texto azul (legible sobre la mitad azul y la mitad
-  // dorada de la barra). Si el texto no entrase en el ancho, baja un poco
-  // la fuente y vuelve a medir (defensivo, no debería pasar en A4).
-  const SUCURSALES_PDF =
-    "NUESTRAS SUCURSALES:  Casa Central Katuete · Suc. Katuete · Suc. Nueva Esperanza · Suc. La Paloma · Suc. Saltos Del Guaira";
-  doc.setFont("helvetica", "bold");
-  let sucSize = 7;
-  doc.setFontSize(sucSize);
-  let sucW = doc.getTextWidth(SUCURSALES_PDF);
-  const sucMaxW = contentW - 28;
-  if (sucW > sucMaxW) {
-    sucSize = 6.2;
-    doc.setFontSize(sucSize);
-    sucW = doc.getTextWidth(SUCURSALES_PDF);
-  }
-  const sucPillW = sucW + 22;
-  const sucPillH = 12.5;
-  const sucPillX = x + (contentW - sucPillW) / 2;
-  const sucPillY = y + 50; // bajo las 2 filas de contacto (última base y+43)
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(sucPillX, sucPillY, sucPillW, sucPillH, 6.25, 6.25, "F");
-  doc.setTextColor(...BLUE);
-  doc.text(SUCURSALES_PDF, x + contentW / 2, sucPillY + 8.7, { align: "center" });
+  // ─── NUESTRAS SUCURSALES (Task 106) RETIRADA DEL PIE (Task 108, dueño) ───
+  // El dueño pidió reescribir la lista y subir "bien em cima del PRESUPUESTO
+  // DE VENTA" en TODOS los presupuestos. La píldora blanca del pie se quitó
+  // (el texto nuevo vive en drawSucursalesTop, lib compartida, dibujado en
+  // el encabezado) y FOOTER_H volvió a 56. Nada más cambia en el footer.
 }
 // POST /api/quotes/pdf - genera PDF del presupuesto profesional
 export async function POST(req: NextRequest) {

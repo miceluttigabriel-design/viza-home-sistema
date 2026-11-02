@@ -34,7 +34,7 @@ import {
   type PlanCuotas,
   type TipoEntrega,
 } from "@/store/cotizacion";
-import { textoHashtag } from "@/lib/hashtag-formato";
+import { textoHashtag, textoHashtagValorRealGs } from "@/lib/hashtag-formato";
 import { formatPYG } from "@/lib/format";
 import { PlanSafra } from "./plan-safra";
 import { PlanCheque } from "./plan-cheque";
@@ -1659,10 +1659,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                               {et.nombre.toUpperCase()}
                             </p>
                           ) : null}
-                          {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026" */}
+                          {/* #HASHTAG (promo del admin): "# 100.000 GS valido hasta 30/11/2026"
+                              Task 108 (pedido del dueño): el vendedor ve el VALOR REAL en Gs
+                              (200 → "# 200.000 GS", ya no "# 200 GS") — la conversión/miles y la
+                              salvaguarda de unidades están en textoHashtagValorRealGs (lib). */}
                           {p.hashtag?.valor ? (
                             <p className="text-[11px] font-bold mt-0.5" style={{ color: "#b45309" }}>
-                              #{Number(p.hashtag.valor).toLocaleString("es-PY")} GS
+                              #{textoHashtagValorRealGs(p.hashtag.valor)} GS
                               {p.hashtag.fecha ? ` valido hasta ${p.hashtag.fecha.split("-").reverse().join("/")}` : ""}
                             </p>
                           ) : null}
