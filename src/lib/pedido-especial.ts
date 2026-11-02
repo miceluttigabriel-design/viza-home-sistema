@@ -3,14 +3,19 @@
 // Configuración de la Base: una fila por combinación
 // (PROVEEDOR + TIPO DE PRODUCTO) con sus % (contado, 1-6, 7-13,
 // 14-30) — la MISMA estructura de % que los productos de la BASE.
+// Task 113 v2 (todos los planes del sistema): se agregan
+//   · pctTecnico → % técnico del plan MAYORISTA (col CW de la BASE)
+//   · pctSafra   → tasa de interés MENSUAL del plan SAFRA (col CL)
 //
 // TABLA AUTO-GESTIONADA (mismo patrón probado de TasaCambio /
 // ProductHashtag): si la tabla todavía no existe en la base, la
 // PRIMERA operación que la usa la crea SOLA con SQL idempotente
-// (CREATE TABLE IF NOT EXISTS). Así la config funciona SOLA, sin
-// pasos manuales, y NUNCA rompe la app: si algo falla al leer,
-// las funciones devuelven listas vacías y la UI muestra "sin
-// combinaciones cargadas" — el resto del sistema sigue igual.
+// (CREATE TABLE IF NOT EXISTS) y si ya existe le AGREGA las columnas
+// nuevas con ALTER TABLE ADD COLUMN IF NOT EXISTS (también idempotente,
+// inofensivo). Así la config funciona SOLA, sin pasos manuales, y
+// NUNCA rompe la app: si algo falla al leer, las funciones devuelven
+// listas vacías y la UI muestra "sin combinaciones cargadas" — el
+// resto del sistema sigue igual.
 //
 // PERMISOS (los valida la API con la misma lógica de siempre):
 //   · LEER (GET): cualquier usuario logueado (el vendedor necesita
@@ -60,6 +65,8 @@ export interface CombinacionPedidoEspecial {
   pct1A6: number;
   pct7A13: number;
   pct14A30: number;
+  pctTecnico: number;
+  pctSafra: number;
   updatedAt: string | null;
 }
 
@@ -90,6 +97,8 @@ export async function ensureTablaPedidoEspecial(): Promise<boolean> {
          "pct1A6" DOUBLE PRECISION NOT NULL DEFAULT 0,
          "pct7A13" DOUBLE PRECISION NOT NULL DEFAULT 0,
          "pct14A30" DOUBLE PRECISION NOT NULL DEFAULT 0,
+         "pctTecnico" DOUBLE PRECISION NOT NULL DEFAULT 0,
+         "pctSafra" DOUBLE PRECISION NOT NULL DEFAULT 0,
          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
          CONSTRAINT "PedidoEspecialConfig_pkey" PRIMARY KEY ("id")
@@ -99,6 +108,20 @@ export async function ensureTablaPedidoEspecial(): Promise<boolean> {
       `CREATE UNIQUE INDEX IF NOT EXISTS "PedidoEspecialConfig_proveedor_tipoProducto_key"
        ON "PedidoEspecialConfig"("proveedor", "tipoProducto")`
     );
+    // Task 113 v2: si la tabla YA existía (deploys del Task 113 v1),
+    // las columnas nuevas se agregan solas. ADD COLUMN IF NOT EXISTS es
+    // idempotente e inofensivo — jamás toca datos existentes.
+    try {
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialConfig" ADD COLUMN IF NOT EXISTS "pctTecnico" DOUBLE PRECISION NOT NULL DEFAULT 0`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialConfig" ADD COLUMN IF NOT EXISTS "pctSafra" DOUBLE PRECISION NOT NULL DEFAULT 0`
+      );
+    } catch {
+      // ALTERs fallidos no invalidan la tabla: las lecturas devuelven
+      // lista vacía (P2022) y el sistema sigue funcionando igual.
+    }
     estadoTabla = "lista";
     return true;
   } catch {
@@ -124,6 +147,8 @@ export async function listarCombinaciones(): Promise<CombinacionPedidoEspecial[]
       pct1A6: f.pct1A6,
       pct7A13: f.pct7A13,
       pct14A30: f.pct14A30,
+      pctTecnico: f.pctTecnico ?? 0,
+      pctSafra: f.pctSafra ?? 0,
       updatedAt: f.updatedAt ? new Date(f.updatedAt).toISOString() : null,
     }));
   };
@@ -155,6 +180,8 @@ export interface PayloadCombinacion {
   pct1A6: number;
   pct7A13: number;
   pct14A30: number;
+  pctTecnico: number;
+  pctSafra: number;
 }
 
 export function validarPayloadCombinacion(body: any): PayloadCombinacion | null {
@@ -166,13 +193,26 @@ export function validarPayloadCombinacion(body: any): PayloadCombinacion | null 
   const pct1A6 = Number(body?.pct1A6 ?? 0);
   const pct7A13 = Number(body?.pct7A13 ?? 0);
   const pct14A30 = Number(body?.pct14A30 ?? 0);
+  const pctTecnico = Number(body?.pctTecnico ?? 0);
+  const pctSafra = Number(body?.pctSafra ?? 0);
   if (
     !esPctValido(pctContado) ||
     !esPctValido(pct1A6) ||
     !esPctValido(pct7A13) ||
-    !esPctValido(pct14A30)
+    !esPctValido(pct14A30) ||
+    !esPctValido(pctTecnico) ||
+    !esPctValido(pctSafra)
   ) {
     return null;
   }
-  return { proveedor, tipoProducto, pctContado, pct1A6, pct7A13, pct14A30 };
+  return {
+    proveedor,
+    tipoProducto,
+    pctContado,
+    pct1A6,
+    pct7A13,
+    pct14A30,
+    pctTecnico,
+    pctSafra,
+  };
 }

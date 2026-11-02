@@ -523,6 +523,13 @@ model PedidoEspecialConfig {
   pct1A6       Float    @default(0) // % 1 A 6   (como col Y)
   pct7A13      Float    @default(0) // % 7 A 13  (como col Z)
   pct14A30     Float    @default(0) // % 14 A 30 (como col AA)
+  // Task 113 v2 (todos los planes del sistema):
+  pctTecnico   Float    @default(0) // % TÉCNICO para MAYORISTA (como col CW
+                                        // "Margen P/Tecnico" de la BASE: valor
+                                        // técnico = Costo Gs × (1 + %/100))
+  pctSafra     Float    @default(0) // % SAFRA = tasa de INTERÉS MENSUAL sobre
+                                        // el saldo restante (como col CL de la
+                                        // BASE: 7 = 7% mensual)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

@@ -535,6 +535,8 @@ export async function generateBackupExcel(): Promise<BackupResult> {
       pct1A6: f.pct1A6,
       pct7A13: f.pct7A13,
       pct14A30: f.pct14A30,
+      pctTecnico: f.pctTecnico ?? 0,
+      pctSafra: f.pctSafra ?? 0,
       createdAt: new Date(f.createdAt).toISOString(),
       updatedAt: new Date(f.updatedAt).toISOString(),
     }));
@@ -550,6 +552,8 @@ export async function generateBackupExcel(): Promise<BackupResult> {
           { header: "pct1A6", key: "pct1A6" },
           { header: "pct7A13", key: "pct7A13" },
           { header: "pct14A30", key: "pct14A30" },
+          { header: "pctTecnico", key: "pctTecnico" },
+          { header: "pctSafra", key: "pctSafra" },
           { header: "createdAt", key: "createdAt", width: 24 },
           { header: "updatedAt", key: "updatedAt", width: 24 },
         ],

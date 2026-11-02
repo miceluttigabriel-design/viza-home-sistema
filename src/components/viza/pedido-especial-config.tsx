@@ -7,9 +7,18 @@ import type { CombinacionPedidoEspecial } from "@/lib/pedido-especial";
 
 // ─── MODAL PEDIDO ESPECIAL — CONFIG DE LA BASE (Task 113, pedido del dueño) ───
 // Acá el admin carga las combinaciones PROVEEDOR + TIPO DE PRODUCTO con sus
-// % (contado, 1-6, 7-13, 14-30) — la MISMA estructura de % que los productos
-// de la BASE. El vendedor NO ve este modal: solo elige proveedor + tipo y el
-// sistema aplica estos % con la fórmula de siempre.
+// % (contado, 1-6, 7-13, 14-30 + técnico y safra) — la MISMA estructura de %
+// que los productos de la BASE. El vendedor NO ve este modal: solo elige
+// proveedor + tipo y el sistema aplica estos % con la fórmula de cada plan.
+//
+// Task 113 v2 (pedido del dueño): "los proveedores vas a usar la columna
+// PROVEEDORES de la base… y el tipo de producto también está ya la columna
+// TIPO PRODUCTO en la base, de ahí tiene que estirar, no hace falta que yo
+// importe nada" → el PROVEEDOR y el TIPO ya NO se escriben a mano: se
+// ELIGEN de las listas estiradas de la BASE (tabla Product: columnas
+// FABRICANTE y TIPO, vía /api/pedido-especial/catalogo). Si el catálogo de
+// la BASE no se pudo leer, el modal vuelve al modo texto con datalist para
+// no quedar nunca inutilizable.
 //
 // Solo se monta cuando está abierto ({modalPedidoEspecialOpen && ...}), así
 // arranca limpio en cada apertura (patrón de los modales de la casa).
@@ -24,6 +33,8 @@ interface FormState {
   pct1A6: string;
   pct7A13: string;
   pct14A30: string;
+  pctTecnico: string;
+  pctSafra: string;
 }
 
 const FORM_VACIO: FormState = {
@@ -33,7 +44,17 @@ const FORM_VACIO: FormState = {
   pct1A6: "",
   pct7A13: "",
   pct14A30: "",
+  pctTecnico: "",
+  pctSafra: "",
 };
+
+interface CatalogoApi {
+  proveedores: string[];
+  tiposPorProveedor: Record<string, string[]>;
+  tipos: string[];
+}
+
+const CATALOGO_VACIO: CatalogoApi = { proveedores: [], tiposPorProveedor: {}, tipos: [] };
 
 // Acepta "8", "7,5" y "7.5" (coma decimal incluida, igual que la TASA).
 function parsePct(s: string): number | null {
@@ -49,6 +70,8 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
   // id de la fila en EDICIÓN (null = el form agrega una nueva)
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  // Catálogo de la BASE: proveedores (FABRICANTE) y tipos (TIPO) reales.
+  const [catalogo, setCatalogo] = useState<CatalogoApi>(CATALOGO_VACIO);
 
   const cargar = async () => {
     setCargando(true);
@@ -56,6 +79,17 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
       const res = await fetch("/api/pedido-especial/config");
       const data = await res.json().catch(() => ({}));
       setFilas(Array.isArray(data.combinaciones) ? data.combinaciones : []);
+      // Catálogo de la BASE (Task 113 v2): listas que el dueño pidió estirar.
+      const resCat = await fetch("/api/pedido-especial/catalogo");
+      const dataCat = await resCat.json().catch(() => ({}));
+      setCatalogo({
+        proveedores: Array.isArray(dataCat.proveedores) ? dataCat.proveedores : [],
+        tiposPorProveedor:
+          dataCat.tiposPorProveedor && typeof dataCat.tiposPorProveedor === "object"
+            ? dataCat.tiposPorProveedor
+            : {},
+        tipos: Array.isArray(dataCat.tipos) ? dataCat.tipos : [],
+      });
     } catch {
       toast.error("No se pudo cargar la config del pedido especial");
     } finally {
@@ -79,6 +113,8 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
       pct1A6: String(f.pct1A6),
       pct7A13: String(f.pct7A13),
       pct14A30: String(f.pct14A30),
+      pctTecnico: String(f.pctTecnico ?? 0),
+      pctSafra: String(f.pctSafra ?? 0),
     });
   };
 
@@ -96,9 +132,11 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
       pct1A6: parsePct(form.pct1A6),
       pct7A13: parsePct(form.pct7A13),
       pct14A30: parsePct(form.pct14A30),
+      pctTecnico: parsePct(form.pctTecnico || "0"),
+      pctSafra: parsePct(form.pctSafra || "0"),
     };
     if (!proveedor || !tipoProducto) {
-      toast.error("Escribí el PROVEEDOR y el TIPO DE PRODUCTO");
+      toast.error("Elegí el PROVEEDOR y el TIPO DE PRODUCTO de la BASE");
       return;
     }
     if (Object.values(pcts).some((v) => v === null)) {
@@ -150,7 +188,18 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
     }
   };
 
-  // Listas para los datalist (evitan typos que dupliquen proveedores/tipos)
+  // Modo BASE (normal): selects estirados de la tabla Product.
+  // Modo respaldo (catálogo vacío): inputs de texto con datalist, como v1.
+  const modoBase = catalogo.proveedores.length > 0 || catalogo.tipos.length > 0;
+
+  // Tipos para el select: los del proveedor elegido en la BASE; si ese
+  // proveedor no tiene tipos (raro), TODOS los tipos de la BASE.
+  const tiposDelProveedorBase =
+    (form.proveedor && catalogo.tiposPorProveedor[form.proveedor]?.length
+      ? catalogo.tiposPorProveedor[form.proveedor]
+      : catalogo.tipos) || [];
+
+  // Listas para el modo respaldo (evitan typos que dupliquen valores)
   const proveedoresExistentes = Array.from(new Set(filas.map((f) => f.proveedor)));
   const tiposExistentes = Array.from(new Set(filas.map((f) => f.tipoProducto)));
 
@@ -177,7 +226,7 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
       onClick={ocupado ? undefined : onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
         onClick={(ev) => ev.stopPropagation()}
       >
         {/* Encabezado */}
@@ -201,11 +250,14 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
           <div className="rounded-lg px-3 py-2.5 bg-sky-50 border border-sky-100 text-xs text-sky-900 leading-relaxed flex items-start gap-2">
             <Info className="h-4 w-4 shrink-0 mt-0.5" />
             <span>
-              Una fila por combinación <strong>PROVEEDOR + TIPO DE PRODUCTO</strong>. El
-              vendedor elige esas dos cosas en el panel del cotizador y el sistema aplica
-              estos % con la MISMA fórmula de la BASE (% CONTADO como la col AB; los
-              demás se suman por cuota: 1-6, 7-13, 14-30, igual que las cols Y/Z/AA).
-              Escribí los % como números normales: <strong>10 = 10%</strong>, 2.5 = 2.5%.
+              Una fila por combinación <strong>PROVEEDOR + TIPO DE PRODUCTO</strong>,
+              elegidos de la BASE (columnas FABRICANTE y TIPO — nada que escribir).
+              Cada plan usa su %: <strong>CONTADO/CUOTAS</strong> el % contado + tramos
+              (cols AB/Y/Z/AA) · <strong>MAYORISTA</strong> el % técnico (col CW) ·{" "}
+              <strong>SAFRA</strong> el % mensual sobre el saldo (col CL) ·{" "}
+              <strong>CHEQUE</strong> tasa automática 1.5% MOTO / 3% resto sobre el
+              valor al contado. Escribí los % como números normales:{" "}
+              <strong>10 = 10%</strong>, 2.5 = 2.5%.
             </span>
           </div>
 
@@ -216,52 +268,114 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
               {editandoId ? "EDITANDO COMBINACIÓN" : "NUEVA COMBINACIÓN"}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="text-[10px] font-semibold text-stone-500 uppercase block mb-1 flex items-center gap-1">
-                  <Store className="h-3 w-3" />
-                  Proveedor *
-                </label>
-                <input
-                  type="text"
-                  value={form.proveedor}
-                  onChange={(e) => setField("proveedor", e.target.value)}
-                  list="datalist-proveedores"
-                  placeholder="Ej: GAFRA"
-                  maxLength={80}
-                  className="w-full h-9 px-2.5 rounded-lg border border-stone-300 text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-[#1e6ba8] focus:border-transparent"
-                />
-                <datalist id="datalist-proveedores">
-                  {proveedoresExistentes.map((p) => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-stone-500 uppercase block mb-1 flex items-center gap-1">
-                  <Tag className="h-3 w-3" />
-                  Tipo de producto *
-                </label>
-                <input
-                  type="text"
-                  value={form.tipoProducto}
-                  onChange={(e) => setField("tipoProducto", e.target.value)}
-                  list="datalist-tipos"
-                  placeholder="Ej: MOTOS"
-                  maxLength={80}
-                  className="w-full h-9 px-2.5 rounded-lg border border-stone-300 text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-[#1e6ba8] focus:border-transparent"
-                />
-                <datalist id="datalist-tipos">
-                  {tiposExistentes.map((t) => (
-                    <option key={t} value={t} />
-                  ))}
-                </datalist>
-              </div>
+              {modoBase ? (
+                <>
+                  <div>
+                    <label className="text-[10px] font-semibold text-stone-500 uppercase block mb-1 flex items-center gap-1">
+                      <Store className="h-3 w-3" />
+                      Proveedor (de la BASE) *
+                    </label>
+                    <select
+                      value={form.proveedor}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          proveedor: e.target.value,
+                          // Al cambiar de proveedor, el tipo puede no existir
+                          // para él en la BASE → se limpia para re-elegir.
+                          tipoProducto: "",
+                        }))
+                      }
+                      className="w-full h-9 px-2.5 rounded-lg border border-stone-300 text-sm font-semibold bg-white uppercase focus:outline-none focus:ring-2 focus:ring-[#1e6ba8] focus:border-transparent"
+                    >
+                      <option value="">Elegir proveedor…</option>
+                      {catalogo.proveedores.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-stone-500 uppercase block mb-1 flex items-center gap-1">
+                      <Tag className="h-3 w-3" />
+                      Tipo de producto (de la BASE) *
+                    </label>
+                    <select
+                      value={form.tipoProducto}
+                      onChange={(e) => setField("tipoProducto", e.target.value)}
+                      disabled={!form.proveedor || tiposDelProveedorBase.length === 0}
+                      className="w-full h-9 px-2.5 rounded-lg border border-stone-300 text-sm font-semibold bg-white uppercase focus:outline-none focus:ring-2 focus:ring-[#1e6ba8] focus:border-transparent disabled:bg-stone-100 disabled:text-stone-400"
+                    >
+                      <option value="">
+                        {!form.proveedor
+                          ? "Primero el proveedor"
+                          : tiposDelProveedorBase.length === 0
+                            ? "Sin tipos para este proveedor"
+                            : "Elegir tipo…"}
+                      </option>
+                      {tiposDelProveedorBase.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-[10px] font-semibold text-stone-500 uppercase block mb-1 flex items-center gap-1">
+                      <Store className="h-3 w-3" />
+                      Proveedor *
+                    </label>
+                    <input
+                      type="text"
+                      value={form.proveedor}
+                      onChange={(e) => setField("proveedor", e.target.value)}
+                      list="datalist-proveedores"
+                      placeholder="Ej: GAFRA"
+                      maxLength={80}
+                      className="w-full h-9 px-2.5 rounded-lg border border-stone-300 text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-[#1e6ba8] focus:border-transparent"
+                    />
+                    <datalist id="datalist-proveedores">
+                      {proveedoresExistentes.map((p) => (
+                        <option key={p} value={p} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-stone-500 uppercase block mb-1 flex items-center gap-1">
+                      <Tag className="h-3 w-3" />
+                      Tipo de producto *
+                    </label>
+                    <input
+                      type="text"
+                      value={form.tipoProducto}
+                      onChange={(e) => setField("tipoProducto", e.target.value)}
+                      list="datalist-tipos"
+                      placeholder="Ej: MOTOS"
+                      maxLength={80}
+                      className="w-full h-9 px-2.5 rounded-lg border border-stone-300 text-sm font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-[#1e6ba8] focus:border-transparent"
+                    />
+                    <datalist id="datalist-tipos">
+                      {tiposExistentes.map((t) => (
+                        <option key={t} value={t} />
+                      ))}
+                    </datalist>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+              {inputPct("pctContado", "% Contado (CONTADO/CUOTAS)", "Ej: 10 (=10%)")}
+              {inputPct("pct1A6", "% 1 a 6 (CUOTAS)", "Ej: 2")}
+              {inputPct("pct7A13", "% 7 a 13 (CUOTAS)", "Ej: 1.5")}
+              {inputPct("pct14A30", "% 14 a 30 (CUOTAS)", "Ej: 1")}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-              {inputPct("pctContado", "% Contado", "Ej: 10 (=10%)")}
-              {inputPct("pct1A6", "% 1 a 6", "Ej: 2")}
-              {inputPct("pct7A13", "% 7 a 13", "Ej: 1.5")}
-              {inputPct("pct14A30", "% 14 a 30", "Ej: 1")}
+              {inputPct("pctTecnico", "% Técnico (MAYORISTA)", "Ej: 5 (=5%)")}
+              {inputPct("pctSafra", "% SAFRA mensual", "Ej: 7 (=7%/mes)")}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -306,6 +420,8 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
                       <th className="text-right px-3 py-2 font-semibold">% 1-6</th>
                       <th className="text-right px-3 py-2 font-semibold">% 7-13</th>
                       <th className="text-right px-3 py-2 font-semibold">% 14-30</th>
+                      <th className="text-right px-3 py-2 font-semibold">% Técn.</th>
+                      <th className="text-right px-3 py-2 font-semibold">% SAFRA</th>
                       <th className="text-right px-3 py-2 font-semibold">Acciones</th>
                     </tr>
                   </thead>
@@ -321,6 +437,8 @@ export function ModalPedidoEspecialConfig({ onClose }: { onClose: () => void }) 
                         <td className="px-3 py-2 text-right text-stone-700">{f.pct1A6.toLocaleString("es-PY")}</td>
                         <td className="px-3 py-2 text-right text-stone-700">{f.pct7A13.toLocaleString("es-PY")}</td>
                         <td className="px-3 py-2 text-right text-stone-700">{f.pct14A30.toLocaleString("es-PY")}</td>
+                        <td className="px-3 py-2 text-right text-stone-700">{(f.pctTecnico ?? 0).toLocaleString("es-PY")}</td>
+                        <td className="px-3 py-2 text-right text-stone-700">{(f.pctSafra ?? 0).toLocaleString("es-PY")}</td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">
                           <button
                             onClick={() => empezarEdicion(f)}
