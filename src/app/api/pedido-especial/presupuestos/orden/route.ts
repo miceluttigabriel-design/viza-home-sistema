@@ -74,6 +74,7 @@ export async function POST(req: Request) {
       cambioUS: p.cambioUS,
       idCtr: p.idCtr,
       verificadoPorNombre: p.verificadoPorNombre,
+      verificadoPorEmail: p.verificadoPorEmail,
       fechaVerificado: p.fechaVerificado,
       createdAt: p.createdAt,
     });

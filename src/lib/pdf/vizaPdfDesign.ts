@@ -12,6 +12,11 @@ export const GOLD_LIGHT: RGB = [250, 243, 224];
 export const LINE: RGB = [216, 222, 230];
 
 export const VALIDEZ_DIAS = 10;
+// Task 113 v7 (pedido del dueño): la ORDEN DE COMPRA NO es un presupuesto —
+// "en la orden de compra la validez tiene que ser de 30 días… no es
+// Presupuesto es Orden de Compra y la validez es 30 días". Los
+// presupuestos siguen con sus 10 días de siempre; solo la orden usa 30.
+export const VALIDEZ_DIAS_ORDEN = 30;
 export const FOOTER_H = 64;
 export const FOOTER_BOTTOM_GAP = 34;
 export const FOOTER_RESERVE = FOOTER_H + FOOTER_BOTTOM_GAP + 14;
@@ -87,7 +92,11 @@ export function drawHeader(
   // configurables; por defecto quedan EXACTAMENTE como siempre, así los
   // otros presupuestos no cambian ni un pixel.
   titulo: string = "PRESUPUESTO",
-  etiquetaNumero: string = "N° PRESUPUESTO"
+  etiquetaNumero: string = "N° PRESUPUESTO",
+  // Task 113 v7 (ORDEN DE COMPRA): días de validez configurables — la
+  // orden sale con 30 días ("arregla el válido hasta también conforme
+  // para 30 días en la orden de compra"); los presupuestos siguen en 10.
+  validezDias: number = VALIDEZ_DIAS
 ) {
   drawWave(doc, pageW);
   const lh = 40; const lw = lh * VIZA_LOGO_WORDMARK_RATIO;
@@ -111,7 +120,7 @@ export function drawHeader(
   if (subtitle) doc.text(subtitle, margin + tw + 8, 150);
   doc.setFillColor(...GOLD); doc.rect(margin, 160, 48, 2.5, "F");
   const gap = 10; const bw = (contentW - gap * 2) / 3; const by = 173; const bh = 42;
-  const validez = new Date(emision); validez.setDate(validez.getDate() + VALIDEZ_DIAS);
+  const validez = new Date(emision); validez.setDate(validez.getDate() + validezDias);
   const boxes: [string, string][] = [
     [etiquetaNumero, quoteNumber],
     ["FECHA DE EMISIÓN", fmtDT(emision)],
@@ -199,7 +208,17 @@ export function drawSectionTitle(doc: jsPDF, text: string, x: number, y: number,
   doc.line(x, y + 5, x + w, y + 5);
 }
 
-export function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: number, contentW: number, planType: string) {
+// Task 113 v7 (ORDEN DE COMPRA): la línea de validez del pie es
+// configurable. En los presupuestos queda EXACTAMENTE la de siempre
+// ("Presupuesto válido por 10 días…"); en la orden de compra el dueño
+// pidió: "no es Presupuesto es Orden de Compra y la validez es 30 días".
+export function textoValidezPresupuesto(): string {
+  return `Viza E.A.S (Viza Home) Presupuesto válido por ${VALIDEZ_DIAS} días desde la fecha de emisión.`;
+}
+export function textoValidezOrdenCompra(): string {
+  return `Viza E.A.S (Viza Home) Orden de Compra válida por ${VALIDEZ_DIAS_ORDEN} días desde la fecha de emisión.`;
+}
+export function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: number, contentW: number, planType: string, textoValidez?: string) {
   const x = margin; const h = FOOTER_H;
   const y = pageH - FOOTER_BOTTOM_GAP - h;
   const split = contentW * 0.5;
@@ -219,7 +238,7 @@ export function drawFooter(doc: jsPDF, pageW: number, pageH: number, margin: num
   doc.text("@vizahome", x + split + 18, y + 47);
   doc.text("www.viza.com.py", x + split + 135, y + 34);
   doc.setFont("helvetica", "normal"); doc.setFontSize(6.8); doc.setTextColor(...GREY);
-  doc.text(`Viza E.A.S (Viza Home) Presupuesto válido por ${VALIDEZ_DIAS} días desde la fecha de emisión.`, pageW / 2, pageH - 20, { align: "center" });
+  doc.text(textoValidez || textoValidezPresupuesto(), pageW / 2, pageH - 20, { align: "center" });
 }
 
 export function formatPYG(amount: number): string {

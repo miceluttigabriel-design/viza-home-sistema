@@ -228,6 +228,9 @@ export interface PresupuestoPedidoEspecial {
   // Task 113 v6: VERIFICADO del encargado + ORDEN DE COMPRA generada.
   fechaVerificado: string | null;
   verificadoPorNombre: string;
+  // Task 113 v7 (orden de compra): correo del encargado que verificó —
+  // sale en el PDF de la orden junto a su nombre completo.
+  verificadoPorEmail: string;
   ordenGenerada: boolean;
   ordenNumero: string;
   ordenFecha: string | null;
@@ -268,6 +271,7 @@ function aFila(f: {
   fechaAprobado: Date | null;
   fechaVerificado: Date | null;
   verificadoPorNombre: string;
+  verificadoPorEmail: string;
   ordenGenerada: boolean;
   ordenNumero: string;
   ordenFecha: Date | null;
@@ -311,6 +315,7 @@ function aFila(f: {
     fechaAprobado: f.fechaAprobado ? new Date(f.fechaAprobado).toISOString() : null,
     fechaVerificado: f.fechaVerificado ? new Date(f.fechaVerificado).toISOString() : null,
     verificadoPorNombre: f.verificadoPorNombre ?? "",
+    verificadoPorEmail: f.verificadoPorEmail ?? "",
     ordenGenerada: !!f.ordenGenerada,
     ordenNumero: f.ordenNumero ?? "",
     ordenFecha: f.ordenFecha ? new Date(f.ordenFecha).toISOString() : null,

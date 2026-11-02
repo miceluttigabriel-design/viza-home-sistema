@@ -21,6 +21,7 @@ import {
 } from "../src/lib/pedido-especial-calc";
 import { buildPedidoEspecialPdf } from "../src/lib/pdf/pedido-especial-pdf";
 import { buildOrdenCompraPdf } from "../src/lib/pdf/orden-compra-pdf";
+import { textoValidezOrdenCompra } from "../src/lib/pdf/vizaPdfDesign";
 
 let fallos = 0;
 function check(nombre: string, cond: boolean, detalle?: string) {
@@ -181,16 +182,24 @@ for (const [nombre, over] of planes) {
 }
 
 // ORDEN DE COMPRA
+// v7: validez 30 días, pie "Orden de Compra", sin firma del proveedor,
+// sin franja de abajo; vendedor (nombre+correo) y encargado
+// (nombre+correo) arriba, en DATOS DEL PEDIDO.
 const oc = buildOrdenCompraPdf({
   ...filaPdfBase,
   ordenNumero: "OC-01",
   idCtr: "12345",
   verificadoPorNombre: "JEYSON MARCELO WEISS",
+  verificadoPorEmail: "jeyson.weiss@viza.com.py",
   fechaVerificado: new Date("2026-11-03T15:00:00Z").toISOString(),
 });
 const ocBuf = Buffer.from(oc.output("arraybuffer"));
 writeFileSync("scripts/t113-muestras-v6/orden-compra.pdf", ocBuf);
 check(`PDF orden de compra (${(ocBuf.length / 1024).toFixed(0)} KB, ${oc.getNumberOfPages()} pág)`, ocBuf.length > 5000 && oc.getNumberOfPages() === 1);
+check(
+  "pie de la orden: 'Orden de Compra válida por 30 días' (no 'Presupuesto')",
+  textoValidezOrdenCompra() === "Viza E.A.S (Viza Home) Orden de Compra válida por 30 días desde la fecha de emisión."
+);
 
 console.log(fallos === 0 ? "\nTODO OK ✓" : `\nFALLOS: ${fallos} ✗`);
 process.exit(fallos === 0 ? 0 : 1);
