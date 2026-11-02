@@ -934,6 +934,11 @@ export async function POST(req: NextRequest) {
     // flujo principal del panel de ventas (plan A/B/C): antes NUNCA se
     // guardaba y por eso el CRM no contaba estos presupuestos.
     // Best-effort: si falla, el PDF sale igual (nunca rompe la emisión).
+    // Task 111 (pedido del dueño): si el presupuesto salió SOLO AL CONTADO
+    // (única opción el "Plan A: Contado", sin ningún plan de cuotas — la
+    // MISMA condición "soloContado" que quita la sección de financiación
+    // del PDF), se registra como CONTADO para que el CRM lo muestre en su
+    // propia opción CONTADO y no lo cuente como CUOTA.
     await guardarQuoteEmitido({
       plan: "PRESUPUESTO",
       quoteNumber: quoteNumberPresupuesto,
@@ -944,6 +949,7 @@ export async function POST(req: NextRequest) {
       subtotal: body.contadoOriginal,
       discount: body.cascoValor ?? 0,
       total: body.contadoAjustado ?? body.contadoOriginal ?? 0,
+      contadoSolo: soloContado === true,
     });
 
     return new NextResponse(pdfBuffer, {

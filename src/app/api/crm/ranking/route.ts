@@ -21,12 +21,17 @@ import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 //   · cualquier otro usuario → 403 (no ve el CRM).
 //
 // Task 78 (pedido del dueño): cada fila del ranking trae también el
-// DESGLOSE POR TIPO DE PLAN (CUOTA / MAYORISTA / SAFRA / CHEQUE) para que
-// el CRM pueda filtrar por plan. El plan se deduce del PREFIJO del
-// quoteNumber (PRESUPUESTO-01 → CUOTA, MAYOR-01 → MAYORISTA,
+// DESGLOSE POR TIPO DE PLAN (CUOTA / CONTADO / MAYORISTA / SAFRA /
+// CHEQUE) para que el CRM pueda filtrar por plan. El plan se deduce del
+// PREFIJO del quoteNumber (PRESUPUESTO-01 → CUOTA, MAYOR-01 → MAYORISTA,
 // SAFRA-01 → SAFRA, CHEQUE-01 → CHEQUE). Formatos viejos (número
 // aleatorio del estilo VZH-MAYOR-20261026-8515) también matchean por
 // INCLUDE, así el histórico queda agrupado igual.
+//
+// Task 111 (pedido del dueño): los presupuestos emitidos SOLO AL
+// CONTADO (únicamente el "Plan A: Contado", sin cuotas) se guardan con
+// status "emitida_contado" (ver src/lib/guardar-quote.ts) y entran al
+// CRM como su PROPIA opción CONTADO — ya no se cuentan como CUOTA.
 //
 // SOLO LECTURA: nunca crea, edita ni borra presupuestos, usuarios ni
 // productos. La única escritura posible es la SIEMBRA automática de la
@@ -100,13 +105,18 @@ export async function GET() {
       aprobadasPorUser.set(g.userId, g._count);
     }
 
-    // ─── Desglose POR TIPO DE PLAN (Task 78, pedido del dueño) ───
-    // Solo (userId, quoteNumber): consulta liviana de 2 columnas. Con el
-    // prefijo del quoteNumber se arma el desglose CUOTA/MAYORISTA/SAFRA/
-    // CHEQUE por usuario. Desde Task 78 los 4 PDFs (PRESUPUESTO normal,
-    // MAYORISTA, SAFRA y CHEQUE) guardan su emisión en la base con el MISMO
-    // número impreso, así el desglose coincide con lo que ve el vendedor.
-    function planDeQuote(quoteNumber: string): string {
+    // ─── Desglose POR TIPO DE PLAN (Task 78; Task 111 agrega CONTADO) ───
+    // Solo (userId, quoteNumber, status): consulta liviana de 3 columnas.
+    // Con el prefijo del quoteNumber se arma el desglose CUOTA/MAYORISTA/
+    // SAFRA/CHEQUE por usuario. Desde Task 78 los 4 PDFs (PRESUPUESTO
+    // normal, MAYORISTA, SAFRA y CHEQUE) guardan su emisión en la base con
+    // el MISMO número impreso, así el desglose coincide con lo que ve el
+    // vendedor.
+    // Task 111: los emitidos SOLO AL CONTADO se guardan con status
+    // "emitida_contado" → entran a la opción CONTADO del CRM. Los demás
+    // PRESUPUESTO-XX (con cuotas) siguen siendo CUOTA.
+    function planDeQuote(quoteNumber: string, status?: string): string {
+      if ((status || "") === "emitida_contado") return "CONTADO"; // Task 111
       const qn = (quoteNumber || "").toUpperCase();
       if (qn.includes("MAYOR")) return "MAYORISTA";
       if (qn.includes("SAFRA")) return "SAFRA";
@@ -114,18 +124,24 @@ export async function GET() {
       return "CUOTA"; // PRESUPUESTO-XX y cualquier formato viejo del carrito
     }
     const quotesParaPlan = await db.quote.findMany({
-      select: { userId: true, quoteNumber: true },
+      select: { userId: true, quoteNumber: true, status: true },
     });
     const porPlanPorUser = new Map<string, Record<string, number>>();
     for (const q of quotesParaPlan) {
       if (!q.userId) continue;
       const rec =
         porPlanPorUser.get(q.userId) ??
-        { CUOTA: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 };
-      rec[planDeQuote(q.quoteNumber)]++;
+        { CUOTA: 0, CONTADO: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 };
+      rec[planDeQuote(q.quoteNumber, q.status)]++;
       porPlanPorUser.set(q.userId, rec);
     }
-    const porPlanVacio = () => ({ CUOTA: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 });
+    const porPlanVacio = () => ({
+      CUOTA: 0,
+      CONTADO: 0,
+      MAYORISTA: 0,
+      SAFRA: 0,
+      CHEQUE: 0,
+    });
 
     // Sucursal de cada usuario (tabla aparte, auto-creada en el primer uso).
     // Primera vez: se siembra solo desde la planilla de funcionarios

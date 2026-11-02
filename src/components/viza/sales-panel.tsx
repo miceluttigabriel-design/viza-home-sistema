@@ -275,15 +275,18 @@ interface CrmFilaSucursal {
   total: number;
   aprobadas: number;
   // Desglose por TIPO DE PLAN (Task 78, pedido del dueño): el CRM puede
-  // filtrar por CUOTA / MAYORISTA / SAFRA / CHEQUE. Opcional por compat.
-  porPlan?: { CUOTA: number; MAYORISTA: number; SAFRA: number; CHEQUE: number };
+  // filtrar por CUOTA / CONTADO / MAYORISTA / SAFRA / CHEQUE. Opcional por
+  // compat. Task 111: CONTADO = emitido SOLO AL CONTADO (sin cuotas).
+  porPlan?: { CUOTA: number; CONTADO: number; MAYORISTA: number; SAFRA: number; CHEQUE: number };
   ultimo: string | null;
 }
 
 // Pills del filtro por PLAN del CRM (Task 78, pedido del dueño: "para
-// nosotros y los usuarios VIP también"): TODOS + los 4 planes. CUOTA = el
-// presupuesto normal del panel de ventas (quoteNumber PRESUPUESTO-XX).
-const CRM_PLANES_SUC = ["TODOS", "CUOTA", "MAYORISTA", "SAFRA", "CHEQUE"] as const;
+// nosotros y los usuarios VIP también"): TODOS + los planes. CUOTA = el
+// presupuesto normal con cuotas del panel de ventas (quoteNumber
+// PRESUPUESTO-XX). Task 111: CONTADO = emitido SOLO AL CONTADO (sin
+// cuotas) — opción propia que pidió el dueño.
+const CRM_PLANES_SUC = ["TODOS", "CUOTA", "CONTADO", "MAYORISTA", "SAFRA", "CHEQUE"] as const;
 
 // Fecha corta DD/MM/AA para la columna "último" del CRM
 const fmtFechaCortaCrmSuc = (iso: string | null): string => {
@@ -1137,9 +1140,19 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       <header className="sticky top-0 z-30 backdrop-blur shadow-md" style={{ backgroundColor: AZUL }}>
         {/* Banda dorada superior */}
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2 flex-wrap lg:flex-nowrap">
-          {/* LADO IZQUIERDO: Reloj (PRIMERO, EXTREMO IZQUIERDO) + GDA + BASE + Tabs */}
-          <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap">
+        {/* Task 111 (pedido del dueño): el cuadrito CAMBIO quedaba
+            SOBREPUESTO em cima de los botones (GDA/ORQUESTADOR/BASE/CUOTA/
+            SAFRA/CHEQUE/MAYORISTA) cuando la fila no entraba: con
+            lg:flex-nowrap la línea no podía partirse y el contenido
+            se encimaba. Ahora el header PUEDE PARTIRSE en 2 filas cuando
+            falta lugar (igual que siempre cuando entra todo en una):
+            nada se pisa — el lado derecho (CAMBIO + usuario + candado +
+            salir) baja a su propia fila alineada a la derecha. */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2 flex-wrap">
+          {/* LADO IZQUIERDO: Reloj (PRIMERO, EXTREMO IZQUIERDO) + GDA + BASE + Tabs.
+              Task 111: también con flex-wrap SIEMPRE (antes lg:flex-nowrap
+              era la causa del encimiento sobre el cuadrito CAMBIO). */}
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Reloj en tiempo real - PRIMERO EN EL HEADER, EXTREMO IZQUIERDO - FONDO BLANCO TEXTO NEGRO */}
             <div
               className="hidden md:flex flex-col items-start text-left px-3 py-1.5 rounded-xl border shrink-0"
@@ -1287,8 +1300,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             </button>
           </div>
 
-          {/* LADO DERECHO: MOSTRADOR tasa de cambio + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto lg:ml-0">
+          {/* LADO DERECHO: MOSTRADOR tasa de cambio + Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión.
+              Task 111: ml-auto en TODOS los tamaños (sin lg:ml-0) — si la
+              fila se parte, este grupo baja a una fila propia alineada a
+              la derecha, sin encimarse con los botones. */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
             {/* Task 87B (pedido del dueño): MOSTRADOR de la tasa de cambio en
                 el panel de ventas. SOLO LECTURA: es un span, no un botón —
                 nadie edita desde acá. Se actualiza SOLO: se lee de la base

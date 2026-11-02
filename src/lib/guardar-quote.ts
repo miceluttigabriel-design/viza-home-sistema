@@ -23,6 +23,12 @@ import { db } from "@/lib/db";
 // · status "emitida": el ranking cuenta TODOS los quotes como
 //   "emitidos" (total) y sigue mostrando "aprobadas" aparte, igual
 //   que siempre. Ningún otro código filtra por status (verificado).
+// · Task 111 (pedido del dueño): los presupuestos emitidos SOLO AL
+//   CONTADO se guardan con status "emitida_contado" para que el CRM
+//   los separe en su propia opción CONTADO (y no los cuente como
+//   CUOTA). Solo cuando el PDF sale únicamente con el Plan A: Contado
+//   (sin ningún plan de cuotas). El total del ranking NO cambia:
+//   "emitida" y "emitida_contado" cuentan igual en el total.
 export async function guardarQuoteEmitido(params: {
   plan: string; // "PRESUPUESTO" | "MAYOR" | "SAFRA" | "CHEQUE"
   quoteNumber: string;
@@ -33,6 +39,7 @@ export async function guardarQuoteEmitido(params: {
   subtotal?: number;
   discount?: number;
   total?: number;
+  contadoSolo?: boolean; // Task 111: emitido SOLO AL CONTADO (sin cuotas)
 }): Promise<void> {
   try {
     await db.quote.create({
@@ -45,7 +52,10 @@ export async function guardarQuoteEmitido(params: {
         discount: Number(params.discount) || 0,
         taxRate: 0,
         total: Number(params.total) || 0,
-        status: "emitida",
+        // Task 111: "emitida_contado" = emitido SOLO AL CONTADO. El CRM
+        // (api/crm/ranking) usa ese status para la opción CONTADO; para el
+        // total del ranking vale igual que "emitida".
+        status: params.contadoSolo ? "emitida_contado" : "emitida",
         userId: params.userId || null,
       },
     });

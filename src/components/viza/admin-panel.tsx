@@ -64,16 +64,18 @@ interface CrmFila {
   total: number; // presupuestos emitidos
   aprobadas: number; // de esos, cuántas quedaron en estado "aprobada"
   // Desglose por TIPO DE PLAN (Task 78, pedido del dueño): el CRM puede
-  // filtrar por CUOTA / MAYORISTA / SAFRA / CHEQUE. Viene de la API
-  // (GET /api/crm/ranking); opcional para compat hacia atrás.
-  porPlan?: { CUOTA: number; MAYORISTA: number; SAFRA: number; CHEQUE: number };
+  // filtrar por CUOTA / CONTADO / MAYORISTA / SAFRA / CHEQUE. Viene de la
+  // API (GET /api/crm/ranking); opcional para compat hacia atrás.
+  // Task 111: CONTADO = presupuestos emitidos SOLO AL CONTADO (sin cuotas).
+  porPlan?: { CUOTA: number; CONTADO: number; MAYORISTA: number; SAFRA: number; CHEQUE: number };
   ultimo: string | null; // fecha ISO del último presupuesto
 }
 
-// Pills del filtro por PLAN del CRM (Task 78): TODOS + los 4 planes que
-// pidió el dueño. CUOTA = el presupuesto normal del panel de ventas
-// (quoteNumber PRESUPUESTO-XX).
-const CRM_PLANES = ["TODOS", "CUOTA", "MAYORISTA", "SAFRA", "CHEQUE"] as const;
+// Pills del filtro por PLAN del CRM (Task 78): TODOS + los planes que
+// pidió el dueño. CUOTA = el presupuesto normal con cuotas del panel de
+// ventas (quoteNumber PRESUPUESTO-XX). Task 111: CONTADO = el presupuesto
+// emitido SOLO AL CONTADO (sin cuotas) — opción propia que pidió el dueño.
+const CRM_PLANES = ["TODOS", "CUOTA", "CONTADO", "MAYORISTA", "SAFRA", "CHEQUE"] as const;
 
 // Fecha corta DD/MM/AA para la columna "último" del CRM
 const fmtFechaCortaCrm = (iso: string | null): string => {
@@ -4373,10 +4375,11 @@ tr.fila-etiquetada-${e.id}:hover td {
                 })}
               </div>
 
-              {/* Filtro por TIPO DE PLAN (Task 78, pedido del dueño):
-                  TODOS / CUOTA / MAYORISTA / SAFRA / CHEQUE. Con un plan
-                  elegido, el ranking cuenta solo los presupuestos de ese
-                  plan (CUOTA = el presupuesto normal del panel de ventas). */}
+              {/* Filtro por TIPO DE PLAN (Task 78; Task 111 agrega CONTADO):
+                  TODOS / CUOTA / CONTADO / MAYORISTA / SAFRA / CHEQUE. Con un
+                  plan elegido, el ranking cuenta solo los presupuestos de ese
+                  plan (CUOTA = con cuotas; CONTADO = emitido solo al
+                  contado, sin cuotas — pedido del dueño). */}
               <div className="px-6 py-2.5 flex flex-wrap items-center gap-1.5 border-b border-stone-200 shrink-0 bg-stone-50">
                 <span className="text-[11px] font-bold uppercase tracking-wide text-stone-400 mr-1">
                   Tipo de PLAN:
