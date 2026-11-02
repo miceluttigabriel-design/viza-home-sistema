@@ -20,6 +20,7 @@ import {
   diasDesdeEmision,
   diasHastaFecha,
   redondeoComercial,
+  formatearMontoInput,
 } from "../src/lib/pedido-especial-calc";
 
 let fallas = 0;
@@ -201,6 +202,53 @@ const hoyReal = new Date();
 const manana = new Date(hoyReal.getFullYear(), hoyReal.getMonth(), hoyReal.getDate() + 1);
 const mananaISO = `${manana.getFullYear()}-${String(manana.getMonth() + 1).padStart(2, "0")}-${String(manana.getDate()).padStart(2, "0")}`;
 check("diasHastaFecha mañana", diasHastaFecha(mananaISO), 1);
+
+// === TASK 113 v3: FORMATEO AUTOMÁTICO del costo (puntito de miles +
+// coma decimal, pedido del dueño: "puntito automático para separar
+// decimales y etc") ===
+// Escribir normalmente:
+check("fmt 15000000 → 15.000.000", formatearMontoInput("15000000"), "15.000.000");
+check("fmt 500 → 500", formatearMontoInput("500"), "500");
+check("fmt 1000 → 1.000", formatearMontoInput("1000"), "1.000");
+check("fmt 0 → 0", formatearMontoInput("0"), "0");
+check("fmt 007 → 7", formatearMontoInput("007"), "7");
+// Decimales con coma (convenio es-PY, el que ya parsea parseCosto):
+check("fmt 2500,5 → 2.500,5", formatearMontoInput("2500,5"), "2.500,5");
+check("fmt 2500,50 → 2.500,50", formatearMontoInput("2500,50"), "2.500,50");
+check("fmt 0, → 0,", formatearMontoInput("0,"), "0,");
+check("fmt ,5 → 0,5", formatearMontoInput(",5"), "0,5");
+check("fmt 1,99 recorta", formatearMontoInput("1,999"), "1,99");
+check("fmt 2 comas", formatearMontoInput("1,2,3"), "1,23");
+// Pegado con puntos de miles (mismo valor, no se rompe):
+check("fmt pegado 1.500.000", formatearMontoInput("1.500.000"), "1.500.000");
+// Basura fuera (letras, espacios, signos):
+check("fmt abc → vacío", formatearMontoInput("abc"), "");
+check("fmt -100 → 100", formatearMontoInput("-100"), "100");
+check("fmt 1 500 → 1.500", formatearMontoInput("1 500"), "1.500");
+check("fmt vacío → vacío", formatearMontoInput(""), "");
+// IDEMPOTENTE: formatear lo ya formateado no cambia nada (el input
+// controlado no pelea con el store):
+check("fmt idempotente 1", formatearMontoInput("15.000.000"), "15.000.000");
+check("fmt idempotente 2", formatearMontoInput("2.500,50"), "2.500,50");
+check("fmt idempotente 3", formatearMontoInput("0,"), "0,");
+// Y el resultado SIEMPRE lo parsea bien parseCosto (simulado acá con la
+// misma lógica de la pantalla): miles con puntos y coma decimal.
+const parseCostoPantalla = (s: string): number | null => {
+  const limpio = String(s || "").trim().replace(/\s/g, "");
+  if (!limpio) return null;
+  let normalizado = limpio;
+  if (limpio.includes(",")) {
+    normalizado = limpio.replace(/\./g, "").replace(",", ".");
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(limpio)) {
+    normalizado = limpio.replace(/\./g, "");
+  }
+  const n = Number(normalizado);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+check("fmt+parse 15.000.000", parseCostoPantalla(formatearMontoInput("15000000")), 15000000);
+check("fmt+parse 2.500,50", parseCostoPantalla(formatearMontoInput("2500,50")), 2500.5);
+check("fmt+parse 1.000", parseCostoPantalla(formatearMontoInput("1000")), 1000);
+check("fmt+parse 0,", parseCostoPantalla(formatearMontoInput("0,")), null);
 
 if (fallas > 0) {
   console.error(`\n${fallas} VERIFICACIONES FALLARON`);

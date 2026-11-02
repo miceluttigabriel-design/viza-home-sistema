@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calculator,
   Coins,
@@ -10,10 +10,10 @@ import {
   FileText,
   Trash2,
   RefreshCw,
-  Info,
   Calendar,
   Landmark,
-  Table2,
+  History,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePedidoEspecialStore } from "@/store/pedido-especial";
@@ -23,10 +23,12 @@ import {
   generarFechasCheques,
   diasDesdeEmision,
   diasHastaFecha,
+  formatearMontoInput,
   NOMBRE_PLAN,
   type PlanPedidoEspecial,
 } from "@/lib/pedido-especial-calc";
 import type { CombinacionPedidoEspecial } from "@/lib/pedido-especial";
+import type { PresupuestoPedidoEspecial } from "@/lib/pedido-especial-presupuestos";
 import { formatPYG } from "@/lib/format";
 
 // === PEDIDO ESPECIAL (Task 113, pedido del dueño) ===
@@ -49,10 +51,101 @@ import { formatPYG } from "@/lib/format";
 //      (márgenes por tramos de la BASE, recargo 3% sin entrega 31-60
 //      días, valor técnico del MAYORISTA, interés mensual sobre saldo
 //      del SAFRA, tasa 1.5%/3% mensual del CHEQUE).
-// SOLO CÁLCULO (confirmado por el dueño): no genera PDF, no guarda en
-// la BD, no toca el CRM — el resultado se ve en pantalla, uno por vez.
+// Task 113 v3 (pedido del dueño): además de calcular en pantalla, el
+// vendedor puede GUARDAR el presupuesto → queda en el HISTORIAL con
+// situación GENERADO, y puede MARCARLO APROBADO con un botón. El
+// encargado de sucursal ve el historial de SU sucursal con la situación
+// de cada uno (el número ESPECIAL-01, 02… sale del servidor junto con
+// el recálculo con los % de la Base: lo guardado siempre es lo visto).
 // El vendedor NO ve ni escribe los %: vienen SIEMPRE de la Base del
 // admin, como el precio de la BASE en el cotizador de siempre.
+// El campo de costo (y la entrada del SAFRA) formatean SOLOS los miles
+// con puntito mientras se escribe: "15000000" → "15.000.000".
+
+// ─── INPUT DE MONTO con puntito automático (Task 113 v3) ───
+// Formatea MIENTRAS se escribe: separa miles con punto y acepta coma
+// decimal (2.500,50). Cuida el cursor (mapearCaret) y el backspace
+// sobre un separador (borra el dígito de una, para que no se "atasque").
+function mapearCaret(viejo: string, nuevo: string, caret: number): number {
+  const esSig = (c: string) => /[\d,]/.test(c);
+  let sig = 0;
+  for (let i = 0; i < caret && i < viejo.length; i++) {
+    if (esSig(viejo[i])) sig++;
+  }
+  let cont = 0;
+  let i = 0;
+  while (i < nuevo.length && cont < sig) {
+    if (esSig(nuevo[i])) cont++;
+    i++;
+  }
+  return i;
+}
+
+function CampoMonto({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const caretRef = useRef<number | null>(null);
+
+  // Tras cada cambio de valor, ubica el cursor donde le corresponde
+  // (solo si el último onChange lo pidió: las actualizaciones externas
+  // del store no mueven el cursor).
+  useEffect(() => {
+    if (caretRef.current !== null && ref.current) {
+      try {
+        ref.current.setSelectionRange(caretRef.current, caretRef.current);
+      } catch {
+        // inputs sin selección: nada que hacer
+      }
+      caretRef.current = null;
+    }
+  }, [value]);
+
+  const formatear = (raw: string, caret: number) => {
+    const nuevo = formatearMontoInput(raw);
+    caretRef.current = mapearCaret(raw, nuevo, caret);
+    onChange(nuevo);
+  };
+
+  return (
+    <input
+      ref={ref}
+      type="text"
+      inputMode="decimal"
+      value={value}
+      onChange={(e) =>
+        formatear(e.target.value, e.target.selectionStart ?? e.target.value.length)
+      }
+      onKeyDown={(e) => {
+        // Backspace sobre un separador ("1.500" borrando el "."):
+        // el formateador lo volvería a poner y el input se atasca.
+        // Solución: borrar el separador + el dígito anterior de una vez.
+        if (e.key !== "Backspace" || !ref.current) return;
+        const el = ref.current;
+        const pos = el.selectionStart ?? el.value.length;
+        const fin = el.selectionEnd ?? pos;
+        if (pos === fin && pos > 0) {
+          const c = el.value[pos - 1];
+          if (c === "." || c === ",") {
+            e.preventDefault();
+            const raw = el.value.slice(0, pos - 2) + el.value.slice(pos);
+            formatear(raw, pos - 2);
+          }
+        }
+      }}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+}
 
 // === VIZA home brand palette (la de todos los planes) ===
 const AZUL = "#155789";
@@ -122,7 +215,76 @@ function fechaCorta(iso: string): string {
   return y && m && d ? `${d}/${m}/${y}` : iso;
 }
 
-export function PlanEspecial() {
+// ─── Helpers de presentación del HISTORIAL (Task 113 v3) ───
+
+// "2026-11-02T14:30:00.000Z" → "02/11/2026" (fecha local del dispositivo).
+function fmtFechaHora(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+// El MONTO PRINCIPAL de cada plan (lo mismo que muestra la pantalla
+// grande del resultado: contado → valorContado, cuotas → cuota, etc.).
+function montoPrincipal(p: PresupuestoPedidoEspecial): number {
+  switch (p.plan) {
+    case "contado":
+      return p.valorContado;
+    case "cuotas_con_entrega":
+    case "cuotas_sin_entrega":
+      return p.cuotaValor;
+    case "mayorista":
+      return p.valorTecnico;
+    case "cheque":
+      return p.detalle?.cheques?.[0]?.valor || 0;
+    default:
+      return p.total;
+  }
+}
+
+// Aclaración chica debajo del plan/valor del historial.
+function lineaValorPresupuesto(p: PresupuestoPedidoEspecial): string {
+  if (p.plan === "cuotas_con_entrega" || p.plan === "cuotas_sin_entrega") {
+    return p.cuotas > 0 ? `${p.cuotas} × ${formatPYG(p.cuotaValor)}` : "";
+  }
+  if (p.plan === "cheque") {
+    const n = p.detalle?.cheques?.length || p.cuotas || 0;
+    return n ? `${n} cheque${n !== 1 ? "s" : ""}` : "";
+  }
+  if (p.plan === "safra" && p.totalIntereses > 0) {
+    return `incluye ${formatPYG(p.totalIntereses)} de intereses`;
+  }
+  if (p.plan === "mayorista") return "valor técnico";
+  if (p.plan === "contado") return "al contado";
+  return "";
+}
+
+// Costo original tal cual lo puso el vendedor (para que el encargado vea
+// con qué costo se trabajó: "US$ 2.500" o "Gs 15.000.000").
+function modoCostoFila(p: PresupuestoPedidoEspecial): string {
+  const costo = p.costoOriginal || 0;
+  if (!costo) return "";
+  return p.modoCosto === "usd"
+    ? `costo US$ ${costo.toLocaleString("es-PY")}`
+    : `costo ${formatPYG(costo)}`;
+}
+
+export function PlanEspecial({
+  userEmail = "",
+  puedeVerTodo = false,
+  puedeAprobarTodo = false,
+}: {
+  // Email del usuario logueado (para saber cuáles presupuestos son suyos:
+  // el dueño puede marcarlos APROBADO).
+  userEmail?: string;
+  // true = encargado de sucursal / admin: el historial muestra TODOS los
+  // presupuestos de su sucursal (lo decide la API; acá solo ordena la
+  // pantalla con el historial ARRIBA, que es lo que el encargado busca).
+  puedeVerTodo?: boolean;
+  // true = admin/supremo: puede aprobar cualquier presupuesto.
+  puedeAprobarTodo?: boolean;
+}) {
   const {
     modoCosto,
     costoStr,
@@ -194,6 +356,98 @@ export function PlanEspecial() {
     cargarConfig();
   }, []);
 
+  // ═══ HISTORIAL de presupuestos (Task 113 v3, pedido del dueño) ═══
+  // La API decide el alcance: el vendedor ve los SUYOS (con botón
+  // MARCAR APROBADO), el encargado ve los de SU sucursal (solo lectura,
+  // con la situación de cada uno) y el admin ve todos.
+  const [historial, setHistorial] = useState<PresupuestoPedidoEspecial[]>([]);
+  const [vistaHistorial, setVistaHistorial] = useState<string>("MIS");
+  const [sucursalHistorial, setSucursalHistorial] = useState<string | null>(null);
+  const [cargandoHistorial, setCargandoHistorial] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [aprobandoId, setAprobandoId] = useState<string | null>(null);
+
+  const cargarHistorial = async () => {
+    setCargandoHistorial(true);
+    try {
+      const res = await fetch("/api/pedido-especial/presupuestos");
+      const data = await res.json().catch(() => ({}));
+      setHistorial(Array.isArray(data.presupuestos) ? data.presupuestos : []);
+      if (typeof data.vista === "string") setVistaHistorial(data.vista);
+      setSucursalHistorial(typeof data.sucursal === "string" ? data.sucursal : null);
+    } catch {
+      // Historial inaccesible: la pantalla de cálculo sigue normal.
+    } finally {
+      setCargandoHistorial(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarHistorial();
+  }, []);
+
+  // GUARDAR el presupuesto actual en el historial (queda GENERADO).
+  // El servidor RECALCULA con los % de la Base y da el número ESPECIAL-XX.
+  const guardarPresupuesto = async () => {
+    if (!resultadoOk || !combinacionElegida || guardando) return;
+    setGuardando(true);
+    try {
+      const res = await fetch("/api/pedido-especial/presupuestos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proveedor,
+          tipoProducto,
+          descripcion: descripcion.trim(),
+          modoCosto,
+          costo,
+          plan,
+          cuotas,
+          fechaInicioPago,
+          safraEntrada,
+          safraMeses,
+          chequesCantidad,
+          chequesFechas,
+          fechaEmision: hoy,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+      toast.success(`Presupuesto ${data?.presupuesto?.numero || "ESPECIAL"} guardado (GENERADO)`);
+      cargarHistorial();
+    } catch (error) {
+      toast.error(`No se pudo guardar: ${(error as Error).message}`);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // MARCAR COMO APROBADO (el vendedor que lo generó, o un admin).
+  const aprobarPresupuesto = async (id: string) => {
+    if (aprobandoId) return;
+    setAprobandoId(id);
+    try {
+      const res = await fetch("/api/pedido-especial/presupuestos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+      toast.success("Presupuesto marcado como APROBADO");
+      cargarHistorial();
+    } catch (error) {
+      toast.error(`No se pudo aprobar: ${(error as Error).message}`);
+    } finally {
+      setAprobandoId(null);
+    }
+  };
+
+  const miEmail = userEmail.trim().toLowerCase();
+  const puedeAprobarFila = (p: PresupuestoPedidoEspecial): boolean =>
+    p.estado === "GENERADO" &&
+    (puedeAprobarTodo || (!!miEmail && p.vendedorEmail === miEmail));
+
   // === Listas de PROVEEDOR y TIPO — ESTIRADAS DE LA BASE ===
   // Si el catálogo de la BASE todavía no cargó (o falla), respaldo con las
   // combinaciones que ya tienen % (así la pantalla NUNCA queda inutilizable).
@@ -224,9 +478,6 @@ export function PlanEspecial() {
       ) || null,
     [combinaciones, proveedor, tipoProducto]
   );
-
-  // ¿Cuántas combinaciones tienen % cargados? (aviso chico en pantalla)
-  const conPorcentaje = combinaciones.length;
 
   // === Parámetros específicos del plan elegido ===
   const esMoto = useMemo(() => esTipoMoto(tipoProducto), [tipoProducto]);
@@ -340,6 +591,184 @@ export function PlanEspecial() {
 
   const fmtUS = (n: number) => "US$ " + n.toLocaleString("es-PY");
 
+  // ═══ SECCIÓN HISTORIAL (Task 113 v3, pedido del dueño) ═══
+  // El encargado de sucursal ve el historial de SU sucursal con la
+  // situación de cada presupuesto (GENERADO / APROBADO). El vendedor ve
+  // el suyo y marca APROBADO los que quiera. Un solo JSX: para el
+  // encargado/admin va ARRIBA en la pantalla, para el vendedor ABAJO.
+  const tituloHistorial =
+    vistaHistorial === "SUCURSAL" && sucursalHistorial
+      ? ` · ${sucursalHistorial}`
+      : vistaHistorial === "TODAS"
+        ? " · TODAS LAS SUCURSALES"
+        : "";
+  const generados = historial.filter((p) => p.estado === "GENERADO").length;
+  const aprobados = historial.filter((p) => p.estado === "APROBADO").length;
+
+  const seccionHistorial = (
+    <section className="bg-white rounded-2xl border-2 p-5 shadow-sm" style={{ borderColor: DORADO }}>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2
+          className="text-xs font-bold uppercase tracking-wide flex items-center gap-2"
+          style={{ color: AZUL }}
+        >
+          <History className="h-4 w-4" />
+          HISTORIAL · PEDIDOS ESPECIALES{tituloHistorial}
+        </h2>
+        <button
+          onClick={cargarHistorial}
+          disabled={cargandoHistorial}
+          className="text-[11px] font-semibold text-stone-500 hover:text-sky-700 transition-colors flex items-center gap-1 disabled:opacity-50"
+          title="Recargar el historial"
+        >
+          <RefreshCw className={`h-3 w-3 ${cargandoHistorial ? "animate-spin" : ""}`} />
+          Actualizar
+        </button>
+      </div>
+
+      {cargandoHistorial ? (
+        <div className="py-10 flex flex-col items-center gap-2">
+          <div className="h-9 w-9 rounded-full border-4 border-stone-200 border-t-[#155789] animate-spin"></div>
+          <p className="text-xs text-stone-500 font-medium">Cargando historial…</p>
+        </div>
+      ) : historial.length === 0 ? (
+        <div className="py-10 text-center">
+          <History className="h-9 w-9 text-stone-300 mx-auto mb-2" />
+          <p className="text-sm font-semibold text-stone-600">
+            {vistaHistorial === "MIS"
+              ? "Todavía no guardaste ningún presupuesto"
+              : "Todavía no hay presupuestos de pedido especial"}
+          </p>
+          <p className="text-xs text-stone-400 mt-1 max-w-sm mx-auto">
+            {vistaHistorial === "MIS"
+              ? "Completá el pedido de arriba y apretá GUARDAR PRESUPUESTO: queda acá con situación GENERADO."
+              : "Cuando los vendedores guarden presupuestos de pedido especial aparecen acá, con su situación (GENERADO / APROBADO)."}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Resumen de la situación (lo que el dueño pidió ver) */}
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+            <span className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-600">
+              {historial.length} presupuesto{historial.length !== 1 ? "s" : ""}
+            </span>
+            <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
+              {generados} generado{generados !== 1 ? "s" : ""}
+            </span>
+            <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-800">
+              {aprobados} aprobado{aprobados !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-stone-200 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-stone-100 text-stone-600 uppercase text-[10px]">
+                  <th className="text-left px-3 py-2 font-bold whitespace-nowrap">N°</th>
+                  <th className="text-center px-3 py-2 font-bold whitespace-nowrap">FECHA</th>
+                  {puedeVerTodo && (
+                    <th className="text-left px-3 py-2 font-bold whitespace-nowrap">VENDEDOR</th>
+                  )}
+                  <th className="text-left px-3 py-2 font-bold">PRODUCTO</th>
+                  <th className="text-left px-3 py-2 font-bold whitespace-nowrap">PLAN</th>
+                  <th className="text-right px-3 py-2 font-bold whitespace-nowrap">VALOR</th>
+                  <th className="text-center px-3 py-2 font-bold whitespace-nowrap">SITUACIÓN</th>
+                  <th className="text-right px-3 py-2 font-bold whitespace-nowrap"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {historial.map((p) => {
+                  const extra = lineaValorPresupuesto(p);
+                  return (
+                    <tr key={p.id} className="hover:bg-stone-50">
+                      <td className="px-3 py-2.5 font-extrabold whitespace-nowrap" style={{ color: AZUL }}>
+                        {p.numero}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-stone-600 whitespace-nowrap">
+                        {fmtFechaHora(p.createdAt)}
+                      </td>
+                      {puedeVerTodo && (
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <div className="font-semibold text-stone-800 max-w-[140px] truncate" title={p.vendedorNombre || p.vendedorEmail}>
+                            {p.vendedorNombre || p.vendedorEmail}
+                          </div>
+                          {p.sucursal && (
+                            <div className="text-[10px] text-stone-400">{p.sucursal}</div>
+                          )}
+                        </td>
+                      )}
+                      <td className="px-3 py-2.5">
+                        <div className="font-semibold text-stone-800">
+                          {p.proveedor} · {p.tipoProducto}
+                        </div>
+                        <div className="text-[11px] text-stone-500 max-w-[220px] truncate" title={p.descripcion}>
+                          {p.descripcion}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="font-bold text-stone-700">{NOMBRE_PLAN[p.plan as PlanPedidoEspecial] || p.plan}</span>
+                        {extra && <div className="text-[10px] text-stone-400">{extra}</div>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <span className="font-extrabold text-stone-900">{formatPYG(montoPrincipal(p))}</span>
+                        {modoCostoFila(p) && (
+                          <div className="text-[10px] text-stone-400">{modoCostoFila(p)}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {p.estado === "APROBADO" ? (
+                          <span
+                            className="px-2 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-300 whitespace-nowrap"
+                            title={p.fechaAprobado ? `Aprobado el ${fmtFechaHora(p.fechaAprobado)}` : "Aprobado"}
+                          >
+                            APROBADO
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+                            GENERADO
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {puedeAprobarFila(p) ? (
+                          <button
+                            onClick={() => aprobarPresupuesto(p.id)}
+                            disabled={aprobandoId === p.id}
+                            className="h-7 px-3 rounded-lg font-bold text-[10px] flex items-center gap-1 border transition-colors hover:brightness-95 disabled:opacity-50 whitespace-nowrap"
+                            style={{
+                              backgroundColor: "rgba(22,163,74,0.08)",
+                              color: "#166534",
+                              borderColor: "rgba(22,163,74,0.4)",
+                            }}
+                            title="Marcar este presupuesto como APROBADO (el encargado lo ve aprobado)"
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            {aprobandoId === p.id ? "APROBANDO…" : "MARCAR APROBADO"}
+                          </button>
+                        ) : p.estado === "APROBADO" ? (
+                          <span className="text-[10px] text-green-700 font-semibold whitespace-nowrap">
+                            ✓ {p.fechaAprobado ? fmtFechaHora(p.fechaAprobado) : ""}
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-[10px] text-stone-400 leading-relaxed">
+            El VALOR guardado es el que se calculó en ese momento (con los % de la Base
+            de ese día): si después cambian los %, el presupuesto del historial NO cambia.
+            {vistaHistorial === "SUCURSAL" &&
+              " Vés tu sucursal: solo lectura — la aprobación la hace el vendedor que lo generó."}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+
   // Botón de TIPO DE PLAN (los 6 del sistema, mismo estilo de siempre).
   const botonPlan = (p: PlanPedidoEspecial) => (
     <button
@@ -366,6 +795,11 @@ export function PlanEspecial() {
 
   return (
     <div className="space-y-5">
+      {/* HISTORIAL ARRIBA para encargado/admin: es lo que busca al entrar
+          (el dueño: "los encargados de sucursales… ver el histórico… y la
+          situación de los mismos"). Para el vendedor va al final. */}
+      {puedeVerTodo && seccionHistorial}
+
       {/* === A. DATOS DEL PEDIDO (costo + proveedor + tipo + descripción) === */}
       <section className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3 mb-3">
@@ -387,19 +821,9 @@ export function PlanEspecial() {
           </button>
         </div>
 
-        {/* Aviso si la Base todavía no tiene combinaciones con % */}
-        {!cargandoConfig && conPorcentaje === 0 && (
-          <div className="rounded-lg px-3 py-2.5 bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed mb-3 flex items-start gap-2">
-            <Info className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>
-              Todavía no hay combinaciones con % cargados en la Base. Pedile al admin
-              que las cargue en el Panel Admin (Base) con el botón{" "}
-              <strong>PEDIDO ESPECIAL</strong>.
-            </span>
-          </div>
-        )}
-
-        {/* COSTO: moneda + monto directo (como pidió el dueño) */}
+        {/* COSTO: moneda + monto directo — Task 113 v3: el input separa
+            SOLO los miles con puntito mientras se escribe (pedido del
+            dueño: "puntito automático"). */}
         <div className="mb-4">
           <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
             Costo del producto *
@@ -434,12 +858,10 @@ export function PlanEspecial() {
                 GS
               </button>
             </div>
-            <input
-              type="text"
+            <CampoMonto
               value={costoStr}
-              onChange={(e) => setCostoStr(e.target.value)}
-              inputMode="decimal"
-              placeholder={modoCosto === "usd" ? "Ej: 2500" : "Ej: 15.000.000"}
+              onChange={setCostoStr}
+              placeholder={modoCosto === "usd" ? "Ej: 2.500" : "Ej: 15.000.000"}
               className="flex-1 h-10 px-3 rounded-lg border border-stone-300 text-sm font-semibold focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
             />
           </div>
@@ -599,11 +1021,9 @@ export function PlanEspecial() {
                   <Landmark className="h-3 w-3" />
                   Entrada (Gs):
                 </label>
-                <input
-                  type="text"
+                <CampoMonto
                   value={safraEntradaStr}
-                  onChange={(e) => setSafraEntradaStr(e.target.value)}
-                  inputMode="decimal"
+                  onChange={setSafraEntradaStr}
                   placeholder="0 = sin entrada"
                   className="w-36 h-10 px-3 rounded-lg border border-stone-300 text-sm font-semibold focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
                 />
@@ -928,6 +1348,31 @@ export function PlanEspecial() {
               {plan === "cheque" &&
                 "MISMA lógica del plan CON CHEQUE: base = valor contado, plazo promedio (días/30) y cheques con el mismo valor al millar superior. Cálculo en pantalla únicamente."}
             </p>
+
+            {/* ── GUARDAR EN EL HISTORIAL (Task 113 v3, pedido del dueño) ──
+                Queda con situación GENERADO y número ESPECIAL-XX; después
+                el vendedor lo marca APROBADO y el encargado de su sucursal
+                lo ve aprobado en el historial. */}
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed px-4 py-3"
+              style={{ borderColor: DORADO, background: "rgba(217,184,107,0.07)" }}
+            >
+              <p className="text-[11px] text-stone-600 leading-snug max-w-md">
+                Al guardar queda en el <strong style={{ color: AZUL }}>HISTORIAL</strong> con
+                situación <strong>GENERADO</strong>. Después lo podés marcar{" "}
+                <strong>APROBADO</strong> y el encargado de tu sucursal lo ve aprobado.
+              </p>
+              <button
+                onClick={guardarPresupuesto}
+                disabled={!resultadoOk || !combinacionElegida || guardando}
+                className="h-10 px-5 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                style={{ backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }}
+                title="Guardar este presupuesto en el historial (queda GENERADO)"
+              >
+                <CheckCircle2 className={`h-4 w-4 ${guardando ? "animate-pulse" : ""}`} />
+                {guardando ? "GUARDANDO…" : "GUARDAR PRESUPUESTO"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="py-6 text-center">
@@ -949,31 +1394,14 @@ export function PlanEspecial() {
         )}
       </section>
 
-      {/* Recordatorio discreto de qué plan usa qué (guía rápida) */}
-      <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-        <p className="text-[11px] font-bold uppercase text-stone-500 mb-2 flex items-center gap-1.5">
-          <Table2 className="h-3.5 w-3.5" />
-          Qué usa cada plan (los % los carga el admin en la Base)
-        </p>
-        <ul className="text-[11px] text-stone-600 leading-relaxed space-y-1">
-          <li>
-            <strong>CONTADO / CUOTAS:</strong> % contado + tramos 1-6 / 7-13 / 14-30
-            (misma estructura de la BASE).
-          </li>
-          <li>
-            <strong>MAYORISTA:</strong> % técnico (Costo Gs × (1 + %), como el VALOR
-            TÉCNICO de la BASE).
-          </li>
-          <li>
-            <strong>SAFRA:</strong> % SAFRA = tasa de interés mensual sobre el saldo
-            restante.
-          </li>
-          <li>
-            <strong>CHEQUE:</strong> tasa automática 1.5% (tipo MOTO) / 3% (resto),
-            base = valor al contado.
-          </li>
-        </ul>
-      </div>
+      {/* ═══ HISTORIAL · PRESUPUESTOS PEDIDO ESPECIAL (Task 113 v3) ═══
+          El vendedor ve los SUYOS con el botón MARCAR APROBADO; el
+          encargado de sucursal ve los de SU sucursal con la situación de
+          cada uno (GENERADO / APROBADO) — solo lectura; el admin ve todos.
+          Para el encargado/admin el historial va ARRIBA (es lo que busca
+          cuando entra); para el vendedor va ABAJO (calcula → guarda →
+          ve lo suyo). */}
+      {!puedeVerTodo && seccionHistorial}
     </div>
   );
 }

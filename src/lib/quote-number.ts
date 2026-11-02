@@ -19,7 +19,10 @@ import { db } from "@/lib/db";
 
 // Planes con numeración propia. El presupuesto normal del carrito
 // (guardado en BD y su PDF) usa "PRESUPUESTO".
-const PLANES_VALIDOS = new Set(["PRESUPUESTO", "MAYOR", "SAFRA", "CHEQUE"]);
+// Task 113 v3: "ESPECIAL" = presupuestos del PEDIDO ESPECIAL guardados
+// en el historial (tabla PedidoEspecialPresupuesto) — ESPECIAL-01, 02…,
+// cuenta PROPIA por usuario igual que los demás planes.
+const PLANES_VALIDOS = new Set(["PRESUPUESTO", "MAYOR", "SAFRA", "CHEQUE", "ESPECIAL"]);
 
 // Cache por instancia: la tabla solo se intenta crear una vez por proceso
 // (en Vercel cada instancia fría la re-crea solo si falta de verdad).

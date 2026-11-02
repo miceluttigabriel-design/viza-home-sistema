@@ -24,6 +24,7 @@ import { db } from "@/lib/db";
 import { leerCapacidades } from "@/lib/producto-capacidad";
 import { leerCores } from "@/lib/producto-cores";
 import { ensureTablaPedidoEspecial } from "@/lib/pedido-especial";
+import { ensureTablaPedidoEspecialPresupuestos } from "@/lib/pedido-especial-presupuestos";
 
 export interface BackupStats {
   fecha: string; // ISO
@@ -563,6 +564,94 @@ export async function generateBackupExcel(): Promise<BackupResult> {
   } catch (error) {
     // Tabla ausente o lectura fallida: la hoja se salta y nada más.
     console.error("backup: hoja Pedido Especial omitida:", error);
+  }
+
+  // ===== HOJA 16: PEDIDO ESPECIAL HISTORICO (Task 113 v3, pedido del dueño) =====
+  // Los presupuestos que los vendedores GUARDAN desde PEDIDO ESPECIAL con
+  // su situación (GENERADO / APROBADO). Mismo escudo que la hoja anterior:
+  // try/catch — si la tabla todavía no existe (nadie guardó nada todavía),
+  // esta hoja se SALTA en silencio y el backup / el correo (Task 112) NO
+  // se tocan por nada del mundo. La columna `detalle` (JSON del desglose)
+  // se recorta a 500 caracteres para que la hoja no pese una tonelada.
+  try {
+    await ensureTablaPedidoEspecialPresupuestos();
+    const filasPeh = await db.pedidoEspecialPresupuesto.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    const filasHistorico = filasPeh.map((f) => ({
+      id: f.id,
+      numero: f.numero,
+      estado: f.estado,
+      vendedorEmail: f.vendedorEmail,
+      vendedorNombre: f.vendedorNombre,
+      sucursal: f.sucursal,
+      proveedor: f.proveedor,
+      tipoProducto: f.tipoProducto,
+      descripcion: f.descripcion,
+      modoCosto: f.modoCosto,
+      costoOriginal: f.costoOriginal,
+      costoGs: f.costoGs,
+      cambioUS: f.cambioUS,
+      plan: f.plan,
+      cuotas: f.cuotas,
+      pctContado: f.pctContado,
+      pct1A6: f.pct1A6,
+      pct7A13: f.pct7A13,
+      pct14A30: f.pct14A30,
+      pctTecnico: f.pctTecnico,
+      pctSafra: f.pctSafra,
+      valorContado: f.valorContado,
+      cuotaValor: f.cuotaValor,
+      valorTecnico: f.valorTecnico,
+      total: f.total,
+      totalIntereses: f.totalIntereses,
+      detalle: (f.detalle || "").slice(0, 500),
+      fechaAprobado: f.fechaAprobado ? new Date(f.fechaAprobado).toISOString() : "",
+      createdAt: new Date(f.createdAt).toISOString(),
+      updatedAt: new Date(f.updatedAt).toISOString(),
+    }));
+    hojas.push(
+      await escribirHoja(
+        wb,
+        "Pedido Especial Historico",
+        [
+          { header: "id", key: "id" },
+          { header: "numero", key: "numero" },
+          { header: "estado", key: "estado" },
+          { header: "vendedorEmail", key: "vendedorEmail" },
+          { header: "vendedorNombre", key: "vendedorNombre" },
+          { header: "sucursal", key: "sucursal" },
+          { header: "proveedor", key: "proveedor" },
+          { header: "tipoProducto", key: "tipoProducto" },
+          { header: "descripcion", key: "descripcion" },
+          { header: "modoCosto", key: "modoCosto" },
+          { header: "costoOriginal", key: "costoOriginal" },
+          { header: "costoGs", key: "costoGs" },
+          { header: "cambioUS", key: "cambioUS" },
+          { header: "plan", key: "plan" },
+          { header: "cuotas", key: "cuotas" },
+          { header: "pctContado", key: "pctContado" },
+          { header: "pct1A6", key: "pct1A6" },
+          { header: "pct7A13", key: "pct7A13" },
+          { header: "pct14A30", key: "pct14A30" },
+          { header: "pctTecnico", key: "pctTecnico" },
+          { header: "pctSafra", key: "pctSafra" },
+          { header: "valorContado", key: "valorContado" },
+          { header: "cuotaValor", key: "cuotaValor" },
+          { header: "valorTecnico", key: "valorTecnico" },
+          { header: "total", key: "total" },
+          { header: "totalIntereses", key: "totalIntereses" },
+          { header: "detalle(500)", key: "detalle", width: 40 },
+          { header: "fechaAprobado", key: "fechaAprobado", width: 24 },
+          { header: "createdAt", key: "createdAt", width: 24 },
+          { header: "updatedAt", key: "updatedAt", width: 24 },
+        ],
+        filasHistorico
+      )
+    );
+  } catch (error) {
+    // Tabla ausente o lectura fallida: la hoja se salta y nada más.
+    console.error("backup: hoja Pedido Especial Historico omitida:", error);
   }
 
   // ===== GENERAR EL BUFFER =====

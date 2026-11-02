@@ -595,3 +595,39 @@ export function diasHastaFecha(fechaISO: string, hoy = new Date()): number | nul
   h.setHours(0, 0, 0, 0);
   return Math.ceil((inicio.getTime() - h.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+// ─── FORMATEO AUTOMÁTICO del monto mientras se escribe (Task 113 v3,
+// pedido del dueño: "en la barra de poner costo quiero que aplique el
+// puntito automático para separar decimales y etc"). ───
+// Mientras el vendedor escribe, la pantalla separa SOLA los miles con
+// PUNTO (estilo Paraguay / la BASE: 15000000 → "15.000.000") y acepta
+// la COMA como separador decimal (2.500,50). El resultado siempre lo
+// parsea igual parseCosto de la pantalla — mismo convenio de siempre.
+//   "15000000"   → "15.000.000"
+//   "2500,5"     → "2.500,5"
+//   "2500,505"   → "2.500,50"   (recorta a 2 decimales)
+//   "1.500.000"  → "1.500.000"  (pegado con puntos: mismo valor)
+//   "abc"        → ""           (solo dígitos y coma)
+// Es IDEMPOTENTE: formatear algo ya formateado devuelve lo mismo, así
+// el input controlado no pelea con el store.
+export function formatearMontoInput(raw: string, maxDecimales = 2): string {
+  // Solo dígitos y coma (fuera espacios, letras, guiones…).
+  let s = String(raw ?? "").replace(/[^\d,]/g, "");
+  if (!s) return "";
+  // Máximo UNA coma: lo que va después es la parte decimal.
+  const iComa = s.indexOf(",");
+  if (iComa !== -1) {
+    const entero = s.slice(0, iComa);
+    const decimales = s
+      .slice(iComa + 1)
+      .replace(/,/g, "")
+      .slice(0, Math.max(0, maxDecimales));
+    s = `${entero || "0"},${decimales}`;
+  }
+  const [entero, decimales] = s.split(",");
+  // Sin ceros a la izquierda ("007" → "7") y cota sanitaria de 15 dígitos.
+  const digitos = (entero || "").replace(/^0+(?=\d)/, "").slice(0, 15);
+  // Puntito de miles cada 3 dígitos (solo en la parte entera).
+  const conPuntos = digitos.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return decimales !== undefined ? `${conPuntos},${decimales}` : conPuntos;
+}

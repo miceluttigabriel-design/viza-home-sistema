@@ -535,3 +535,71 @@ model PedidoEspecialConfig {
 
   @@unique([proveedor, tipoProducto])
 }
+
+// ============================================================
+// HISTORIAL de presupuestos del PEDIDO ESPECIAL (Task 113 v3,
+// pedido del dueño): "los encargados de sucursales quiero que
+// ellos puedan ver el historico de presupuestos de pedido
+// especial generados… y la situación de los mismos, si fue
+// generado y si está como aprobado… el vendedor va a tener una
+// opción de marcar como aprobado".
+//
+// Cada presupuesto que el vendedor GUARDA desde la pantalla PEDIDO
+// ESPECIAL queda acá con su SITUACIÓN:
+//   · GENERADO → recién guardado (el cálculo quedó congelado)
+//   · APROBADO → el vendedor lo marcó aprobado; el encargado de su
+//     sucursal lo ve como aprobado en el historial.
+// El encargado de sucursal (lista ENCARGADOS_SUCURSAL) ve el
+// historial de SU sucursal SOLO LECTURA; el vendedor ve el propio
+// con el botón MARCAR APROBADO; admin/supremo ven todo.
+//
+// TABLA AUTO-GESTIONADA igual que PedidoEspecialConfig: se crea
+// SOLA en el primer uso (SQL idempotente en
+// src/lib/pedido-especial-presupuestos.ts) y NUNCA toca tablas
+// existentes. Sin relaciones Prisma a propósito (mismo motivo).
+//
+// Los números salen de QuoteSequence con plan "ESPECIAL" (misma
+// mecánica de MAYOR-01 / SAFRA-01 / CHEQUE-01: ESPECIAL-01, 02…,
+// cuenta PROPIA por usuario).
+// ============================================================
+model PedidoEspecialPresupuesto {
+  id             String    @id @default(cuid())
+  numero         String    @unique // "ESPECIAL-01", "ESPECIAL-02"...
+  vendedorEmail  String // email de quien lo generó (minúscula)
+  vendedorNombre String    @default("") // nombre del vendedor (para el encargado)
+  sucursal       String    @default("") // sucursal del vendedor (snapshot UsuarioSucursal)
+  proveedor      String
+  tipoProducto   String
+  descripcion    String    @default("")
+  modoCosto      String    @default("gs") // "usd" | "gs" (moneda del costo original)
+  costoOriginal  Float // costo tal cual lo puso el vendedor (US$ o Gs)
+  costoGs        Float // costo convertido a Gs
+  cambioUS       Float     @default(0) // tasa activa usada si modoCosto = usd
+  plan           String // contado | cuotas_con_entrega | cuotas_sin_entrega | mayorista | safra | cheque
+  cuotas         Int       @default(0)
+  // % APLICADOS (snapshot de la combinación de la Base en el momento
+  // del cálculo — quedan congelados acá para que el historial muestre
+  // SIEMPRE el mismo número, aunque el admin cambie los % después).
+  pctContado     Float     @default(0)
+  pct1A6         Float     @default(0)
+  pct7A13        Float     @default(0)
+  pct14A30       Float     @default(0)
+  pctTecnico     Float     @default(0)
+  pctSafra       Float     @default(0)
+  valorContado   Float     @default(0)
+  cuotaValor     Float     @default(0)
+  valorTecnico   Float     @default(0)
+  total          Float // monto principal del plan (lo grande de la pantalla)
+  totalIntereses Float     @default(0) // SAFRA
+  // Desglose COMPLETO del cálculo en JSON (cronograma SAFRA, cheques,
+  // fecha de inicio sin entrega, entrada, recargo, tasa, etc.) para
+  // poder re-mostrar el plan idéntico más adelante.
+  detalle        String    @default("")
+  estado         String    @default("GENERADO") // GENERADO | APROBADO
+  fechaAprobado  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([vendedorEmail])
+  @@index([sucursal])
+}

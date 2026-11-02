@@ -1583,7 +1583,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         {viewMode === "safra" && <PlanSafra sucursalMia={sucursalMia} />}
         {viewMode === "cheque" && <PlanCheque sucursalMia={sucursalMia} />}
         {viewMode === "mayorista" && <PlanMayorista sucursalMia={sucursalMia} />}
-        {viewMode === "especial" && <PlanEspecial />}
+        {viewMode === "especial" && (
+          <PlanEspecial
+            userEmail={user.email}
+            puedeVerTodo={esEncargadoCrm || isAdmin}
+            puedeAprobarTodo={isAdmin}
+          />
+        )}
 
         {viewMode === "cotizador" && (
         <>
