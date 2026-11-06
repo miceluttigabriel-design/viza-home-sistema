@@ -2475,6 +2475,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                   String.fromCharCode(
                     65 + idx + (incluirContadoEnPresupuesto ? 1 : 0)
                   );
+                // Task 118 (pedido del dueño): el rótulo del plan en el
+                // comparativo debe ser EL MISMO que el de la tabla de planes
+                // de arriba ("1 ENTRADA + 7 CUOTAS", no "8 CUOTAS"). Con
+                // entrega inicial personalizada la entrega va como fila
+                // propia, así que el plan muestra solo las cuotas (N-1).
+                const entregaActivaComp =
+                  Math.round(entregaPersonalizada || 0) > 0;
+                const rótuloPlanComp = (letra: string, cuotas: number) => {
+                  if (cuotas === 1) return `${letra} · PAGO`;
+                  const n = cuotas - 1;
+                  const word = `CUOTA${n !== 1 ? "S" : ""}`;
+                  if (entregaActivaComp) return `${letra} · ${n} ${word}`;
+                  return `${letra} · 1 ENTRADA + ${n} ${word}`;
+                };
                 return (
                   <>
                     {mostrarConEntrega && (
@@ -2489,8 +2503,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                                 </th>
                               )}
                               {calculatedPlanes.map((p, idx) => (
-                                <th key={p.id} className="text-right font-bold text-stone-700 px-3 py-2 whitespace-nowrap">
-                                  {letraDe(idx)} · {p.cuotas} {p.cuotas === 1 ? "PAGO" : "CUOTAS"}
+                                <th key={p.id} className="text-right font-bold text-stone-700 px-3 py-2">
+                                  {p.cuotas > 1 && !entregaActivaComp ? (
+                                    // Task 118: mismo rótulo que arriba, en 2
+                                    // renglones para que no se estire la tabla.
+                                    <>
+                                      <span className="block">{letraDe(idx)} · 1 ENTRADA</span>
+                                      <span className="block">+ {p.cuotas - 1} CUOTA{p.cuotas - 1 !== 1 ? "S" : ""}</span>
+                                    </>
+                                  ) : (
+                                    rótuloPlanComp(letraDe(idx), p.cuotas)
+                                  )}
                                 </th>
                               ))}
                             </tr>

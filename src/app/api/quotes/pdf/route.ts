@@ -961,6 +961,17 @@ export async function POST(req: NextRequest) {
 
       const lineasNota: string[] = [];
       let comparativoDibujado = false;
+      // Task 118 (pedido del dueño): el rótulo de cada plan en el comparativo
+      // debe ser EL MISMO que muestra arriba la tabla de OPCIONES DE
+      // FINANCIACIÓN (antes arriba decía "1 ENTRADA + 7 CUOTAS" y abajo
+      // "A · 8 CUOTAS" — el dueño lo detectó y lo pidió corregido).
+      //  - Entrega estándar: el plan son 8 pagos = 1 ENTRADA + 7 CUOTAS.
+      //  - Con entrega inicial personalizada: la entrega va como fila propia
+      //    arriba, así que el plan muestra solo las cuotas restantes (N-1).
+      const entregaInicialComp = Math.max(
+        0,
+        Math.round(body.entregaPersonalizada || 0)
+      );
 
       // --- Tabla 1: CONTADO + planes CON ENTREGA (valores de la lista) ---
       if (tablaConAplica && (planesColCon.length > 0 || hayContado)) {
@@ -969,7 +980,19 @@ export async function POST(req: NextRequest) {
             ? [{ titulo: "CONTADO", total: body.contadoAjustado ?? null }]
             : []),
           ...planesColCon.map((p) => ({
-            titulo: `${p.letra} · ${p.cuotas} CUOTA${p.cuotas !== 1 ? "S" : ""}`,
+            // Task 118: mismo rótulo que la fila del plan arriba (1 ENTRADA +
+            // N-1 CUOTAS; con entrega personalizada solo N-1 CUOTAS). En 2
+            // líneas para que entre en la columna.
+            ...(entregaInicialComp > 0
+              ? {
+                  titulo: `${p.letra} · ${p.cuotas - 1} CUOTA${
+                    p.cuotas - 1 !== 1 ? "S" : ""
+                  }`,
+                }
+              : {
+                  titulo: `${p.letra} · 1 ENTRADA`,
+                  titulo2: `+ ${p.cuotas - 1} CUOTA${p.cuotas - 1 !== 1 ? "S" : ""}`,
+                }),
             total: p.valorPorCuota,
           })),
         ];
@@ -994,10 +1017,6 @@ export async function POST(req: NextRequest) {
           ensureSpace: (curY, n) => (curY + n > yVend - 12 ? (doc.addPage(), 60) : curY),
         });
         comparativoDibujado = true;
-        const entregaInicialComp = Math.max(
-          0,
-          Math.round(body.entregaPersonalizada || 0)
-        );
         if (entregaInicialComp > 0 && planesColCon.length > 0) {
           lineasNota.push(
             `La entrega inicial (Gs ${entregaInicialComp.toLocaleString("es-PY")}) se descuenta del total del plan; los valores por producto son los de la lista.`

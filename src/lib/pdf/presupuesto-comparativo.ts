@@ -40,7 +40,11 @@ const LINE: RGB = [216, 222, 230];
 
 // Una columna de la tabla = una opción de pago del presupuesto.
 export interface ComparativoCol {
-  titulo: string; // "CONTADO" | "A · 6 CUOTAS"
+  titulo: string; // "CONTADO" | "A · 6 CUOTAS" | "A · 1 ENTRADA"
+  // 2ª línea opcional del título (Task 118, pedido del dueño): los planes CON
+  // ENTREGA se rotulan igual que arriba en la tabla de OPCIONES DE
+  // FINANCIACIÓN ("1 ENTRADA + 7 CUOTAS"); en 2 líneas entra sin pisar.
+  titulo2?: string; // ej: "+ 7 CUOTAS"
   total: number | null; // valor de la fila TOTAL (null → "—")
 }
 
@@ -107,12 +111,19 @@ export function drawTablaComparativo(doc: jsPDF, o: TablaComparativoOpts): numbe
   doc.text("PRODUCTO", o.margin + 8, y + 13.5);
   let cx = o.margin + prodColW;
   cols.forEach((c, i) => {
-    if (i === 0 && conContado) {
-      doc.text(c.titulo, cx + contadoW - 8, y + 13.5, { align: "right" });
+    const w = i === 0 && conContado ? contadoW : planColW;
+    const xRight = cx + w - 8;
+    if (c.titulo2) {
+      // Título en 2 líneas (Task 118): "A · 1 ENTRADA" / "+ 7 CUOTAS" — el
+      // MISMO rótulo de la tabla de planes de arriba, en 2 renglones para
+      // que entre en la columna aunque haya varios planes.
+      doc.setFontSize(fontCol);
+      doc.text(c.titulo, xRight, y + 8.8, { align: "right" });
+      doc.text(c.titulo2, xRight, y + 16.2, { align: "right" });
     } else {
-      doc.text(c.titulo, cx + planColW - 8, y + 13.5, { align: "right" });
+      doc.text(c.titulo, xRight, y + 13.5, { align: "right" });
     }
-    cx += i === 0 && conContado ? contadoW : planColW;
+    cx += w;
   });
   y += HEADER_H;
 
