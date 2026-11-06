@@ -31,8 +31,16 @@ export const FOOTER_RESERVE = FOOTER_H + FOOTER_BOTTOM_GAP + 14;
 // en AZUL VIZA bold, 24pt encima de la línea base del título del plan
 // ("PRESUPUESTO DE VENTA / SAFRA / CON CHEQUE / MAYORISTA"). Solo
 // visual: no toca datos ni lógica.
+// Task 119 (pedido del dueño, "pequeño arreglo visual"): el texto correcto
+// de la franja es "Central Katuete 1º Piso. Suc. Katuete(Planta Baja) /
+// Nueva Esperanza / La Paloma Del Espíritu Santo / Saltos Del Guaira" —
+// antes decía "Casa Central", la sucursal Katuete sin "(Planta Baja)" y
+// "La Paloma" sin "Del Espíritu Santo". Debe salir así en TODOS los
+// presupuestos (cuota/SAFRA/CHEQUE/MAYORISTA) y también en la ORDEN DE
+// COMPRA — todos usan esta misma constante. Medido: a 7.5pt el texto nuevo
+// ocupa 422.7pt < 511.3pt de ancho útil → entra sin bajar el tamaño.
 export const SUCURSALES_LINEA =
-  "Casa Central Katuete 1º Piso. Suc. Katuete / Nueva Esperanza / La Paloma / Saltos Del Guaira";
+  "Central Katuete 1º Piso. Suc. Katuete(Planta Baja) / Nueva Esperanza / La Paloma Del Espíritu Santo / Saltos Del Guaira";
 
 export function drawSucursalesTop(doc: jsPDF, x: number, w: number, yTitulo: number) {
   doc.setFont("helvetica", "bold");
