@@ -4,15 +4,30 @@
 // Muestra el COSTO de cada producto agregado a la cotización para que el
 // vendedor pueda armar el crédito con los números reales.
 //
+// Task 114 (pedido del dueño): el OJITO ahora FUNCIONA. "quiero que este
+// ojito del costo funcione para ocultar el costo también y mostrar… hay
+// veces que el cliente está encima de él y acaba viendo el costo".
+//   · Clic en el ojito → los montos salen "Gs •••••" (nombres quedan, que
+//     no son secreto) y el icono cambia a ojo tachado.
+//   · Otro clic → vuelven a verse.
+//   · La preferencia queda guardada POR USUARIO (store costo-oculto) y los
+//     4 cuadros de la pantalla (CUOTA / SAFRA / CHEQUE / MAYORISTA) se
+//     ocultan/muestran JUNTOS, porque son este mismo componente.
+//
 // REGLA DE ORO: Este cuadro es SOLO DE PANTALLA. El costo se guarda apenas
 // como un campo extra en los stores locales (zustand/localStorage del
 // vendedor) y NUNCA se incluye en el payload de ningún PDF ni se guarda en
 // la BD: las rutas de PDF (mayorista-pdf / safra-pdf / cheque-pdf / quotes/pdf)
 // solo reciben sku, name, quantity y precios, así que el costo no puede
-// aparecer en ningún presupuesto "de ningún modo".
+// aparecer en ningún presupuesto "de ningún modo". El ojito es SOLO VISUAL:
+// no toca cálculos, ni stores de cotización, ni PDFs.
 
-import { EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { formatPYG } from "@/lib/format";
+import {
+  COSTO_OCULTO_TXT,
+  useCostoOcultoStore,
+} from "@/store/costo-oculto";
 
 // === Colores del cuadrito (paleta de la marca VIZA) ===
 // Fondo AZUL del logo (#155789) — el mismo azul de los cuadros de totales
@@ -91,6 +106,10 @@ export function extractCostoMayorista(product: unknown): number {
 // opción de cotización (CUOTA / SAFRA / CHEQUE / MAYORISTA).
 // Devuelve null si no hay productos, para no ocupar espacio.
 export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
+  // Task 114: ojito funcional — estado compartido por los 4 cuadros.
+  const oculto = useCostoOcultoStore((s) => s.oculto);
+  const toggleOculto = useCostoOcultoStore((s) => s.toggleOculto);
+
   if (items.length === 0) return null;
 
   const totalCosto = items.reduce(
@@ -104,17 +123,38 @@ export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
       className="mt-3 rounded-xl border-2 border-dashed p-3"
       style={{ borderColor: COSTO_BORDER, backgroundColor: COSTO_BG }}
     >
-      {/* Encabezado */}
+      {/* Encabezado — el ojito + el título son el BOTÓN de ocultar/mostrar
+          (Task 114): área de toque grande, funciona en celular también. */}
       <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <EyeOff className="h-3.5 w-3.5 shrink-0" style={{ color: COSTO_VALOR }} />
+        <button
+          type="button"
+          onClick={toggleOculto}
+          aria-pressed={oculto}
+          aria-label={
+            oculto
+              ? "Mostrar el costo de los productos"
+              : "Ocultar el costo de los productos"
+          }
+          title={
+            oculto
+              ? "Mostrar el costo (clic)"
+              : "Ocultar el costo — ideal si hay un cliente al lado (clic)"
+          }
+          className="flex items-center gap-1.5 min-w-0 cursor-pointer select-none rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+          style={{ color: COSTO_VALOR }}
+        >
+          {oculto ? (
+            <EyeOff className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <Eye className="h-3.5 w-3.5 shrink-0" />
+          )}
           <span
             className="text-[10px] font-bold uppercase tracking-wide truncate"
             style={{ color: COSTO_VALOR }}
           >
-            Costo de productos · solo vendedor
+            {oculto ? "Costo oculto · clic para ver" : "Costo de productos · solo vendedor"}
           </span>
-        </div>
+        </button>
         <span
           className="text-[9px] font-bold uppercase tracking-wide shrink-0 px-1.5 py-0.5 rounded"
           style={{ color: COSTO_BG, backgroundColor: COSTO_VALOR }}
@@ -138,9 +178,11 @@ export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
               className="font-semibold tabular-nums whitespace-nowrap"
               style={{ color: COSTO_VALOR }}
             >
-              {(it.cost ?? 0) > 0
-                ? formatPYG((it.cost ?? 0) * it.quantity)
-                : "—"}
+              {oculto
+                ? COSTO_OCULTO_TXT
+                : (it.cost ?? 0) > 0
+                  ? formatPYG((it.cost ?? 0) * it.quantity)
+                  : "—"}
             </span>
           </div>
         ))}
@@ -161,7 +203,7 @@ export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
           className="font-extrabold text-sm tabular-nums"
           style={{ color: COSTO_TOTAL }}
         >
-          {formatPYG(totalCosto)}
+          {oculto ? COSTO_OCULTO_TXT : formatPYG(totalCosto)}
         </span>
       </div>
 
