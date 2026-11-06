@@ -395,7 +395,9 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
       {/* ─── Header (mismo lenguaje visual que los demás paneles) ─── */}
       <header className="sticky top-0 z-30 backdrop-blur shadow-md" style={{ backgroundColor: AZUL }}>
         <div className="h-1.5 w-full" style={{ backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})` }} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+        <div className="px-4 sm:px-6 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+          {/* Task 125: sin max-w-7xl — el contenido del header llega a las
+              mismas extremidades que las cards de abajo (alineados). */}
           <div className="flex items-center gap-2">
             <button
               onClick={onGoOrquestador}
@@ -466,7 +468,14 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+      {/* Task 125 (pedido del dueño: "consigue expandir para que llegue a la
+          extremidade del lado derecho e izquierdo para que quede mayor"):
+          sin el max-w-7xl de antes, TODO el contenido (cards + gráfico +
+          TABLA) se estira de extremidad a extremidad de la pantalla y la
+          tabla muestra más columnas sin scrollear. Queda el mismo padding
+          chico de siempre (16/24px) como aire de los bordes, y el header
+          de arriba queda alineado con las mismas extremidades. */}
+      <main className="px-4 sm:px-6 py-5 space-y-5">
         {/* Aviso de solo lectura */}
         <p className="text-[11px] text-stone-500 font-medium">
           Vista de consulta · para editar un producto, andá a LA BASE · la importación divide el inventario POR SUCURSAL (CENTRAL = depósito central).
