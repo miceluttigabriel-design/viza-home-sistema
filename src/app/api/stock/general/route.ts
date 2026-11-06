@@ -6,6 +6,8 @@ import {
   leerSucursalesStock,
   leerSaldosSucursal,
 } from "@/lib/stock-sucursal"; // Task 98 (tabla aparte auto-gestionada)
+import { leerCapacidades } from "@/lib/producto-capacidad"; // Task 97 (tabla aparte auto-gestionada)
+import { leerCores } from "@/lib/producto-cores"; // Task 98 (tabla aparte auto-gestionada)
 
 // ─────────────────────────────────────────────────────────────────
 // GET /api/stock/general — datos del cuadro STOCK GENERAL (Task 98)
@@ -30,7 +32,12 @@ import {
 //   stats: {totalProducts, totalStock, bySubgrupo} → cards + gráfico
 //                 (según sucursal activa: TODAS usa el stock global de
 //                 siempre; una sucursal usa el saldo de esa sucursal)
-//   rows: [{id, sku, name, category, subGrupo, stock}] → tabla paginada
+//   rows: [{id, sku, name, category, fabricante, categoria, subGrupo, marca,
+//           tipo, modelo, referencia, stock, ultimaEdicionAt, ultimaEdicionPor,
+//           capacidad, cores}] → tabla paginada
+//           (Task 124: las columnas de LA BASE van dentro de STOCK GENERAL,
+//            en la MISMA orden que la Base; capacidad/cores salen de las
+//            tablas aparte auto-gestionadas, igual que GET /api/products)
 //
 // SOLO LECTURA: acá no se escribe NADA (la importación es el endpoint
 // import-stock de siempre, y la edición de productos sigue en LA BASE).
@@ -68,6 +75,79 @@ function buildWhereBusqueda(search: string): { OR: Array<Record<string, unknown>
 function codNumero(s: unknown): number | null {
   const digitos = String(s ?? "").replace(/\D/g, "");
   return digitos === "" ? null : Number(digitos);
+}
+
+// ─── Task 124: LAS COLUMNAS DE LA BASE DENTRO DE STOCK GENERAL ───
+// Pedido del dueño: "TODAS ESTAS COLUNAS DE LA BASE... QUE ESTEA DENTRO
+// DE STOCK GENERAL EN LA MISMA ORDEN... INCLUSO QUIERO QUE TODO LO
+// REFERENTE A CADA CODIGO QUE SE EDITO DE LA BASE ESTEA REGISTRADO
+// ALLA TANBIEN".
+//
+// Clave: LA BASE y STOCK GENERAL leen del MISMO modelo Product (la Base
+// edita acá y el Stock General muestra acá), así que CADA edición hecha
+// en la Base queda registrada automáticamente en Stock General — no hay
+// una segunda copia que se desincronice. El select de abajo trae las
+// mismas columnas que muestra la tabla de la Base:
+//   COD=sku · PROVEDOR=fabricante · GRUPO=categoria · SUB-GRUPO=subGrupo
+//   MARCA=marca · TIPO PRODUCTO=tipo · MODELO=modelo · REF.FABRICA=referencia
+//   DESCRIPCION=name · + ultimaEdicion* (badge de quién/cuándo editó).
+// CAPACIDAD y CORES viven en tablas aparte (ProductCapacidad/ProductCores,
+// Tasks 97/98) y se fusionan con fusionarColumnasBase (abajo), igual que
+// hace GET /api/products.
+const SELECT_FILAS = {
+  id: true,
+  sku: true,
+  name: true,
+  category: true, // respaldo del SUB-GRUPO (igual que venía mostrando la vista)
+  fabricante: true,
+  categoria: true,
+  subGrupo: true,
+  marca: true,
+  tipo: true,
+  modelo: true,
+  referencia: true,
+  stock: true,
+  ultimaEdicionAt: true,
+  ultimaEdicionPor: true,
+};
+
+type FilaBase = {
+  id: string;
+  sku: string;
+  name: string | null;
+  category: string | null;
+  fabricante: string | null;
+  categoria: string | null;
+  subGrupo: string | null;
+  marca: string | null;
+  tipo: string | null;
+  modelo: string | null;
+  referencia: string | null;
+  stock: number;
+  ultimaEdicionAt: Date | null;
+  ultimaEdicionPor: string | null;
+  capacidad?: string | null; // se agrega en fusionarColumnasBase
+  cores?: string | null; // se agrega en fusionarColumnasBase
+};
+
+// CAPACIDAD y CORES (tablas aparte AUTO-GESTIONADAS, lib best-effort: si
+// la tabla todavía no existe devuelven mapa vacío y la vista carga igual,
+// sin esas celdas — NUNCA rompe esta ruta). Se fusionan SOLO en las filas
+// de la página (máx. pageSize), no en todo el listado.
+async function fusionarColumnasBase<T extends { id: string }>(
+  filas: T[]
+): Promise<(T & { capacidad: string | null; cores: string | null })[]> {
+  if (filas.length === 0) return [];
+  const ids = filas.map((f) => f.id);
+  const [capMap, coresMap] = await Promise.all([
+    leerCapacidades(ids),
+    leerCores(ids),
+  ]);
+  return filas.map((f) => ({
+    ...f,
+    capacidad: capMap.get(f.id) ?? null,
+    cores: coresMap.get(f.id) ?? null,
+  }));
 }
 
 export async function GET(req: NextRequest) {
@@ -123,14 +203,10 @@ export async function GET(req: NextRequest) {
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
       // Filas de la página (mismos criterios de orden que la BASE).
-      let rows: Array<{
-        id: string;
-        sku: string;
-        name: string | null;
-        category: string | null;
-        subGrupo: string | null;
-        stock: number;
-      }>;
+      // Task 124: el MISMO select de columnas de la Base para los dos
+      // caminos de orden (COD y stock/name); capacidad/cores se fusionan
+      // después, una sola vez.
+      let rows: FilaBase[];
       if (sort === "sku") {
         const rowsCod = await db.product.findMany({
           where,
@@ -150,14 +226,7 @@ export async function GET(req: NextRequest) {
           .map((r) => r.id);
         const filasPagina = await db.product.findMany({
           where: { id: { in: pageIds } },
-          select: {
-            id: true,
-            sku: true,
-            name: true,
-            category: true,
-            subGrupo: true,
-            stock: true,
-          },
+          select: SELECT_FILAS,
         });
         const porId = new Map(filasPagina.map((f) => [f.id, f]));
         rows = pageIds
@@ -173,16 +242,12 @@ export async function GET(req: NextRequest) {
           orderBy,
           skip: (page - 1) * pageSize,
           take: pageSize,
-          select: {
-            id: true,
-            sku: true,
-            name: true,
-            category: true,
-            subGrupo: true,
-            stock: true,
-          },
+          select: SELECT_FILAS,
         });
       }
+
+      // Task 124: CAPACIDAD y CORES (tablas aparte) solo en las filas de la página.
+      rows = await fusionarColumnasBase(rows);
 
       return NextResponse.json({
         ok: true,
@@ -223,33 +288,16 @@ export async function GET(req: NextRequest) {
     if (subgrupo) where.category = subgrupo;
     if (orBusqueda) where.OR = orBusqueda.OR;
 
+    // Task 124: el MISMO select de columnas de la Base que el modo TODAS.
     const productos = await db.product.findMany({
       where,
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        category: true,
-        subGrupo: true,
-        stock: true, // global (informativo); la vista muestra el de la sucursal
-      },
+      select: SELECT_FILAS,
     });
 
-    // Combinar producto + saldo de la sucursal.
-    type Fila = {
-      id: string;
-      sku: string;
-      name: string | null;
-      category: string | null;
-      subGrupo: string | null;
-      stock: number;
-    };
-    const filas: Fila[] = productos.map((p) => ({
-      id: p.id,
-      sku: p.sku,
-      name: p.name,
-      category: p.category,
-      subGrupo: p.subGrupo,
+    // Combinar producto + saldo de la sucursal (el stock que se muestra es
+    // el SALDO de la sucursal; el global de Product queda informativo).
+    const filas: FilaBase[] = productos.map((p) => ({
+      ...p,
       stock: Math.round(saldos.get(p.id) ?? 0),
     }));
 
@@ -295,7 +343,11 @@ export async function GET(req: NextRequest) {
     });
 
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const rows = filas.slice((page - 1) * pageSize, page * pageSize);
+    // Task 124: capacidad/cores fusionadas SOLO en las filas de la página
+    // (las stats y el gráfico por sub-grupo no las necesitan).
+    const rows = await fusionarColumnasBase(
+      filas.slice((page - 1) * pageSize, page * pageSize)
+    );
 
     return NextResponse.json({
       ok: true,

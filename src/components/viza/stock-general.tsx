@@ -22,6 +22,22 @@
 //
 // Datos: UN endpoint nuevo (GET /api/stock/general) alimenta TODO
 // (cards + pills + gráfico + tabla) para que nada se desincronice.
+//
+// TASK 124 — LAS COLUMNAS DE LA BASE DENTRO DE STOCK GENERAL (pedido del
+// dueño: "TODAS ESTAS COLUNAS DE LA BASE... QUE ESTEA DENTRO DE STOCK
+// GENERAL EN LA MISMA ORDEN... TODO LO REFERENTE A CADA CODIGO QUE SE
+// EDITO DE LA BASE ESTEA REGISTRADO ALLA TANBIEN"):
+//   · La tabla muestra las MISMAS columnas de LA BASE en la MISMA orden:
+//     COD > PROVEDOR > GRUPO > SUB-GRUPO > MARCA > TIPO PRODUCTO > MODELO >
+//     > CAPACIDAD > CORES > REF.FABRICA > DESCRIPCION (+ STOCK/SALDO al
+//     final, la columna propia de esta vista). Encima de cada nombre va la
+//     misma etiqueta de grupo que en la Base (DATOS FINALES / DATOS).
+//   · Los datos salen VIVOS de la MISMA base que edita LA BASE (mismo
+//     modelo Product + tablas aparte ProductCapacidad/ProductCores): cada
+//     edición hecha en la Base queda registrada acá automáticamente.
+//   · Los COD editados a mano en la Base llevan el MISMO badge naranja de
+//     última edición que en la Base (quién y cuándo).
+//   · Vista SOLO LECTURA igual que siempre: para editar, LA BASE.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -36,6 +52,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Pencil,
   Upload,
   Check,
   Warehouse,
@@ -85,14 +102,47 @@ interface DatosResp {
   error?: string;
 }
 
+// Task 124: una fila = las mismas columnas de LA BASE (los mismos campos
+// que edita la Base) + el stock/saldo propio de esta vista.
 interface ProdFila {
   id: string;
   sku: string;
-  name: string | null;
-  category: string | null;
-  subGrupo?: string | null;
+  name: string | null; // DESCRIPCION
+  category: string | null; // categoría del catálogo (respaldo del SUB-GRUPO)
+  fabricante?: string | null; // PROVEDOR
+  categoria?: string | null; // GRUPO
+  subGrupo?: string | null; // SUB-GRUPO
+  marca?: string | null;
+  tipo?: string | null; // TIPO PRODUCTO
+  modelo?: string | null;
+  capacidad?: string | null; // tabla aparte ProductCapacidad (igual que la Base)
+  cores?: string | null; // tabla aparte ProductCores (igual que la Base)
+  referencia?: string | null; // REF.FABRICA
+  ultimaEdicionAt?: string | null; // badge de última edición (igual que la Base)
+  ultimaEdicionPor?: string | null;
   stock: number;
 }
+
+// ─── Task 124: columnas de LA BASE dentro de STOCK GENERAL ───
+// La MISMA orden que la tabla de la Base (Tasks 97/98/105):
+// PROVEDOR > GRUPO > SUB-GRUPO > MARCA > TIPO PRODUCTO > MODELO >
+// > CAPACIDAD > CORES > REF.FABRICA > DESCRIPCION. "grupo" es la etiqueta
+// chiquita que aparece ENCIMA del nombre, igual que en la Base (PROVEDOR…
+// CORES llevan DATOS FINALES; REF.FABRICA y DESCRIPCION llevan DATOS).
+// COD va primero y STOCK/SALDO queda al final (columna propia de esta
+// vista). Solo LECTURA: para editar un dato, LA BASE.
+const COLS_BASE: Array<{ key: keyof ProdFila; label: string; grupo: string | null }> = [
+  { key: "fabricante", label: "PROVEDOR", grupo: "DATOS FINALES" },
+  { key: "categoria", label: "GRUPO", grupo: "DATOS FINALES" },
+  { key: "subGrupo", label: "SUB-GRUPO", grupo: "DATOS FINALES" },
+  { key: "marca", label: "MARCA", grupo: "DATOS FINALES" },
+  { key: "tipo", label: "TIPO PRODUCTO", grupo: "DATOS FINALES" },
+  { key: "modelo", label: "MODELO", grupo: "DATOS FINALES" },
+  { key: "capacidad", label: "CAPACIDAD", grupo: "DATOS FINALES" },
+  { key: "cores", label: "CORES", grupo: "DATOS FINALES" },
+  { key: "referencia", label: "REF.FABRICA", grupo: "DATOS" },
+  { key: "name", label: "DESCRIPCION", grupo: "DATOS" },
+];
 
 // ─── Vista previa de la importación (mismo motor que LA BASE + Task 98) ───
 interface PreviewSucursal {
@@ -643,7 +693,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
               <input
                 value={busqueda}
                 onChange={(e) => onBusquedaChange(e.target.value)}
-                placeholder="Buscar por descripción, COD, marca…"
+                placeholder="Buscar por descripción, COD, marca, modelo…"
                 className="w-full h-10 pl-9 pr-3 rounded-xl border border-stone-200 text-sm text-stone-700 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
               />
             </div>
@@ -696,10 +746,24 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-stone-50 border-y border-stone-200">
-                  <th className="text-left px-4 py-2.5 text-[10px] font-black tracking-widest text-stone-400 w-20">COD</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-black tracking-widest text-stone-400">DESCRIPCION</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-black tracking-widest text-stone-400 w-40 hidden md:table-cell">SUB-GRUPO</th>
-                  <th className="text-right px-4 py-2.5 text-[10px] font-black tracking-widest text-stone-400 w-24">
+                  <th className="text-left px-4 py-2 text-[10px] font-black tracking-widest text-stone-400 w-24 align-bottom whitespace-nowrap">COD</th>
+                  {/* Task 124: las columnas de LA BASE, en la MISMA orden que
+                      la tabla de la Base y con la misma etiqueta de grupo
+                      encima (DATOS FINALES / DATOS). */}
+                  {COLS_BASE.map((col) => (
+                    <th
+                      key={col.key}
+                      className="text-left px-4 py-2 text-[10px] font-black tracking-widest text-stone-400 align-bottom whitespace-nowrap"
+                    >
+                      {col.grupo && (
+                        <span className="block text-[9px] font-normal tracking-normal text-stone-300">
+                          {col.grupo}
+                        </span>
+                      )}
+                      {col.label}
+                    </th>
+                  ))}
+                  <th className="text-right px-4 py-2 text-[10px] font-black tracking-widest text-stone-400 w-24 align-bottom whitespace-nowrap">
                     {sucursalSel ? "SALDO" : "STOCK"}
                   </th>
                 </tr>
@@ -707,7 +771,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
               <tbody>
                 {cargando ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10">
+                    <td colSpan={12} className="px-4 py-10">
                       <div className="flex items-center justify-center gap-2 text-stone-400">
                         <Loader2 className="h-4 w-4 animate-spin" /> Cargando productos…
                       </div>
@@ -715,7 +779,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
                   </tr>
                 ) : filas.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-stone-400 text-sm">
+                    <td colSpan={12} className="px-4 py-10 text-center text-stone-400 text-sm">
                       {busquedaAplicada || subgrupo || sucursalSel
                         ? "Ningún producto coincide con los filtros."
                         : "Sin productos en la base todavía."}
@@ -724,13 +788,66 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
                 ) : (
                   filas.map((p) => (
                     <tr key={p.id} className="border-b border-stone-100 hover:bg-sky-50/40 transition-colors">
-                      <td className="px-4 py-2 font-bold text-stone-600 tabular-nums">{p.sku}</td>
-                      <td className="px-4 py-2 text-stone-700 truncate max-w-[340px]" title={p.name ?? ""}>
-                        {p.name || "—"}
+                      {/* COD — con el MISMO badge naranja de última edición
+                          que en LA BASE (Task 124: "todo lo referente a cada
+                          codigo que se edito de la base estea registrado
+                          alla tambien"): quién y cuándo editó. */}
+                      <td className="px-4 py-2 align-top">
+                        {p.ultimaEdicionAt && (() => {
+                          const d = new Date(p.ultimaEdicionAt);
+                          const pad = (n: number) => String(n).padStart(2, "0");
+                          const fecha = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+                          const hora = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                          const editor = p.ultimaEdicionPor || "admin";
+                          return (
+                            <div
+                              title={`Editado en LA BASE por ${editor} el ${fecha} a las ${hora}`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "3px",
+                                fontSize: "9px",
+                                fontWeight: 500,
+                                color: "#9a3412",
+                                backgroundColor: "#fff7ed",
+                                border: "1px solid #fdba74",
+                                borderRadius: "4px",
+                                padding: "1px 4px",
+                                marginBottom: "3px",
+                                lineHeight: "1.2",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              <Pencil style={{ width: "9px", height: "9px", flexShrink: 0 }} />
+                              <span>{fecha} {hora}</span>
+                            </div>
+                          );
+                        })()}
+                        <div className="font-mono font-bold text-stone-600 tabular-nums text-xs">{p.sku}</div>
                       </td>
-                      <td className="px-4 py-2 text-stone-500 text-xs hidden md:table-cell">
-                        {p.subGrupo || p.category || "—"}
-                      </td>
+                      {/* Task 124: las demás columnas de LA BASE, en la misma
+                          orden (COLS_BASE). Celda truncada con el texto
+                          completo en el title, igual estilo que antes. */}
+                      {COLS_BASE.map((col) => {
+                        // SUB-GRUPO conserva el respaldo de siempre (si
+                        // subGrupo viene vacío muestra la category del
+                        // catálogo — igual que la vista venía haciendo).
+                        const valor = (
+                          col.key === "subGrupo"
+                            ? p.subGrupo || p.category
+                            : p[col.key]
+                        ) as string | null | undefined;
+                        return (
+                          <td key={col.key} className="px-4 py-2 align-top">
+                            <span
+                              className={`block truncate text-xs ${col.key === "name" ? "max-w-[340px] text-stone-700" : "max-w-[220px] text-stone-600"}`}
+                              title={valor ?? ""}
+                            >
+                              {valor || "—"}
+                            </span>
+                          </td>
+                        );
+                      })}
                       <td className="px-4 py-2 text-right">
                         <span className={`inline-block min-w-12 text-center text-xs font-black px-2 py-0.5 rounded-full ring-1 ${stockBadgeCls(p.stock)} tabular-nums`}>
                           {fmtNum(p.stock)}
