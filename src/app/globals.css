@@ -204,7 +204,11 @@ tr.fila-etiquetada-rojo:hover td {
 /* ============================================
    FILA ACTIVA (fila tocada) - SOLO VISUAL
    Al tocar/clickear cualquier celda de un producto (o al navegar
-   con el teclado) su linea completa se pinta de un azul suave.
+   con el teclado) su linea completa se pinta de AZUL MARINO VIZA.
+   (Pedido del dueño: "queremos que sea un azul marino bien mas
+   fuerte, del color de Viza" — el mismo #155789 del sidebar,
+   del login y de los PDFs. Antes era un azul suave #BFDBFE.)
+   Texto en BLANCO para que se lea sobre el azul marino.
    Al tocar otra fila, esa pasa a ser la activa y la anterior
    vuelve a la normalidad.
    El !important pinta TODOS los td, incluidas las columnas fijas
@@ -215,10 +219,55 @@ tr.fila-etiquetada-rojo:hover td {
    ============================================ */
 tr.fila-activa td,
 tr.fila-activa > td {
-  background-color: #BFDBFE !important; /* azul suave, a pedido del usuario */
+  background-color: #155789 !important; /* AZUL MARINO VIZA (marca) */
+  color: #ffffff !important; /* texto blanco para leer sobre el marino */
 }
 tr.fila-activa:hover td {
-  background-color: #93C5FD !important; /* azul un poco mas fuerte al pasar el mouse */
+  background-color: #1e6ba8 !important; /* azul Viza un poco mas claro al pasar el mouse */
+}
+
+/* ── Legibilidad DENTRO de la fila azul marino (solo visual) ──
+   Los inputs de edicion no traen fondo propio (transparente): sobre el
+   marino su letra pasa a BLANCA. Cuando la celda esta EN EDICION (focus)
+   se abre un cuadrito BLANCO con letra oscura, para teclear comodo.
+   Los inputs de SOLO LECTURA llevan la clase bg-white: siguen blancos
+   con letra oscura (regla input.bg-white de abajo los protege). */
+tr.fila-activa td input,
+tr.fila-activa td textarea {
+  color: #ffffff !important;
+}
+tr.fila-activa td input::placeholder,
+tr.fila-activa td textarea::placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+tr.fila-activa td input:focus,
+tr.fila-activa td textarea:focus {
+  background-color: #ffffff !important;
+  color: #1c1917 !important;
+}
+tr.fila-activa td input:focus::placeholder,
+tr.fila-activa td textarea:focus::placeholder {
+  color: #78716c !important;
+}
+/* Modo solo lectura (vendedor): inputs blancos de siempre, letra oscura */
+tr.fila-activa td input.bg-white,
+tr.fila-activa td textarea.bg-white {
+  background-color: #ffffff !important;
+  color: #1c1917 !important;
+}
+tr.fila-activa td input.bg-white::placeholder,
+tr.fila-activa td textarea.bg-white::placeholder {
+  color: #a8a29e !important;
+}
+/* Celda de COSTO editada por el admin (dorada): el dorado de esa celda
+   SIEMPRE gana (regla de abajo), asi que su letra sigue oscura como siempre.
+   Sin esta proteccion, la letra blanca de la fila quedaria invisible sobre
+   el dorado. */
+tr.fila-activa td.celda-costo-editado input {
+  color: #1c1917 !important;
+}
+tr.fila-activa td.celda-costo-editado input::placeholder {
+  color: #78716c !important;
 }
 
 /* ============================================
