@@ -38,6 +38,10 @@ import { hashtagCeldaRoja, hoyParaguay } from "@/lib/hashtag-formato";
 import { calcularValorMayorista, esProductoAire } from "@/lib/margen-mayorista";
 import type { EtiquetaCreada } from "@/lib/etiquetas";
 import { puedeEditarTasaCambio } from "@/lib/permisos-cambio";
+// Task 126 (pedido del dueño): toda edición guardada en LA BASE replica AL
+// INSTANTE en STOCK GENERAL (columnas de la Base, STOCK/SALDO y el registro
+// de última edición) — misma pestaña y otras pestañas.
+import { avisarProductoEditado } from "@/lib/replicacion-productos";
 import { ModalPedidoEspecialConfig } from "./pedido-especial-config";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 // Task 107 (pedido del dueño): el mini cuadrito de última actualización de stock
@@ -1012,6 +1016,17 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
         return newDirty;
       });
       toast.success(`${product.name} guardado`);
+      // Task 126: avisar "se guardó un producto" para que STOCK GENERAL replique
+      // AL INSTANTE (columnas de la Base, STOCK/SALDO y el registro de última
+      // edición del COD) — sin esperar a que el dueño refresque ni cambie filtros.
+      // Funciona en la misma pestaña y en otras pestañas (BroadcastChannel).
+      avisarProductoEditado({
+        id: product.id,
+        sku: product.sku,
+        columnas: Object.keys(changes),
+        por: data.product?.ultimaEdicionPor ?? null,
+        accion: "guardado",
+      });
     } catch {
       toast.error("No se pudo guardar");
     }
@@ -1025,6 +1040,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
       const res = await fetch(`/api/products/${product.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error");
       toast.success("Producto eliminado");
+      // Task 126: también se avisa la baja, para que STOCK GENERAL saque el
+      // producto de la tabla al instante (mismo canal que el guardado).
+      avisarProductoEditado({
+        id: product.id,
+        sku: product.sku,
+        columnas: [],
+        accion: "eliminado",
+      });
       fetchProducts();
     } catch {
       toast.error("No se pudo eliminar");

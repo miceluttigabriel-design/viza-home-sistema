@@ -41,6 +41,9 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useRef, useState } from "react";
+// Task 126 (pedido del dueño): escuchar los guardados de LA BASE para
+// replicarlos AL INSTANTE en esta vista (columnas, stock y registro).
+import { suscribirseAEdicionesProductos } from "@/lib/replicacion-productos";
 import {
   ArrowLeft,
   Boxes,
@@ -272,7 +275,11 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
       if (busquedaAplicada) params.set("search", busquedaAplicada);
       if (subgrupo) params.set("subgrupo", subgrupo);
       if (sucursalSel) params.set("sucursal", sucursalSel);
-      const res = await fetch(`/api/stock/general?${params.toString()}`);
+      // Task 126: siempre datos VIVOS — jamás una copia cacheada del navegador
+      // (así lo replicado desde LA BASE llega tal cual a la tabla).
+      const res = await fetch(`/api/stock/general?${params.toString()}`, {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as DatosResp;
       setSucursales(Array.isArray(data.sucursales) ? data.sucursales : []);
@@ -299,6 +306,50 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
     const t = setTimeout(() => cargarDatos(), 0);
     return () => clearTimeout(t);
   }, [cargarDatos]);
+
+  // ═══ REPLICACIÓN EN VIVO desde LA BASE (Task 126, pedido del dueño) ═══
+  // "cada vez que um producto sea editado y guardado quiero que el mismo
+  // replique en el stock... incluso los registros... toda edicion hecha y
+  // guardada en estas colunas hay que replicar en el stock general".
+  //
+  // Cuando el dueño guarda una fila en LA BASE, esta vista recibe el aviso
+  // (misma pestaña vía CustomEvent y otras pestañas vía BroadcastChannel /
+  // storage — ver src/lib/replicacion-productos.ts) y vuelve a pedir TODOS
+  // sus datos: las columnas de la Base (PROVEDOR, GRUPO, SUB-GRUPO, MARCA,
+  // TIPO PRODUCTO, MODELO, CAPACIDAD, CORES, REF.FABRICA, DESCRIPCION), el
+  // STOCK/SALDO y el registro de última edición (badge naranja del COD)
+  // quedan al día SIN tocar filtros ni refrescar a mano.
+  //
+  // Ref antial desactualización: apunta SIEMPRE a la última cargarDatos
+  // (con sus filtros/página/orden vigentes) para que el aviso refresque
+  // con lo que el dueño está viendo en este momento.
+  const recargarRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    recargarRef.current = cargarDatos;
+  }, [cargarDatos]);
+
+  useEffect(() => {
+    const dejarDeEscuchar = suscribirseAEdicionesProductos(() => {
+      recargarRef.current();
+    });
+    return dejarDeEscuchar;
+  }, []);
+
+  // Cinturón extra: al volver a ESTA pestaña (o traer la ventana al frente)
+  // también refresca — si el aviso no llegara por ningún canal, la vista
+  // igual se pone al día en el momento en que el dueño la mira.
+  useEffect(() => {
+    const recargarSiVisible = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      recargarRef.current();
+    };
+    window.addEventListener("focus", recargarSiVisible);
+    document.addEventListener("visibilitychange", recargarSiVisible);
+    return () => {
+      window.removeEventListener("focus", recargarSiVisible);
+      document.removeEventListener("visibilitychange", recargarSiVisible);
+    };
+  }, []);
 
   const maxStockCat = stats?.bySubgrupo?.reduce((m, c) => Math.max(m, c.stock), 0) ?? 0;
   const inicial = (user.name || user.email).charAt(0).toUpperCase();

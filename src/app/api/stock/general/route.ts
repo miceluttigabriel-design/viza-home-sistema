@@ -9,6 +9,12 @@ import {
 import { leerCapacidades } from "@/lib/producto-capacidad"; // Task 97 (tabla aparte auto-gestionada)
 import { leerCores } from "@/lib/producto-cores"; // Task 98 (tabla aparte auto-gestionada)
 
+// Task 126 (pedido del dueño): la respuesta SIEMPRE se calcula en vivo —
+// nada de caché de ruta. Así, cada vez que LA BASE guarda una edición,
+// STOCK GENERAL (que refresca sola al recibir el aviso) ve los valores
+// nuevos al instante.
+export const dynamic = "force-dynamic";
+
 // ─────────────────────────────────────────────────────────────────
 // GET /api/stock/general — datos del cuadro STOCK GENERAL (Task 98)
 // "tenemos que hacer um filtro para poder ver por sucursal... lo que
