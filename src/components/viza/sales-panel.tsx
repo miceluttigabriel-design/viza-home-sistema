@@ -22,7 +22,6 @@ import {
   KeyRound,
   LayoutGrid,
   BarChart3,
-  Tag,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -1818,17 +1817,19 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
           />
         </Section>
 
-        {/* 2.4. PRODUCTOS POR ETIQUETA (Task 86, pedido del dueño): listado
+        {/* 2.4. LISTADO DE PRODUCTOS CLASSIFICADOS (Task 86, pedido del dueño): listado
             intuitivo de los productos de CADA etiqueta por separado. Toca un
             chip → lista sus productos → click en un producto lo agrega a la
             cotización (mismo flujo del buscador). SOLO LECTURA de la base:
             acá no se etiqueta ni se edita nada. Los fondos usan los MISMOS
             colores que la Base, pero el PDF del presupuesto jamás los recibe
-            (su payload mapea campos explícitos). */}
-        <Section title="PRODUCTOS POR ETIQUETA" icon={<Tag className="h-4 w-4" />}>
-          <p className="text-[11px] text-stone-500 mb-3">
-            Tocá una etiqueta para ver sus productos y agregarlos a la cotización.
-          </p>
+            (su payload mapea campos explícitos).
+            Task 120 (pedido del dueño, "apenas un cambio visual de descripción"):
+            título nuevo "LISTADO DE PRODUCTOS CLASSIFICADOS", SIN el icono de
+            etiqueta, SIN el texto de ayuda "Tocá una etiqueta..." y SIN el
+            cartel "Elegí una etiqueta de arriba..." (con etiqueta sin elegir no
+            se muestra nada). Funcionamiento idéntico. */}
+        <Section title="LISTADO DE PRODUCTOS CLASSIFICADOS" icon={null}>
           <div className="flex flex-wrap gap-2 mb-3">
             {[...ETIQUETAS_FIJAS, ...etiquetasCreadas].map((et) => {
               const activa = etiquetaSel === et.id;
@@ -1857,9 +1858,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
           {cargandoEtiqueta ? (
             <div className="p-4 text-sm text-stone-500 text-center">Buscando productos...</div>
           ) : !etiquetaSel ? (
-            <div className="p-3 text-xs text-stone-400 text-center rounded-lg border border-dashed border-stone-200">
-              Elegí una etiqueta de arriba para ver sus productos
-            </div>
+            // Task 120: sin cartel de ayuda — con etiqueta sin elegir no se
+            // muestra nada (el dueño lo pidió borrado, incluso su recuadro).
+            null
           ) : productosEtiqueta.length === 0 ? (
             <div className="p-4 text-sm text-stone-500 text-center">
               No hay productos con esta etiqueta
