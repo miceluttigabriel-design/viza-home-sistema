@@ -30,6 +30,7 @@ import {
   Percent,
   Coins,
   BarChart3,
+  Warehouse,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -184,6 +185,12 @@ interface AdminPanelProps {
   // importar nada. La seguridad real ya la da el backend (PUT/DELETE/
   // PATCH exigen admin); este modo es la capa de UX encima.
   modoLectura?: boolean;
+  // Task 127 (pedido del dueño): SOLO llega para viza@viza.com.py (VILMAR
+  // CESAR ZAGO PEREIRA — lista única en src/lib/acceso-stock-general.ts).
+  // Habilita el botón IR A STOCK GENERAL. Si no llega la prop, el botón no
+  // se renderiza (ningún otro usuario lo ve) — misma regla de la casa que
+  // onGoOrquestador/onGoBase.
+  onGoStock?: () => void;
 }
 
 const PAGE_SIZE = 50; // Más productos por página (filas compactas permiten ver más)
@@ -493,7 +500,7 @@ const frozenWidthByKey: Record<string, number> = Object.fromEntries(
   FROZEN_COLUMNS.map((c) => [c.key, c.width])
 );
 
-export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrquestador, modoLectura }: AdminPanelProps) {
+export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrquestador, modoLectura, onGoStock }: AdminPanelProps) {
   // Modo SOLO LECTURA (Task 78): el usuario de COMPRAS ve la base completa
   // pero no edita nada. Default false = admins de siempre, sin cambios.
   const esLectura = modoLectura === true;
@@ -1264,6 +1271,23 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
             >
               <ShoppingCart className="h-4 w-4" />
             </button>
+
+            {/* 2b. Task 127 (pedido del dueño): IR A STOCK GENERAL — SOLO
+                VILMAR (viza@viza.com.py, VILMAR CESAR ZAGO PEREIRA). La prop
+                onGoStock solo llega desde page.tsx si el email está en la
+                lista de acceso (src/lib/acceso-stock-general.ts), así que
+                ningún otro usuario ve este botón. */}
+            {onGoStock && (
+              <button
+                onClick={onGoStock}
+                className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors shadow-sm hover:brightness-95"
+                style={{ background: "#ffffff", color: "#0d3d5e", boxShadow: "0 2px 6px rgba(217,184,107,0.3), 0 0 0 1px #e7d9a8" }}
+                title="IR A STOCK GENERAL (inventario por sucursal + distribución inteligente)"
+                aria-label="IR A STOCK GENERAL"
+              >
+                <Warehouse className="h-4 w-4" />
+              </button>
+            )}
 
             {/* 2. Task 91 (mudanza visual): ORQUESTADOR — solo supremo (la prop
                 solo llega al supremo desde page.tsx). Vuelve a la pantalla de

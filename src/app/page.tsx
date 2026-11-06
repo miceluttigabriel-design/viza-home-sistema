@@ -12,6 +12,10 @@ import { StockGeneral } from "@/components/viza/stock-general";
 import { Loader2 } from "lucide-react";
 import { setCurrentUserId } from "@/lib/user-scoped-storage";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
+// Task 127 (pedido del dueño): SOLO el email viza@viza.com.py (VILMAR CESAR
+// ZAGO PEREIRA) ve el botón IR A STOCK GENERAL y puede entrar a esa vista
+// fuera del supremo (lista única en src/lib/acceso-stock-general.ts).
+import { puedeIrAStockGeneral } from "@/lib/acceso-stock-general";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -58,6 +62,12 @@ export default function Home() {
     role,
   };
 
+  // Task 127: ¿este usuario tiene el botón IR A STOCK GENERAL? (hoy: solo
+  // viza@viza.com.py — VILMAR CESAR ZAGO PEREIRA; el supremo ya entra por
+  // su ORQUESTADOR de siempre). Si la vista "stock" llega pedida por
+  // cualquier otro email, se ignora y cae a su vista normal.
+  const verStockGeneral = puedeIrAStockGeneral(user.email);
+
   // Vista efectiva (Task 91): si todavía no navegó (null), la inicial es
   // por rol → supremo cae en el ORQUESTADOR; todos los demás, donde ya
   // caían antes (admin → base, colaborador → panel). Cero cambios para
@@ -94,7 +104,22 @@ export default function Home() {
   // Colaborador → solo SalesPanel (no puede ver Admin ni Gestión)
   // Compat hacia atrás: representante = colaborador
   if (role === "colaborador" || role === "representante") {
-    return <SalesPanel user={user} />;
+    // Task 127: VILMAR (viza@viza.com.py) puede entrar al STOCK GENERAL desde
+    // su botón (sin BASE y sin ORQUESTADOR: solo COTIZADOR para volver).
+    if (view === "stock" && verStockGeneral) {
+      return (
+        <StockGeneral
+          user={user}
+          onGoSales={() => setAdminView("sales")}
+        />
+      );
+    }
+    return (
+      <SalesPanel
+        user={user}
+        onGoStock={verStockGeneral ? () => setAdminView("stock") : undefined}
+      />
+    );
   }
 
   // Admin "común" → entra DIRECTO a la BASE (Task 91: igual que siempre)
@@ -103,7 +128,24 @@ export default function Home() {
     if (view === "sales") {
       return <SalesPanel user={user} onGoAdmin={() => setAdminView("admin")} />;
     }
-    return <AdminPanel user={user} onGoSales={() => setAdminView("sales")} />;
+    // Task 127: VILMAR (viza@viza.com.py) puede entrar al STOCK GENERAL desde
+    // su botón de la BASE (con BASE y COTIZADOR para volver).
+    if (view === "stock" && verStockGeneral) {
+      return (
+        <StockGeneral
+          user={user}
+          onGoBase={() => setAdminView("admin")}
+          onGoSales={() => setAdminView("sales")}
+        />
+      );
+    }
+    return (
+      <AdminPanel
+        user={user}
+        onGoSales={() => setAdminView("sales")}
+        onGoStock={verStockGeneral ? () => setAdminView("stock") : undefined}
+      />
+    );
   }
 
   // SUPREMO_ADMIN → Acceso Total: Orquestador + Base + Stock + Ventas + Gestión

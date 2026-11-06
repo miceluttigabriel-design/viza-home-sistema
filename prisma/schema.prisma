@@ -458,6 +458,30 @@ model StockSucursal {
 }
 
 // ============================================================
+// STOCK IDEAL POR PRODUCTO Y SUCURSAL (Task 127, pedido del dueño)
+// Módulo de DISTRIBUCIÓN INTELIGENTE DE INVENTARIO: el dueño define
+// CUÁNTO debería haber de cada producto en cada nodo (CENTRAL y cada
+// sucursal). Con eso el sistema calcula quién SOBRA (saldo > ideal =
+// excedente) y quién FALTA (saldo < ideal = déficit) y arma el
+// reporte de TRANSFERENCIAS INTERNAS (de donde sobra a donde falta —
+// NUNCA órdenes de compra a proveedores).
+// MISMO patrón que StockSucursal: tabla aparte (sin relación a
+// Product a propósito), UNIQUE(productId, sucursal) y AUTO-GESTIONADA
+// en src/lib/stock-ideal.ts (si la tabla no existe, la primera
+// operación la crea sola con SQL idempotente — jamás rompe la app).
+// ============================================================
+model ProductStockIdeal {
+  id        String   @id @default(cuid())
+  productId String   // Product.id (sin relación a propósito, mismo motivo que arriba)
+  sucursal  String   // "CENTRAL" | "KATUETE" | "NUEVA ESPERANZA" | ... (tal cual StockSucursal)
+  ideal     Float    @default(0) // cuántas unidades DEBERÍA haber en ese nodo
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, sucursal])
+  @@index([sucursal])
+}
+
+// ============================================================
 // Task 105 (pedido del dueño): REGISTRO DE IMPORTACIONES DE STOCK.
 // "cada vez que yo suba el excel para actualizar stock y agregar nuevos
 // productos seria importante que lo equipo tenga esto informado en su

@@ -46,6 +46,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { suscribirseAEdicionesProductos } from "@/lib/replicacion-productos";
 import {
   ArrowLeft,
+  ArrowLeftRight,
   Boxes,
   Layers,
   Tags,
@@ -59,8 +60,11 @@ import {
   Upload,
   Check,
   Warehouse,
+  Target,
+  Save,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 
 const AZUL = "#0d3d5e";
 const DORADO = "#D9B86B";
@@ -74,8 +78,12 @@ interface AppUser {
 
 interface StockGeneralProps {
   user: AppUser;
-  onGoOrquestador: () => void;
-  onGoBase: () => void;
+  // Task 127: opcionales con la regla de la casa del SalesPanel — si no
+  // llega la prop, el botón no se renderiza. El ORQUESTADOR solo lo ve el
+  // supremo; VILMAR (viza@viza.com.py) entra con BASE (si es admin) o solo
+  // con COTIZADOR (si es colaborador), según lo que page.tsx le pase.
+  onGoOrquestador?: () => void;
+  onGoBase?: () => void;
   onGoSales: () => void;
 }
 
@@ -203,6 +211,46 @@ interface ImportResult {
   errores: string[];
 }
 
+// ─── DISTRIBUCIÓN INTELIGENTE (Task 127, pedido del dueño) ───
+// Reporte de TRANSFERENCIAS INTERNAS entre sucursales (de donde sobra
+// a donde falta — jamás órdenes de compra). Lo calcula
+// GET /api/stock/distribucion con el STOCK IDEAL definido por nodo.
+interface FilaDistribucion {
+  sku: string;
+  producto: string;
+  color: string | null; // CORES (columna de la Base)
+  tipo: string | null; // TIPO PRODUCTO (columna de la Base)
+  origen: string;
+  destino: string;
+  cantidad: number;
+  origenSaldo: number;
+  origenIdeal: number;
+  destinoSaldo: number;
+  destinoIdeal: number;
+  destinoFalta: number;
+}
+
+interface ResumenDistribucion {
+  transferencias: number;
+  unidades: number;
+  productos: number;
+  faltanteNoCubierto: number;
+  sucursalesConFaltante: Array<{ nodo: string; falta: number }>;
+}
+
+// Fila de la pantalla CONFIGURAR STOCK IDEAL (GET /api/stock/ideal):
+// saldo actual e ideal actual de cada producto por nodo.
+interface FilaIdeal {
+  id: string;
+  sku: string;
+  name: string;
+  tipo: string | null;
+  referencia: string | null;
+  cores: string | null;
+  saldos: Record<string, number>;
+  ideales: Record<string, number>;
+}
+
 type OrdenOpt = "stock-asc" | "stock-desc" | "name-asc" | "sku-asc" | "sku-desc";
 
 const ORDENES: Array<{ id: OrdenOpt; label: string; sort: string; dir: string }> = [
@@ -214,6 +262,8 @@ const ORDENES: Array<{ id: OrdenOpt; label: string; sort: string; dir: string }>
 ];
 
 const PAGE_SIZE = 50;
+// Productos por página en la pantalla CONFIGURAR STOCK IDEAL (Task 127).
+const IDEAL_PAGE_SIZE = 50;
 
 function fmtNum(n: number): string {
   return new Intl.NumberFormat("es-PY").format(n);
@@ -441,6 +491,172 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
     }
   };
 
+  // ═══ DISTRIBUCIÓN INTELIGENTE (Task 127, pedido del dueño) ═══
+  // Reporte de transferencias internas entre sucursales (de donde SOBRA
+  // a donde FALTA, con el STOCK IDEAL por nodo) + pantalla para definir
+  // ese stock ideal. Nada se escribe en el stock desde acá: es un
+  // REPORTE para que el equipo mueva la mercadería.
+  const [distOpen, setDistOpen] = useState(false);
+  const [distMode, setDistMode] = useState<"reporte" | "ideal">("reporte");
+  const [distCargando, setDistCargando] = useState(false);
+  const [distFilas, setDistFilas] = useState<FilaDistribucion[]>([]);
+  const [distResumen, setDistResumen] = useState<ResumenDistribucion | null>(null);
+  const [distAviso, setDistAviso] = useState<string | null>(null);
+  const [distSucursales, setDistSucursales] = useState<string[]>([]);
+
+  const cargarDistribucion = useCallback(async () => {
+    setDistCargando(true);
+    try {
+      const res = await fetch("/api/stock/distribucion", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Error HTTP ${res.status}`);
+      setDistFilas(Array.isArray(data.filas) ? data.filas : []);
+      setDistResumen(data.resumen ?? null);
+      setDistAviso(data.aviso ?? null);
+      setDistSucursales(Array.isArray(data.sucursales) ? data.sucursales : []);
+    } catch (error) {
+      console.error("Error distribución:", error);
+      toast.error(`Distribución: ${(error as Error).message}`);
+      setDistFilas([]);
+      setDistResumen(null);
+    } finally {
+      setDistCargando(false);
+    }
+  }, []);
+
+  const abrirDistribucion = () => {
+    setDistOpen(true);
+    setDistMode("reporte");
+    void cargarDistribucion();
+  };
+
+  // ── CONFIGURAR STOCK IDEAL (segunda pantalla del modal) ──
+  const [idealBusqueda, setIdealBusqueda] = useState("");
+  const [idealBusquedaAplicada, setIdealBusquedaAplicada] = useState("");
+  const [idealPage, setIdealPage] = useState(1);
+  const [idealRows, setIdealRows] = useState<FilaIdeal[]>([]);
+  const [idealTotal, setIdealTotal] = useState(0);
+  const [idealTotalPages, setIdealTotalPages] = useState(1);
+  const [idealCargando, setIdealCargando] = useState(false);
+  const [idealGuardando, setIdealGuardando] = useState(false);
+  // Cambios sin guardar: "productId||sucursal" → ideal nuevo (0 = quitar).
+  const [idealEdiciones, setIdealEdiciones] = useState<Record<string, number>>({});
+  const idealDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cargarIdeales = useCallback(async (busqueda: string, page: number) => {
+    setIdealCargando(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(IDEAL_PAGE_SIZE),
+      });
+      if (busqueda) params.set("search", busqueda);
+      const res = await fetch(`/api/stock/ideal?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Error HTTP ${res.status}`);
+      setIdealRows(Array.isArray(data.rows) ? data.rows : []);
+      setIdealTotal(typeof data.total === "number" ? data.total : 0);
+      setIdealTotalPages(Math.max(1, Number(data.totalPages) || 1));
+      setDistSucursales(Array.isArray(data.sucursales) ? data.sucursales : []);
+    } catch (error) {
+      console.error("Error stock ideal:", error);
+      toast.error(`Stock ideal: ${(error as Error).message}`);
+      setIdealRows([]);
+    } finally {
+      setIdealCargando(false);
+    }
+  }, []);
+
+  const irAModoIdeal = () => {
+    setDistMode("ideal");
+    setIdealEdiciones({});
+    void cargarIdeales(idealBusquedaAplicada, idealPage);
+  };
+
+  // Búsqueda con debounce (mismo patrón que la tabla principal).
+  const onIdealBusquedaChange = (v: string) => {
+    setIdealBusqueda(v);
+    if (idealDebounceRef.current) clearTimeout(idealDebounceRef.current);
+    idealDebounceRef.current = setTimeout(() => {
+      setIdealBusquedaAplicada(v.trim());
+      setIdealPage(1);
+    }, 350);
+  };
+
+  // Recarga la lista de ideales cuando cambian búsqueda/página (solo si
+  // el modal está abierto en modo ideal).
+  useEffect(() => {
+    if (!distOpen || distMode !== "ideal") return;
+    const t = setTimeout(() => cargarIdeales(idealBusquedaAplicada, idealPage), 0);
+    return () => clearTimeout(t);
+  }, [distOpen, distMode, idealBusquedaAplicada, idealPage, cargarIdeales]);
+
+  const valorIdeal = (fila: FilaIdeal, sucursal: string): string => {
+    const key = `${fila.id}||${sucursal}`;
+    if (key in idealEdiciones) return String(idealEdiciones[key]);
+    const actual = fila.ideales[sucursal];
+    return typeof actual === "number" ? String(actual) : "";
+  };
+
+  const setValorIdeal = (fila: FilaIdeal, sucursal: string, v: string) => {
+    const key = `${fila.id}||${sucursal}`;
+    setIdealEdiciones((prev) => {
+      const next = { ...prev };
+      const limpio = v.trim();
+      const actualGuardado = fila.ideales[sucursal];
+      if (limpio === "") {
+        // vacío = quitar el ideal (borra la fila si existía)
+        next[key] = 0;
+      } else {
+        const n = Math.max(0, Math.floor(Number(limpio) || 0));
+        next[key] = n;
+      }
+      // Si quedó igual que lo ya guardado, sacar del diff (menos ruido)
+      const actualNum =
+        typeof actualGuardado === "number" ? actualGuardado : 0;
+      if (next[key] === actualNum && !(limpio === "" && actualNum > 0)) {
+        delete next[key];
+      }
+      return next;
+    });
+  };
+
+  const guardarIdealesHandler = async () => {
+    const items = Object.entries(idealEdiciones).map(([k, ideal]) => {
+      const [productId, sucursal] = k.split("||");
+      return { productId, sucursal, ideal };
+    });
+    if (items.length === 0) return;
+    setIdealGuardando(true);
+    try {
+      const res = await fetch("/api/stock/ideal", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Error HTTP ${res.status}`);
+      if (Array.isArray(data.errores) && data.errores.length > 0) {
+        toast.warning(`Stock ideal guardado con ${data.errores.length} aviso(s)`);
+      } else {
+        toast.success(
+          `Stock ideal guardado: ${data.filas ?? items.length} nodo(s) actualizado(s)`
+        );
+      }
+      setIdealEdiciones({});
+      await cargarIdeales(idealBusquedaAplicada, idealPage);
+      // El reporte queda recalculado con los ideales nuevos.
+      await cargarDistribucion();
+    } catch (error) {
+      console.error("Error guardando ideales:", error);
+      toast.error(`Stock ideal: ${(error as Error).message}`);
+    } finally {
+      setIdealGuardando(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-stone-100">
       {/* ─── Header (mismo lenguaje visual que los demás paneles) ─── */}
@@ -450,15 +666,17 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
           {/* Task 125: sin max-w-7xl — el contenido del header llega a las
               mismas extremidades que las cards de abajo (alineados). */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={onGoOrquestador}
-              className="h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
-              style={{ backgroundColor: "#FFFFFF", color: AZUL }}
-              title="Volver al Orquestador (solo supremo)"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">ORQUESTADOR</span>
-            </button>
+            {esSupremo && onGoOrquestador && (
+              <button
+                onClick={onGoOrquestador}
+                className="h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
+                style={{ backgroundColor: "#FFFFFF", color: AZUL }}
+                title="Volver al Orquestador (solo supremo)"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">ORQUESTADOR</span>
+              </button>
+            )}
             <h1 className="text-base sm:text-lg font-black text-white tracking-tight px-1">STOCK GENERAL</h1>
             <span
               className="hidden md:flex items-center gap-1.5 text-[9px] font-black tracking-widest px-2 py-1 rounded-full"
@@ -469,6 +687,18 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Task 127: DISTRIBUCIÓN INTELIGENTE — la ve quien entra a esta
+                vista (supremo y el usuario habilitado viza@viza.com.py). */}
+            <button
+              onClick={abrirDistribucion}
+              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
+              style={{ backgroundColor: "#FFFFFF", color: AZUL }}
+              title="Reporte de transferencias internas entre sucursales (de donde sobra a donde falta)"
+            >
+              <ArrowLeftRight className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">DISTRIBUCIÓN INTELIGENTE</span>
+              <span className="sm:hidden">DISTRIB.</span>
+            </button>
             {esSupremo && (
               <>
                 <input
@@ -492,14 +722,16 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
                 </button>
               </>
             )}
-            <button
-              onClick={onGoBase}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center transition-colors border border-transparent hover:brightness-95 shrink-0"
-              style={{ backgroundColor: DORADO, color: AZUL }}
-              title="Ir a LA BASE (editar productos)"
-            >
-              <span>BASE</span>
-            </button>
+            {onGoBase && (
+              <button
+                onClick={onGoBase}
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center transition-colors border border-transparent hover:brightness-95 shrink-0"
+                style={{ backgroundColor: DORADO, color: AZUL }}
+                title="Ir a LA BASE (editar productos)"
+              >
+                <span>BASE</span>
+              </button>
+            )}
             <button
               onClick={onGoSales}
               className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center transition-colors border border-transparent hover:brightness-95 shrink-0"
@@ -511,7 +743,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
             <div
               className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
               style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL }}
-              title={`${user.name || user.email} · SUPREMO`}
+              title={`${user.name || user.email}${esSupremo ? " · SUPREMO" : ""}`}
             >
               {inicial}
             </div>
@@ -946,6 +1178,323 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
           </div>
         </div>
       </main>
+
+      {/* ═══ MODAL: DISTRIBUCIÓN INTELIGENTE (Task 127 — transferencias internas) ═══ */}
+      {distOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+            {/* Título */}
+            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "#e7e5e4" }}>
+              <h3 className="font-black text-lg flex items-center gap-2" style={{ color: AZUL }}>
+                <ArrowLeftRight className="h-5 w-5" />
+                DISTRIBUCIÓN INTELIGENTE
+                <span
+                  className="text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full"
+                  style={{ background: "rgba(21,87,137,0.08)", color: AZUL }}
+                >
+                  TRANSFERENCIAS INTERNAS · SIN COMPRAS
+                </span>
+              </h3>
+              <button
+                onClick={() => setDistOpen(false)}
+                className="h-8 w-8 rounded-lg border border-stone-200 flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-50 transition-colors"
+                title="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Cuerpo */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* ─────── MODO REPORTE ─────── */}
+              {distMode === "reporte" && (
+                <>
+                  {distCargando ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-3">
+                      <Loader2 className="h-8 w-8 animate-spin text-sky-600" />
+                      <p className="text-sm text-stone-500 font-medium">Analizando el stock de las sucursales…</p>
+                    </div>
+                  ) : (
+                    <>
+                      {distAviso && (
+                        <div className="rounded-xl p-4 border border-amber-200 bg-amber-50">
+                          <p className="text-sm font-bold text-amber-800">{distAviso}</p>
+                        </div>
+                      )}
+
+                      {distResumen && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div className="rounded-xl bg-stone-50 border border-stone-200 p-3 text-center">
+                            <p className="text-[9px] font-black tracking-widest text-stone-400 uppercase">Transferencias</p>
+                            <p className="text-lg font-black text-stone-800 tabular-nums">{fmtNum(distResumen.transferencias)}</p>
+                          </div>
+                          <div className="rounded-xl bg-stone-50 border border-stone-200 p-3 text-center">
+                            <p className="text-[9px] font-black tracking-widest text-stone-400 uppercase">Unidades a mover</p>
+                            <p className="text-lg font-black text-stone-800 tabular-nums">{fmtNum(distResumen.unidades)}</p>
+                          </div>
+                          <div className="rounded-xl bg-stone-50 border border-stone-200 p-3 text-center">
+                            <p className="text-[9px] font-black tracking-widest text-stone-400 uppercase">Productos</p>
+                            <p className="text-lg font-black text-stone-800 tabular-nums">{fmtNum(distResumen.productos)}</p>
+                          </div>
+                          <div className={`rounded-xl border p-3 text-center ${distResumen.faltanteNoCubierto > 0 ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"}`}>
+                            <p className="text-[9px] font-black tracking-widest text-stone-400 uppercase">Faltante sin cobertura</p>
+                            <p className={`text-lg font-black tabular-nums ${distResumen.faltanteNoCubierto > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                              {fmtNum(distResumen.faltanteNoCubierto)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {distResumen && distResumen.sucursalesConFaltante.length > 0 && (
+                        <div className="rounded-lg p-3 border border-amber-200 bg-amber-50">
+                          <p className="text-xs font-bold text-amber-800 mb-1">
+                            Los excedentes no alcanzan para cubrir TODO el ideal (no se genera compra a proveedor):
+                          </p>
+                          <p className="text-[10px] text-amber-700 font-medium">
+                            {distResumen.sucursalesConFaltante.map((s) => `${s.nodo}: faltan ${fmtNum(s.falta)}`).join(" · ")}
+                          </p>
+                        </div>
+                      )}
+
+                      {!distAviso && distFilas.length === 0 && (
+                        <div className="rounded-xl p-6 border border-emerald-200 bg-emerald-50 text-center">
+                          <p className="text-sm font-black text-emerald-800">Sin transferencias sugeridas</p>
+                          <p className="text-xs text-emerald-700 mt-1">
+                            Todos los nodos con stock ideal configurado están en su punto.
+                          </p>
+                        </div>
+                      )}
+
+                      {distFilas.length > 0 && (
+                        <div className="rounded-xl border border-stone-200 overflow-hidden">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="bg-stone-50 border-b border-stone-200">
+                                  <th className="text-left px-3 py-2 text-[9px] font-black tracking-widest text-stone-500">COD</th>
+                                  <th className="text-left px-3 py-2 text-[9px] font-black tracking-widest text-stone-500">PRODUCTO</th>
+                                  <th className="text-left px-3 py-2 text-[9px] font-black tracking-widest text-stone-500">COLOR</th>
+                                  <th className="text-left px-3 py-2 text-[9px] font-black tracking-widest text-emerald-600">SUCURSAL ORIGEN (SOBRA)</th>
+                                  <th className="px-1 py-2" />
+                                  <th className="text-left px-3 py-2 text-[9px] font-black tracking-widest text-sky-600">SUCURSAL DESTINO (FALTA)</th>
+                                  <th className="text-right px-3 py-2 text-[9px] font-black tracking-widest text-stone-500">CANTIDAD A TRANSFERIR</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {distFilas.map((f, i) => (
+                                  <tr
+                                    key={`${f.sku}-${f.origen}-${f.destino}-${i}`}
+                                    className="border-b border-stone-100 hover:bg-sky-50/40"
+                                  >
+                                    <td className="px-3 py-2 font-mono font-bold text-stone-800 whitespace-nowrap">{f.sku}</td>
+                                    <td className="px-3 py-2 text-stone-700 max-w-[240px] truncate" title={f.producto}>{f.producto}</td>
+                                    <td className="px-3 py-2 text-stone-600 max-w-[110px] truncate" title={f.color || ""}>{f.color || "—"}</td>
+                                    <td className="px-3 py-2">
+                                      <div className="font-bold text-emerald-700 whitespace-nowrap">{f.origen}</div>
+                                      <div className="text-[9px] text-stone-400 font-medium whitespace-nowrap">
+                                        tiene {fmtNum(f.origenSaldo)} · ideal {fmtNum(f.origenIdeal)}
+                                      </div>
+                                    </td>
+                                    <td className="px-1 py-2 text-center text-stone-300">
+                                      <ArrowLeftRight className="h-3.5 w-3.5 inline" />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="font-bold text-sky-700 whitespace-nowrap">{f.destino}</div>
+                                      <div className="text-[9px] text-stone-400 font-medium whitespace-nowrap">
+                                        tiene {fmtNum(f.destinoSaldo)} · ideal {fmtNum(f.destinoIdeal)} · falta {fmtNum(f.destinoFalta)}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-right">
+                                      <span
+                                        className="inline-block min-w-[3rem] px-2.5 py-1 rounded-lg font-black text-sm tabular-nums"
+                                        style={{ background: "rgba(21,87,137,0.08)", color: AZUL }}
+                                      >
+                                        {fmtNum(f.cantidad)}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-[10px] text-stone-400 font-medium leading-relaxed">
+                        Regla del cálculo: cada transferencia mueve SOLO EL EXCEDENTE del origen (queda exactamente en su stock ideal) y SOLO
+                        LO QUE LE FALTA al destino (llega exactamente a su ideal) → cantidad = mínimo(excedente del origen, faltante del destino).
+                        Los nodos sin stock ideal definido no participan. Reporte de consulta: nada se mueve solo, la mercadería la mueve el equipo.
+                      </p>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* ─────── MODO CONFIGURAR STOCK IDEAL ─────── */}
+              {distMode === "ideal" && (
+                <>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative flex-1 min-w-[220px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
+                      <input
+                        value={idealBusqueda}
+                        onChange={(e) => onIdealBusquedaChange(e.target.value)}
+                        placeholder="Buscar por descripción, COD, marca, modelo…"
+                        className="w-full h-9 pl-9 pr-3 rounded-xl border border-stone-200 text-xs focus:outline-none focus:ring-2 focus:ring-sky-200"
+                      />
+                    </div>
+                    <span className="text-[10px] text-stone-400 font-medium">
+                      {idealCargando ? "Cargando…" : `${fmtNum(idealTotal)} productos · página ${idealPage}/${idealTotalPages}`}
+                    </span>
+                  </div>
+
+                  <p className="text-[10px] text-stone-400 font-medium">
+                    Anotá cuánto DEBERÍA haber de cada producto en cada nodo (CENTRAL = depósito central). Vacío = sin ideal (ese nodo no
+                    participa en la distribución). El número de abajo de cada casilla es lo que tiene HOY.
+                  </p>
+
+                  {distSucursales.length === 0 ? (
+                    <div className="rounded-xl p-4 border border-amber-200 bg-amber-50">
+                      <p className="text-xs font-bold text-amber-800">
+                        Todavía no hay sucursales con inventario. Importá la planilla del ERP (IMPORTAR INVENTARIO) primero.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-stone-200 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-stone-50 border-b border-stone-200">
+                              <th className="text-left px-3 py-2 text-[9px] font-black tracking-widest text-stone-500 sticky left-0 bg-stone-50">COD</th>
+                              <th className="text-left px-3 py-2 text-[9px] font-black tracking-widest text-stone-500 min-w-[180px]">PRODUCTO</th>
+                              {distSucursales.map((s) => (
+                                <th key={s} className="text-center px-2 py-2 text-[9px] font-black tracking-widest text-stone-600 min-w-[86px]">
+                                  {s}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {idealCargando ? (
+                              <tr>
+                                <td colSpan={2 + distSucursales.length} className="px-3 py-8 text-center text-stone-400">
+                                  <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+                                  Cargando productos…
+                                </td>
+                              </tr>
+                            ) : idealRows.length === 0 ? (
+                              <tr>
+                                <td colSpan={2 + distSucursales.length} className="px-3 py-8 text-center text-stone-400 font-medium">
+                                  Sin resultados para “{idealBusquedaAplicada}”.
+                                </td>
+                              </tr>
+                            ) : (
+                              idealRows.map((r) => (
+                                <tr key={r.id} className="border-b border-stone-100 hover:bg-sky-50/40">
+                                  <td className="px-3 py-2 font-mono font-bold text-stone-800 whitespace-nowrap sticky left-0 bg-white">{r.sku}</td>
+                                  <td className="px-3 py-2">
+                                    <div className="text-stone-700 font-semibold max-w-[240px] truncate" title={r.name}>{r.name}</div>
+                                    {(r.cores || r.tipo) && (
+                                      <div className="text-[9px] text-stone-400 font-medium truncate max-w-[240px]">
+                                        {[r.tipo, r.cores].filter(Boolean).join(" · ")}
+                                      </div>
+                                    )}
+                                  </td>
+                                  {distSucursales.map((s) => (
+                                    <td key={s} className="px-2 py-1.5 text-center">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        inputMode="numeric"
+                                        value={valorIdeal(r, s)}
+                                        onChange={(e) => setValorIdeal(r, s, e.target.value)}
+                                        placeholder="—"
+                                        className="w-16 h-8 rounded-lg border border-stone-300 text-center text-xs font-bold text-stone-800 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                        title={`Stock ideal en ${s} (hoy tiene ${fmtNum(r.saldos[s] ?? 0)})`}
+                                      />
+                                      <div className="text-[8px] text-stone-400 font-medium mt-0.5">tiene {fmtNum(r.saldos[s] ?? 0)}</div>
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {idealTotalPages > 1 && (
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => setIdealPage((p) => Math.max(1, p - 1))}
+                        disabled={idealPage <= 1 || idealCargando}
+                        className="h-8 px-3 rounded-lg border border-stone-200 text-xs font-bold text-stone-600 hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+                      </button>
+                      <span className="text-[10px] text-stone-400 font-bold">Página {idealPage} de {idealTotalPages}</span>
+                      <button
+                        onClick={() => setIdealPage((p) => Math.min(idealTotalPages, p + 1))}
+                        disabled={idealPage >= idealTotalPages || idealCargando}
+                        className="h-8 px-3 rounded-lg border border-stone-200 text-xs font-bold text-stone-600 hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1"
+                      >
+                        Siguiente <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Pie con las acciones del modo activo */}
+            <div className="px-6 py-4 border-t flex items-center justify-between gap-2 flex-wrap" style={{ borderColor: "#e7e5e4" }}>
+              {distMode === "reporte" ? (
+                <>
+                  <button
+                    onClick={() => void cargarDistribucion()}
+                    disabled={distCargando}
+                    className="h-9 px-3 rounded-xl border border-stone-200 text-xs font-bold text-stone-600 hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5"
+                    title="Recalcular con el stock de ahora"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${distCargando ? "animate-spin" : ""}`} />
+                    RECALCULAR
+                  </button>
+                  <button
+                    onClick={irAModoIdeal}
+                    className="h-9 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95"
+                    style={{ backgroundColor: DORADO, color: AZUL }}
+                    title="Definir cuánto debería haber de cada producto en cada sucursal"
+                  >
+                    <Target className="h-3.5 w-3.5" />
+                    CONFIGURAR STOCK IDEAL
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setDistMode("reporte")}
+                    className="h-9 px-3 rounded-xl border border-stone-200 text-xs font-bold text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"
+                  >
+                    <ArrowLeftRight className="h-3.5 w-3.5" />
+                    VOLVER AL REPORTE
+                  </button>
+                  <button
+                    onClick={() => void guardarIdealesHandler()}
+                    disabled={idealGuardando || Object.keys(idealEdiciones).length === 0}
+                    className="h-9 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-110 text-white disabled:opacity-40"
+                    style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                    title="Guardar los stock ideales y recalcular el reporte"
+                  >
+                    {idealGuardando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    GUARDAR IDEALES{Object.keys(idealEdiciones).length > 0 ? ` (${Object.keys(idealEdiciones).length})` : ""}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══ MODAL: IMPORTAR INVENTARIO (mismo motor que LA BASE + sucursales) ═══ */}
       {importOpen && (

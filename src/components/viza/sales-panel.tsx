@@ -22,6 +22,7 @@ import {
   KeyRound,
   LayoutGrid,
   BarChart3,
+  Boxes,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -259,6 +260,11 @@ interface SalesPanelProps {
   // Habilita el botón ORQUESTADOR para volver a la pantalla de los 4 cuadros.
   // Si no llega la prop, el botón no se renderiza (admin/consulta no lo ven).
   onGoOrquestador?: () => void;
+  // Task 127 (pedido del dueño): SOLO llega para viza@viza.com.py (VILMAR
+  // CESAR ZAGO PEREIRA — lista única en src/lib/acceso-stock-general.ts).
+  // Habilita el botón STOCK GENERAL en el panel de ventas. Si no llega la
+  // prop, el botón no se renderiza (ningún otro usuario lo ve).
+  onGoStock?: () => void;
 }
 
 // ─── CRM DE MI SUCURSAL (panel de ventas, solo encargados) ───
@@ -307,7 +313,7 @@ const medalStyleSuc = (pos: number): { bg: string; fg: string } | null =>
     ? { bg: "#CD7F32", fg: "#fff7ed" }
     : null;
 
-export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, onGoOrquestador }: SalesPanelProps) {
+export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, onGoOrquestador, onGoStock }: SalesPanelProps) {
   // El rol define qué botones de navegación se muestran, NO la vista actual.
   // REGLA DE ORO: el menú depende del ROL del usuario, no de la pantalla.
   // El supremo admin es supremo admin en TODAS las pantallas (admin, ventas, gestión).
@@ -1254,6 +1260,21 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               >
                 <LayoutGrid className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">ORQUESTADOR</span>
+              </button>
+            )}
+            {/* Task 127 (pedido del dueño): STOCK GENERAL — SOLO VILMAR
+                (viza@viza.com.py). La prop onGoStock solo llega desde
+                page.tsx si el email está en src/lib/acceso-stock-general.ts,
+                así que ningún otro usuario ve este botón. */}
+            {onGoStock && (
+              <button
+                onClick={onGoStock}
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
+                style={{ backgroundColor: "#FFFFFF", color: AZUL_OSCURO }}
+                title="IR A STOCK GENERAL (inventario por sucursal + distribución inteligente)"
+              >
+                <Boxes className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">STOCK GENERAL</span>
               </button>
             )}
             {isAdmin && onGoAdmin && (
