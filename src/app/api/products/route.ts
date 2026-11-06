@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { leerCostosEditados } from "@/lib/costo-editado";
-import { leerHashtags } from "@/lib/producto-hashtag";
+import { idsProductosConHashtag, leerHashtags } from "@/lib/producto-hashtag";
 import { hashtagVisibleParaVendedor, hoyParaguay } from "@/lib/hashtag-formato";
 import { naceConMargenDefault } from "@/lib/gasto-adm";
 import { calcularValorMayorista } from "@/lib/margen-mayorista";
@@ -49,6 +49,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Rol de la sesión (T123: se necesita ANTES de armar el `where` para el
+    // filtro #HASHTAG — el vendedor solo ve hashtags vigentes; admin,
+    // supremo y consulta ven todos). Más abajo hashtagsSalida reutiliza esto.
+    const rolSesion = (session.user as any)?.role || "";
+    const emailSesion = ((session.user as any)?.email || "").trim().toLowerCase();
+    const veBaseCompleta =
+      rolSesion === "admin" ||
+      rolSesion === "supremo_admin" ||
+      esEmailSoloLectura(emailSesion);
+
     const where: Record<string, unknown> = {};
     if (category && category !== "Todas") {
       where.category = category;
@@ -63,6 +73,15 @@ export async function GET(req: NextRequest) {
     } else if (etiquetaColor === "editados") {
       // Productos que SÍ fueron editados manualmente (tienen ultimaEdicionAt)
       where.ultimaEdicionAt = { not: null };
+    } else if (etiquetaColor === "hashtag") {
+      // T123 (pedido del dueño): filtro #HASHTAG — SOLO productos con # real
+      // cargado (valor >= 1; un valor < 1 no es un # real — ver
+      // valorGsRealesHashtag). Vendedor → solo los VISIBLES (no vencidos,
+      // MISMA regla de Task 95 que ya usa el buscador); admin/supremo/
+      // consulta → todos, también los vencidos (es su base de trabajo).
+      const idsHashtag = await idsProductosConHashtag(!veBaseCompleta);
+      // Sin resultados: id imposible → lista vacía (mismo truco de CAPACIDAD)
+      where.id = { in: idsHashtag.length > 0 ? idsHashtag : ["__sin_coincidencia__"] };
     } else if (etiquetaColor) {
       // Productos con la etiqueta específica
       where.etiquetaColor = etiquetaColor;
@@ -253,12 +272,6 @@ export async function GET(req: NextRequest) {
     // No se borra NADA de la tabla: el admin sigue viendo el valor y la fecha
     // para renovarlo. Los presupuestos ya emitidos y los carritos en curso no
     // se tocan (la evidencia del premio queda igual que siempre).
-    const rolSesion = (session.user as any)?.role || "";
-    const emailSesion = ((session.user as any)?.email || "").trim().toLowerCase();
-    const veBaseCompleta =
-      rolSesion === "admin" ||
-      rolSesion === "supremo_admin" ||
-      esEmailSoloLectura(emailSesion);
     const hashtagsSalida = (() => {
       if (veBaseCompleta) return hashtagsMap;
       const hoy = hoyParaguay();

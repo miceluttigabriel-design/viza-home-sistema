@@ -1867,6 +1867,37 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     {e.nombre.toUpperCase()}
                   </button>
                 ))}
+                {/* T123 (pedido del dueño): filtro #HASHTAG al lado derecho de
+                    las etiquetas (después de VIZA LIQUIDA y las demás creadas)
+                    — muestra SOLO los productos que tienen # cargado. El admin
+                    ve también los vencidos: es su base de trabajo (la celda
+                    roja de la columna #HASHTAG le avisa para renovar). */}
+                <button
+                  type="button"
+                  className={`leyenda-item ${labelFilter === "hashtag" ? "filtro-activo" : ""}`}
+                  data-filtro="hashtag"
+                  onClick={() => {
+                    setLabelFilter(prev => prev === "hashtag" ? null : "hashtag");
+                    setPage(1);
+                  }}
+                  title="Filtrar: SOLO productos con #HASHTAG"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    cursor: "pointer",
+                    padding: "4px 10px",
+                    borderRadius: "5px",
+                    border: labelFilter === "hashtag" ? "2px solid #0d3d5e" : "2px solid transparent",
+                    background: labelFilter === "hashtag" ? "rgba(21, 87, 137, 0.15)" : "transparent",
+                    color: labelFilter === "hashtag" ? "#0d3d5e" : "#525252",
+                    fontWeight: labelFilter === "hashtag" ? 700 : 400,
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  <span style={{ fontWeight: 800, fontSize: "13px" }}>#</span>
+                  HASHTAG
+                </button>
               </div>
             </div>
           </div>

@@ -17,6 +17,7 @@
 // vacío (sin hashtag en los resultados) y guardarHashtag devuelve false
 // — todo lo demás sigue funcionando igual que siempre.
 import { db } from "@/lib/db";
+import { hashtagVisibleParaVendedor, hoyParaguay } from "@/lib/hashtag-formato";
 
 export interface HashtagProducto {
   valor: number | null;
@@ -128,5 +129,39 @@ export async function guardarHashtag(
     return await intentar();
   } catch {
     return false;
+  }
+}
+
+// ─── Filtro #HASHTAG (T123, pedido del dueño) ───
+// Ids de los productos que TIENEN un # real cargado (valor >= 1: un valor
+// < 1 no es un # real — ver valorGsRealesHashtag en hashtag-formato.ts).
+//   · soloVisibles=false (admin / supremo / consulta) → TODOS, también los
+//     vencidos (es su base de trabajo: la celda roja les avisa para renovar).
+//   · soloVisibles=true (vendedores) → SOLO los no vencidos: la MISMA regla
+//     de visibilidad de la Task 95 que ya gobierna el buscador.
+// Si la tabla todavía no existe se crea sola y se reintenta una vez; si aun
+// así falla devuelve [] (ningún producto coincide) y la app sigue igual.
+export async function idsProductosConHashtag(soloVisibles: boolean): Promise<string[]> {
+  const intentar = async (): Promise<string[]> => {
+    const filas = await db.productHashtag.findMany({
+      where: { valor: { gte: 1 } },
+      select: { productId: true, fecha: true },
+    });
+    if (!soloVisibles) return filas.map((f) => f.productId);
+    const hoy = hoyParaguay();
+    return filas
+      .filter((f) => hashtagVisibleParaVendedor(f.fecha, hoy))
+      .map((f) => f.productId);
+  };
+  try {
+    return await intentar();
+  } catch (error) {
+    if (!esErrorTablaFaltante(error)) return [];
+    if (!(await ensureTablaProductoHashtag())) return [];
+  }
+  try {
+    return await intentar();
+  } catch {
+    return [];
   }
 }

@@ -1854,6 +1854,24 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 </button>
               );
             })}
+            {/* T123 (pedido del dueño): chip #HASHTAG al lado derecho de las
+                etiquetas (después de VIZA LIQUIDA y las demás) — toca y se
+                listan SOLO los productos con # vigente, la MISMA regla del
+                buscador: vencidos fuera de la vista de ventas. Tocar de
+                nuevo lo apaga, igual que las etiquetas. */}
+            <button
+              onClick={() => elegirEtiqueta("hashtag")}
+              className="h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              style={{
+                borderColor: "#155789",
+                backgroundColor: etiquetaSel === "hashtag" ? "#155789" : "transparent",
+                color: etiquetaSel === "hashtag" ? "#ffffff" : "#155789",
+              }}
+              title="Ver SOLO los productos con #HASHTAG vigente"
+            >
+              <span className="font-black">#</span>
+              HASHTAG
+            </button>
           </div>
           {cargandoEtiqueta ? (
             <div className="p-4 text-sm text-stone-500 text-center">Buscando productos...</div>
@@ -1863,12 +1881,15 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             null
           ) : productosEtiqueta.length === 0 ? (
             <div className="p-4 text-sm text-stone-500 text-center">
-              No hay productos con esta etiqueta
+              {etiquetaSel === "hashtag"
+                ? "No hay productos con #HASHTAG vigente"
+                : "No hay productos con esta etiqueta"}
             </div>
           ) : (
             <>
               <div className="text-[11px] font-semibold uppercase text-stone-400 mb-2">
-                {etiquetaTotal} producto{etiquetaTotal !== 1 ? "s" : ""} con esta etiqueta
+                {etiquetaTotal} producto{etiquetaTotal !== 1 ? "s" : ""} con{" "}
+                {etiquetaSel === "hashtag" ? "#HASHTAG" : "esta etiqueta"}
               </div>
               <div className="max-h-80 overflow-y-auto rounded-xl border border-stone-200 divide-y divide-stone-100">
                 {productosEtiqueta.map((p) => {
@@ -1886,6 +1907,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                           SKU: {p.sku}
                           {typeof p.stock === "number" ? ` · Stock: ${p.stock}` : ""}
                           {p.priceContado ? ` · Contado: ${formatPYG(p.priceContado)}` : ""}
+                          {/* T123: en el filtro #HASHTAG cada fila muestra su # */}
+                          {p.hashtag?.valor
+                            ? ` · # ${textoHashtagValorRealGs(p.hashtag.valor)} GS`
+                            : ""}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
