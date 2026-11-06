@@ -450,6 +450,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   // Estado local para controlar qué opciones se muestran en el presupuesto
   const [mostrarConEntrega, setMostrarConEntrega] = useState(true);
   const [mostrarSinEntrega, setMostrarSinEntrega] = useState(true);
+  // Task 116 (pedido del dueño): vista del resultado — "CUOTA UNIFICADA"
+  // (la tabla de siempre, DEFAULT = nadie ve nada distinto al entrar) o
+  // "POR PRODUCTO (COMPARATIVO)": la cuota de CADA producto en cada plan,
+  // para comparar cuando hay varias TVs y el cliente pregunta "¿y esta
+  // cuánto queda por mes?". Es SOLO presentacion: no toca calculos, ni el
+  // store, ni el PDF, ni datos. Al recalcular se mantiene la vista elegida.
+  const [vistaComparativo, setVistaComparativo] = useState(false);
   // Estado del reloj en tiempo real (se actualiza cada segundo)
   const [relojAhora, setRelojAhora] = useState<Date>(new Date());
 
@@ -2243,6 +2250,43 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                   </p>
                 </div>
               )}
+              {/* Task 116: SELECTOR DE VISTA — unificado (de siempre) o
+                  comparativo por producto. SOLO cambia lo que se ve en
+                  pantalla; el cálculo y el PDF no se tocan. */}
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <p className="text-[11px] font-semibold uppercase text-stone-500 tracking-wide">
+                  Vista del cálculo
+                </p>
+                <div className="flex rounded-xl border border-stone-200 bg-stone-50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setVistaComparativo(false)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide transition-colors ${
+                      !vistaComparativo
+                        ? "text-white shadow-sm"
+                        : "text-stone-500 hover:text-stone-700"
+                    }`}
+                    style={!vistaComparativo ? { backgroundColor: AZUL } : undefined}
+                  >
+                    Cuota unificada
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVistaComparativo(true)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide transition-colors ${
+                      vistaComparativo
+                        ? "text-white shadow-sm"
+                        : "text-stone-500 hover:text-stone-700"
+                    }`}
+                    style={vistaComparativo ? { backgroundColor: AZUL } : undefined}
+                  >
+                    Por producto (comparativo)
+                  </button>
+                </div>
+              </div>
+
+              {!vistaComparativo ? (
+              <>
               {/* Tabla comparativa de planes */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border border-stone-200 rounded-lg overflow-hidden">
@@ -2374,6 +2418,149 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                   </tbody>
                 </table>
               </div>
+              </>
+              ) : (
+              <>
+              {/* ── Task 116: VISTA COMPARATIVO POR PRODUCTO ──
+                  La cuota de CADA producto en cada plan calculado, con los
+                  valores EXACTOS de la lista (priceN × cantidad — la misma
+                  fuente que usa el cálculo unificado, que es la suma de esta
+                  columna). Los regalos (CASCO / productos regalo) no se
+                  financian: salen con "—". La fila TOTAL muestra el mismo
+                  valor unificado de la tabla de siempre (con entrega
+                  personalizada o recargo ya incluidos). SOLO PRESENTACIÓN:
+                  no cambia ningún cálculo ni el PDF. */}
+              {(() => {
+                const esRegalo = (i: CotizacionItem) =>
+                  i.name.toUpperCase().includes("CASCO") || esProductoRegalo(i.sku);
+                const margenSin =
+                  mostrarSinEntrega && sinEntregaInfo ? sinEntregaInfo.margen : null;
+                const letraDe = (idx: number) =>
+                  String.fromCharCode(
+                    65 + idx + (incluirContadoEnPresupuesto ? 1 : 0)
+                  );
+                return (
+                  <>
+                    {mostrarConEntrega && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm border border-stone-200 rounded-lg overflow-hidden">
+                          <thead className="bg-stone-100 border-b border-stone-200">
+                            <tr>
+                              <th className="text-left font-bold text-stone-700 px-3 py-2 min-w-[220px]">PRODUCTO</th>
+                              {incluirContadoEnPresupuesto && (
+                                <th className="text-right font-bold text-stone-700 px-3 py-2 whitespace-nowrap">
+                                  CONTADO{contadoMarginPct > 0 ? ` +${contadoMarginPct}%` : ""}
+                                </th>
+                              )}
+                              {calculatedPlanes.map((p, idx) => (
+                                <th key={p.id} className="text-right font-bold text-stone-700 px-3 py-2 whitespace-nowrap">
+                                  {letraDe(idx)} · {p.cuotas} {p.cuotas === 1 ? "PAGO" : "CUOTAS"}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((item) => {
+                              const regalo = esRegalo(item);
+                              return (
+                                <tr key={item.productId} className="border-b border-stone-100 last:border-0 hover:bg-stone-50">
+                                  <td className="px-3 py-2 text-xs">
+                                    <span className="font-mono text-stone-400">[{item.sku}]</span>{" "}
+                                    <span className="font-medium">{item.name}</span>
+                                    {regalo && (
+                                      <span className="ml-1.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-stone-200 text-stone-600">Regalo</span>
+                                    )}
+                                    <span className="text-stone-500"> × {item.quantity}</span>
+                                  </td>
+                                  {incluirContadoEnPresupuesto && (
+                                    <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums text-stone-700 whitespace-nowrap">
+                                      {regalo ? "—" : formatPYG(Math.round(getItemPriceN(item, 0) * item.quantity * (1 + (contadoMarginPct || 0) / 100)))}
+                                    </td>
+                                  )}
+                                  {calculatedPlanes.map((p) => (
+                                    <td key={p.id} className="px-3 py-2 text-right text-xs font-semibold tabular-nums whitespace-nowrap" style={{ color: AZUL_OSCURO }}>
+                                      {regalo ? "—" : formatPYG(getItemPriceN(item, p.cuotas) * item.quantity)}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
+                            <tr className="bg-stone-50 border-t-2 border-stone-300">
+                              <td className="px-3 py-3 text-xs font-bold uppercase text-stone-800">Total por cuota (unificado)</td>
+                              {incluirContadoEnPresupuesto && (
+                                <td className="px-3 py-3 text-right text-sm font-bold tabular-nums text-rose-600">{formatPYG(contadoAjustado)}</td>
+                              )}
+                              {calculatedPlanes.map((p) => (
+                                <td key={p.id} className="px-3 py-3 text-right text-sm font-extrabold tabular-nums text-rose-600">{formatPYG(p.valorPorCuota)}</td>
+                              ))}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {mostrarSinEntrega && calculatedPlanesSinEntrega.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "#b45309" }}>
+                          Comparativo por producto — sin entrega inicial{margenSin !== null && margenSin > 0 ? " (+3% · 31-60 días)" : ""}
+                        </p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm border border-stone-200 rounded-lg overflow-hidden">
+                            <thead className="bg-stone-100 border-b border-stone-200">
+                              <tr>
+                                <th className="text-left font-bold text-stone-700 px-3 py-2 min-w-[220px]">PRODUCTO</th>
+                                {calculatedPlanesSinEntrega.map((p, idx) => (
+                                  <th key={p.id} className="text-right font-bold text-stone-700 px-3 py-2 whitespace-nowrap">
+                                    {letraDe(idx)} · {p.cuotas} {p.cuotas === 1 ? "PAGO" : "CUOTAS"}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.map((item) => {
+                                const regalo = esRegalo(item);
+                                return (
+                                  <tr key={item.productId} className="border-b border-stone-100 last:border-0 hover:bg-amber-50/40">
+                                    <td className="px-3 py-2 text-xs">
+                                      <span className="font-mono text-stone-400">[{item.sku}]</span>{" "}
+                                      <span className="font-medium">{item.name}</span>
+                                      {regalo && (
+                                        <span className="ml-1.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-stone-200 text-stone-600">Regalo</span>
+                                      )}
+                                      <span className="text-stone-500"> × {item.quantity}</span>
+                                    </td>
+                                    {calculatedPlanesSinEntrega.map((p) => (
+                                      <td key={p.id} className="px-3 py-2 text-right text-xs font-semibold tabular-nums whitespace-nowrap" style={{ color: "#b45309" }}>
+                                        {regalo
+                                          ? "—"
+                                          : margenSin !== null && margenSin > 0
+                                          ? formatPYG(Math.round(getItemPriceN(item, p.cuotas) * item.quantity * (1 + margenSin)))
+                                          : formatPYG(getItemPriceN(item, p.cuotas) * item.quantity)}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                );
+                              })}
+                              <tr className="bg-amber-50/60 border-t-2 border-stone-300">
+                                <td className="px-3 py-3 text-xs font-bold uppercase text-stone-800">Total por cuota (unificado)</td>
+                                {calculatedPlanesSinEntrega.map((p) => (
+                                  <td key={p.id} className="px-3 py-3 text-right text-sm font-extrabold tabular-nums" style={{ color: "#b45309" }}>{formatPYG(p.valorPorCuota)}</td>
+                                ))}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                    <p className="mt-2 text-[11px] text-stone-500 leading-relaxed">
+                      Valores por producto según la lista de cada plan; la cuota unificada es la suma de todos los productos.
+                      {margenSin !== null && margenSin > 0 ? " En SIN ENTREGA (31-60 días) el +3% y el redondeo comercial se aplican sobre el total unificado, por eso el total puede variar unos miles respecto a la suma de la columna." : ""}
+                      {mostrarConEntrega && Math.round(entregaPersonalizada || 0) > 0 ? " Con entrega inicial personalizada la cuota unificada se recalcula sobre el total; los valores por producto son los de la lista." : ""}
+                    </p>
+                  </>
+                );
+              })()}
+              </>
+              )}
 
               {/* Contado en resultado */}
               <div className="mt-5 pt-4 border-t border-stone-200">
