@@ -1058,6 +1058,40 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             }))
           : null;
 
+      // Task 117 (pedido del dueño): comparativo por producto PARA EL PDF.
+      // Mismos valores que la vista comparativa de la pantalla (Task 116):
+      // priceN de la lista × cantidad — la suma da EXACTO la cuota unificada.
+      // Los regalos (CASCO / productos regalo) no se financian (regalo=true).
+      // Es un campo NUEVO y OPCIONAL del payload: no toca nada existente.
+      const sei = sinEntregaInfo;
+      const esRegaloPdf = (it: (typeof items)[number]) =>
+        it.name.toUpperCase().includes("CASCO") || esProductoRegalo(it.sku);
+      const comparativoItems = items.map((it) => {
+        const regalo = esRegaloPdf(it);
+        const valoresPorCuotas: Record<string, number> = {};
+        calculatedPlanes.forEach((p) => {
+          valoresPorCuotas[String(p.cuotas)] = regalo
+            ? 0
+            : getItemPriceN(it, p.cuotas) * it.quantity;
+        });
+        const valoresSinEntrega: Record<string, number> = {};
+        if (
+          mostrarSinEntrega &&
+          sei &&
+          calculatedPlanesSinEntrega.length > 0
+        ) {
+          calculatedPlanesSinEntrega.forEach((p) => {
+            const base = getItemPriceN(it, p.cuotas) * it.quantity;
+            valoresSinEntrega[String(p.cuotas)] = regalo
+              ? 0
+              : sei.margen > 0
+              ? Math.round(base * (1 + sei.margen))
+              : base;
+          });
+        }
+        return { sku: it.sku, regalo, valoresPorCuotas, valoresSinEntrega };
+      });
+
       const em = emisionHoy(); // emisión = día/hora real de generar el presupuesto
       const payload = {
         cliente: {
@@ -1100,6 +1134,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
           : 0,
         planes: planesForPdf,
         planesSinEntrega: planesSinEntregaForPdf,
+        // Task 117: comparativo por producto (el PDF lo dibuja tal cual)
+        comparativoItems,
       };
 
       const res = await fetch("/api/quotes/pdf", {

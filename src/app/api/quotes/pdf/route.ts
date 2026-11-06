@@ -17,6 +17,13 @@ import { VIZA_LOGO_WORDMARK_PNG, VIZA_LOGO_WORDMARK_RATIO } from "../../../../li
 // en UNA sola hoja (encabezado/footer compactos + filas más bajas).
 import { drawVendedor, yVendedorSobreFooter, drawSucursalesTop } from "../../../../lib/pdf/vizaPdfDesign";
 import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
+// Task 117 (pedido del dueño): comparativo por producto en el PDF.
+// Helper PURO de dibujo (no calcula nada): recibe los valores listos.
+import {
+  drawTablaComparativo,
+  drawNotaComparativo,
+  type ComparativoFila,
+} from "../../../../lib/pdf/presupuesto-comparativo";
 
 // Task 88 (pedido del dueño): el margen adicional del contado se muestra en
 // el presupuesto como "VZH 3" (Viza Home + el número del margen, SIN el
@@ -95,6 +102,17 @@ interface PdfPayload {
   planes: PdfPlan[];
   // Planes alternativos sin entrega inicial (solo si tipoEntrega === "sin_entrega")
   planesSinEntrega?: PdfPlanSinEntrega[] | null;
+  // Task 117 (pedido del dueño): datos del COMPARATIVO POR PRODUCTO.
+  // SOLO PRESENTACIÓN: valores por producto ya calculados por el panel
+  // (priceN de la lista × cantidad — la misma fuente del cálculo unificado).
+  // Opcional: si no viene, el PDF sale EXACTAMENTE igual que siempre.
+  comparativoItems?: {
+    sku: string;
+    regalo: boolean;
+    // cuotas → valor (keys como string; JS indexa igual con número)
+    valoresPorCuotas?: Record<string, number>;
+    valoresSinEntrega?: Record<string, number>;
+  }[];
 }
 
 function formatPYG(amount: number): string {
@@ -893,6 +911,136 @@ export async function POST(req: NextRequest) {
       }
     }
     } // fin if (!soloContado)
+
+    // ===== COMPARATIVO POR PRODUCTO (Task 117, pedido del dueño) =====
+    // "también necesito generar el presupuesto con los comparativos de cuotas":
+    // una tabla con la cuota de CADA producto en cada opción de pago, y al pie
+    // la fila TOTAL POR CUOTA (UNIFICADO) con el MISMO valor de la tabla de
+    // OPCIONES DE FINANCIACIÓN (comparativo y unificado siempre de acuerdo).
+    // SOLO DIBUJO: los valores viajan listos en el payload; si no viajan
+    // (cliente viejo / llamada directa), esta sección no sale y el PDF queda
+    // exactamente igual que siempre.
+    const compItems = body.comparativoItems || [];
+    const planesColCon = body.mostrarConEntrega !== false ? planesFin : [];
+    const tablaConAplica = planesColCon.length > 0 || hayContado;
+    const tablaSinAplica = hayPlanesSinEntrega && !!body.planesSinEntrega;
+    if (!soloContado && compItems.length > 0 && (tablaConAplica || tablaSinAplica)) {
+      const compPorSku = new Map(compItems.map((c) => [c.sku, c]));
+      // Arma las filas del comparativo: una por producto del presupuesto.
+      // CONTADO usa el MISMO subtotal con margen que ya muestra la tabla de
+      // productos (itemsConMargen, con el ajuste fino de redondeo incluido).
+      const filasDe = (
+        usarContado: boolean,
+        planesCols: PdfPlan[],
+        campo: "valoresPorCuotas" | "valoresSinEntrega"
+      ): ComparativoFila[] =>
+        body.items.map((it) => {
+          const c = compPorSku.get((it.sku || "").trim());
+          const conMargen = itemsConMargen.find(
+            (m) => (m.sku || "").trim() === (it.sku || "").trim()
+          );
+          return {
+            name: it.name,
+            quantity: it.quantity,
+            regalo: c?.regalo === true,
+            valores: [
+              ...(usarContado
+                ? [
+                    c?.regalo === true || !conMargen
+                      ? null
+                      : conMargen.subtotalContado,
+                  ]
+                : []),
+              ...planesCols.map((p) => {
+                const v = c?.[campo]?.[p.cuotas];
+                return c?.regalo === true || typeof v !== "number" ? null : v;
+              }),
+            ],
+          };
+        });
+
+      const lineasNota: string[] = [];
+      let comparativoDibujado = false;
+
+      // --- Tabla 1: CONTADO + planes CON ENTREGA (valores de la lista) ---
+      if (tablaConAplica && (planesColCon.length > 0 || hayContado)) {
+        const colsCon = [
+          ...(hayContado
+            ? [{ titulo: "CONTADO", total: body.contadoAjustado ?? null }]
+            : []),
+          ...planesColCon.map((p) => ({
+            titulo: `${p.letra} · ${p.cuotas} CUOTA${p.cuotas !== 1 ? "S" : ""}`,
+            total: p.valorPorCuota,
+          })),
+        ];
+        ensureSpace(110);
+        y += 14;
+        drawSectionTitle(
+          doc,
+          "COMPARATIVO POR PRODUCTO — CUOTA DE CADA UNO",
+          margin,
+          y,
+          contentW
+        );
+        y += 14;
+        y = drawTablaComparativo(doc, {
+          margin,
+          contentW,
+          y,
+          cols: colsCon,
+          filas: filasDe(hayContado, planesColCon, "valoresPorCuotas"),
+          // Wrapper SIN estado: el helper pasa su y viva; acá solo se
+          // decide si abre página (franja vendedor + footer respetados).
+          ensureSpace: (curY, n) => (curY + n > yVend - 12 ? (doc.addPage(), 60) : curY),
+        });
+        comparativoDibujado = true;
+        const entregaInicialComp = Math.max(
+          0,
+          Math.round(body.entregaPersonalizada || 0)
+        );
+        if (entregaInicialComp > 0 && planesColCon.length > 0) {
+          lineasNota.push(
+            `La entrega inicial (Gs ${entregaInicialComp.toLocaleString("es-PY")}) se descuenta del total del plan; los valores por producto son los de la lista.`
+          );
+        }
+      }
+
+      // --- Tabla 2: planes SIN ENTREGA INICIAL (solo si salen en el PDF) ---
+      if (tablaSinAplica && body.planesSinEntrega) {
+        ensureSpace(110);
+        y += 14;
+        drawSectionTitle(
+          doc,
+          "COMPARATIVO POR PRODUCTO — SIN ENTREGA INICIAL",
+          margin,
+          y,
+          contentW
+        );
+        y += 14;
+        y = drawTablaComparativo(doc, {
+          margin,
+          contentW,
+          y,
+          cols: body.planesSinEntrega.map((p) => ({
+            titulo: `${p.letra} · ${p.cuotas} CUOTA${p.cuotas !== 1 ? "S" : ""}`,
+            total: p.valorPorCuota,
+          })),
+          filas: filasDe(false, body.planesSinEntrega, "valoresSinEntrega"),
+          ensureSpace: (curY, n) => (curY + n > yVend - 12 ? (doc.addPage(), 60) : curY),
+        });
+        comparativoDibujado = true;
+        if ((body.margenAplicado ?? 0) > 0) {
+          lineasNota.push(
+            "En SIN ENTREGA INICIAL (31-60 días) el recargo y el redondeo comercial se aplican sobre el total unificado."
+          );
+        }
+      }
+
+      if (comparativoDibujado) {
+        y += 6;
+        y = drawNotaComparativo(doc, { margin, contentW, y, lineas: lineasNota });
+      }
+    }
 
     // ===== OBSERVACIONES =====
     if (body.cliente && body.cliente.observaciones && body.cliente.observaciones.trim()) {
