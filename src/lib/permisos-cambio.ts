@@ -9,9 +9,11 @@
 // SIEMPRE encima de todo: aunque un email estuviera acá, si es solo-lectura
 // no edita jamás).
 //
-// El MOSTRADOR (chip CAMBIO: R$ ... · US$ ...) se ve para TODOS — en la
-// Base y en el panel de ventas — pero es solo informativo: editar es
-// exclusivamente el botón TASA DE CAMBIO de la Base para los de acá arriba.
+// El MOSTRADOR (chip CAMBIO: R$ ... · US$ ...) se ve SOLO en la Base —
+// Task 130 (pedido del dueño): el del panel de ventas fue retirado
+// ("vamos mantener apenas dentro de la Base"). Es solo informativo:
+// editar es exclusivamente el botón TASA DE CAMBIO de la Base para los
+// de acá arriba.
 //
 // Archivo chiquito y SIN imports: lo usan igual la API (/api/config-cambio,
 // servidor) y los paneles (cliente), así la UI y el backend SIEMPRE deciden
