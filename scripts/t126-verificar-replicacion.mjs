@@ -50,9 +50,14 @@ const zonaHandleSave = admin.slice(admin.indexOf("const handleSave"), admin.inde
 check("handleSave llama avisarProductoEditado DESPUÉS del success", /toast\.success\(`\$\{product\.name\} guardado`\)[\s\S]{0,600}avisarProductoEditado\(\{[\s\S]{0,400}accion: "guardado"/.test(zonaHandleSave));
 check("el aviso lleva las columnas tocadas (dirty)", zonaHandleSave.includes("columnas: Object.keys(changes)"));
 check("el aviso lleva el registro de edición (por: ultimaEdicionPor)", zonaHandleSave.includes("ultimaEdicionPor"));
+// T128: los botones IMPORTAR VALOR + % ADD y % ADD + GASTOS ADM 1% se
+// eliminaron de la Base (las márgenes ya nacen automáticas), así que el
+// delimitador de corte de handleDelete pasa a ser el bloque CRM.
 const desdeDelete = admin.indexOf("const handleDelete");
-const zonaHandleDelete = admin.slice(desdeDelete, admin.indexOf("// ─── IMPORTAR VALOR", desdeDelete));
+const hastaCorte = admin.indexOf("// ─── CRM: ranking", desdeDelete);
+const zonaHandleDelete = admin.slice(desdeDelete, hastaCorte === -1 ? undefined : hastaCorte);
 check("handleDelete también avisa (baja → sale del stock)", /avisarProductoEditado\(\{[\s\S]{0,300}accion: "eliminado"/.test(zonaHandleDelete));
+check("T128: la Base ya NO tiene los 2 botones masivos (IMPORTAR VALOR + % ADD / % ADD + GASTOS ADM 1%)", !admin.includes("IMPORTAR VALOR + % ADD") && !admin.includes("GASTOS ADM 1%") && !admin.includes("btn-import-valoradd"));
 
 // ── 3. STOCK GENERAL escucha y refresca solo ──
 console.log("\n[3] src/components/viza/stock-general.tsx (STOCK GENERAL escucha)");
@@ -72,7 +77,11 @@ check("export const dynamic = force-dynamic", /export const dynamic = "force-dyn
 
 // ── 5. Nada de lo anterior rompe la vista (solo lectura intacta) ──
 console.log("\n[5] Vista STOCK GENERAL sigue SOLO LECTURA y con las columnas de la Base (T124)");
-check("sin PUT/PATCH/POST de productos desde la vista stock", !/(method:\s*["'](PUT|PATCH)["'])/.test(stock));
+// T127 añadió el guardado del Stock IDEAL (PUT /api/stock/ideal) desde esta
+// vista: se lo permite expresamente y sigue prohibido TODO PUT/PATCH de
+// productos (la vista Stock General sigue SOLO LECTURA para la Base).
+const stockSinIdeal = stock.replace(/fetch\("\/api\/stock\/ideal",\s*\{\s*method: "PUT"/g, "");
+check("sin PUT/PATCH de productos desde la vista stock (solo se permite PUT /api/stock/ideal de la T127)", !/(method:\s*["'](PUT|PATCH)["'])/.test(stockSinIdeal));
 check("COLS_BASE sigue con las 10 columnas de la Base en orden", (() => {
   const m = stock.match(/const COLS_BASE[\s\S]*?\n\];/);
   if (!m) return false;
