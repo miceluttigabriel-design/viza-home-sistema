@@ -135,8 +135,9 @@ interface ProdFila {
 }
 
 // ─── Task 124: columnas de LA BASE dentro de STOCK GENERAL ───
-// La MISMA orden que la tabla de la Base (Tasks 97/98/105):
-// PROVEDOR > GRUPO > SUB-GRUPO > MARCA > TIPO PRODUCTO > MODELO >
+// La MISMA orden que la tabla de la Base (Tasks 97/98/105 y 129):
+// PROVEDOR > MARCA > GRUPO > SUB-GRUPO > TIPO PRODUCTO > MODELO >
+// (Task 129: MARCA pasó entre PROVEDOR y GRUPO, igual que en la Base)
 // > CAPACIDAD > CORES > REF.FABRICA > DESCRIPCION. "grupo" es la etiqueta
 // chiquita que aparece ENCIMA del nombre, igual que en la Base (PROVEDOR…
 // CORES llevan DATOS FINALES; REF.FABRICA y DESCRIPCION llevan DATOS).
@@ -144,9 +145,9 @@ interface ProdFila {
 // vista). Solo LECTURA: para editar un dato, LA BASE.
 const COLS_BASE: Array<{ key: keyof ProdFila; label: string; grupo: string | null }> = [
   { key: "fabricante", label: "PROVEDOR", grupo: "DATOS FINALES" },
+  { key: "marca", label: "MARCA", grupo: "DATOS FINALES" },
   { key: "categoria", label: "GRUPO", grupo: "DATOS FINALES" },
   { key: "subGrupo", label: "SUB-GRUPO", grupo: "DATOS FINALES" },
-  { key: "marca", label: "MARCA", grupo: "DATOS FINALES" },
   { key: "tipo", label: "TIPO PRODUCTO", grupo: "DATOS FINALES" },
   { key: "modelo", label: "MODELO", grupo: "DATOS FINALES" },
   { key: "capacidad", label: "CAPACIDAD", grupo: "DATOS FINALES" },

@@ -104,7 +104,8 @@ check("Task 124 COLS_BASE intacta (10 columnas de la Base)", (() => {
   const m = stock.match(/const COLS_BASE[\s\S]*?\n\];/);
   if (!m) return false;
   const keys = [...m[0].matchAll(/key: "(\w+)"/g)].map((x) => x[1]);
-  return JSON.stringify(keys) === JSON.stringify(["fabricante", "categoria", "subGrupo", "marca", "tipo", "modelo", "capacidad", "cores", "referencia", "name"]);
+  // Task 129: MARCA quedó entre PROVEDOR y GRUPO (mismo orden en la Base)
+  return JSON.stringify(keys) === JSON.stringify(["fabricante", "marca", "categoria", "subGrupo", "tipo", "modelo", "capacidad", "cores", "referencia", "name"]);
 })());
 check("Vista stock general sigue SOLO LECTURA de productos (el único PUT es el de IDEALES)", (() => {
   const puts = (stock.match(/method: "PUT"/g) || []).length;

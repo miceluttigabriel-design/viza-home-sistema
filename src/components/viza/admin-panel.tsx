@@ -277,7 +277,7 @@ interface ColDef {
 
 const COLUMNS: ColDef[] = [
   // Orden de columnas a pedido del usuario (Task 97, despues del COD fijo):
-  //   COD > PROVEDOR > GRUPO > SUBGRUPO > MARCA > TIPO PRODUCTO > MODELO >
+  //   COD > PROVEDOR > MARCA > GRUPO > SUBGRUPO > TIPO PRODUCTO > MODELO >
   //   > CAPACIDAD > CORES > REF.FABRICA > DESCRIPCION
   // Task 98: el dueño pidió "crea una coluna nombre CORES entre la coluna
   // MODELO y CAPACIDAD" — CORES es la columna NUEVA de esta tarea (texto
@@ -298,6 +298,17 @@ const COLUMNS: ColDef[] = [
   // Renombre visual (pedido del usuario): se muestra PROVEDOR; el campo/key
   // "fabricante" queda intacto (datos, filtro, API, import y export sin cambios).
   { key: "fabricante", label: "PROVEDOR", type: "text", group: "DATOS FINALES" },
+  // MARCA (Task 129, pedido del dueño): "MARCA la coluna Marca ... necessito
+  // que estea en frente de la coluna Provedor ... del lado derecho y atras de
+  // la coluna GRUPO" → queda como vecina INMEDIATA a la derecha de PROVEDOR
+  // y a la izquierda de GRUPO (regla ya validada en esta tabla, Task 105:
+  // "atras de X" = ANTES de X). El campo ya existía en la base de datos y en
+  // import/export Excel; se muestra y es editable en esta tabla (filtro por
+  // columna y búsqueda global ya lo soportaban). MARCA es la columna MARCA
+  // del Excel (el botón IMPORTAR FABRICANTES que la escribía fue retirado
+  // del panel a pedido del dueño, Task 121). Solo cambia la POSICIÓN visual;
+  // key/campo/datos/filtros/Excel intactos.
+  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
   // GRUPO: en la base es el campo "categoria" (col CQ "CATEGORIA" de la
   // planilla), el mismo que ya usan el export Excel y la importación de
   // productos. Se muestra (como GRUPO) y es editable en esta tabla; la planilla
@@ -305,12 +316,6 @@ const COLUMNS: ColDef[] = [
   // del panel a pedido del dueño, Task 121).
   { key: "categoria", label: "GRUPO", type: "text", group: "DATOS FINALES" },
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
-  // FABRICANTE y MARCA restauradas a pedido del usuario: los campos ya
-  // existían en la base de datos y en import/export Excel; ahora también se
-  // muestran y son editables en esta tabla (filtro por columna y búsqueda
-  // global ya lo soportaban). MARCA es la columna MARCA del Excel (el botón IMPORTAR FABRICANTES
-  // que la escribía fue retirado del panel a pedido del dueño, Task 121).
-  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
   // TIPO PRODUCTO (NUEVA en la tabla, Task 97): el campo "tipo" ya existía
   // en la base (col CS "Tipo" de la planilla) y en import/export Excel;
   // estaba OCULTA en esta tabla desde el pedido viejo de orden de columnas
