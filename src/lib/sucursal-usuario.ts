@@ -113,6 +113,10 @@ export const MAPA_SUCURSAL_EXCEL: Record<string, string> = {
   "ventas.giceli@viza.com.py": "LA PALOMA",
   "venta.ana@viza.com.py": "LA PALOMA",
   "ventas.victor@viza.com.py": "LA PALOMA",
+  // FLORENCIO (Task 138, pedido del dueño): ventas.florencio@ es VENTAS de
+  // LA PALOMA. Lo creó a mano desde el GDA y quedó SIN SUCURSAL; con esta
+  // entrada la siembra le crea su fila sola en la primera carga del GDA/CRM.
+  "ventas.florencio@viza.com.py": "LA PALOMA",
   "viza.redes@viza.com.py": "LA PALOMA",
   // NUEVA ESPERANZA
   "danwillian@viza.com.py": "NUEVA ESPERANZA",

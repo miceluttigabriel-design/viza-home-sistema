@@ -12,6 +12,8 @@ import {
   sembrarDesdeExcel,
   migrarCentralKatuete,
   migrarCentral,
+  asignarSucursal,
+  SUCURSALES_USUARIO,
 } from "@/lib/sucursal-usuario";
 
 // GET /api/admin/usuarios
@@ -95,11 +97,12 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { email, name, password, role: newRole } = body as {
+    const { email, name, password, role: newRole, sucursal } = body as {
       email: string;
       name?: string;
       password: string;
       role?: string;
+      sucursal?: string;
     };
 
     if (!email || !password) {
@@ -108,6 +111,15 @@ export async function POST(req: NextRequest) {
     const finalRole = (newRole === "supremo_admin" || newRole === "admin" || newRole === "colaborador")
       ? newRole
       : "colaborador";
+
+    // Task 138 (pedido del dueño): el CREAR USUARIO del GDA ahora elige la
+    // SUCURSAL — "para que no quede usuario sin sucursal". Si viene, tiene
+    // que ser una de las válidas (CENTRAL + las 4 de venta); si viene vacía
+    // o ausente se crea igual (el admin la asigna después desde el CRM).
+    const sucursalNueva = typeof sucursal === "string" ? sucursal.trim().toUpperCase() : "";
+    if (sucursalNueva && !(SUCURSALES_USUARIO as readonly string[]).includes(sucursalNueva)) {
+      return NextResponse.json({ error: "Sucursal no válida" }, { status: 400 });
+    }
 
     const existing = await db.user.findUnique({ where: { email: email.toLowerCase().trim() } });
     if (existing) {
@@ -134,7 +146,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ ok: true, id: created.id, email: created.email });
+    // Task 138: asignar la sucursal elegida (best-effort: la tabla aparte
+    // UsuarioSucursal se crea sola; si falla el usuario queda creado igual
+    // y el front avisa).
+    let sucursalAsignada = false;
+    if (sucursalNueva) {
+      sucursalAsignada = await asignarSucursal(created.email, sucursalNueva);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      id: created.id,
+      email: created.email,
+      sucursal: sucursalNueva || null,
+      sucursalAsignada,
+    });
   } catch (err: any) {
     console.error("[/api/admin/usuarios POST] Error:", err);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });

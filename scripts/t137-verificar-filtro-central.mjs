@@ -101,7 +101,7 @@ check("cobranza.katuete@ sigue en KATUETE", mapa.get("cobranza.katuete@viza.com.
 // ── 3. Las otras sucursales de la planilla intactas ──
 console.log("\n[3] LA PALOMA / NUEVA ESPERANZA / SALTOS DEL GUAIRA intactos");
 const porSuc = (s) => pares.filter(([, v]) => v === s).length;
-check("LA PALOMA sigue con sus usuarios (11)", porSuc("LA PALOMA") === 11);
+check("LA PALOMA sigue con sus usuarios (11 + florencio de la T138 = 12)", porSuc("LA PALOMA") === 12);
 check("NUEVA ESPERANZA sigue con sus usuarios (9)", porSuc("NUEVA ESPERANZA") === 9);
 check("SALTOS DEL GUAIRA sigue con sus usuarios (9)", porSuc("SALTOS DEL GUAIRA") === 9);
 

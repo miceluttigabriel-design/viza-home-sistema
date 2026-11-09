@@ -259,6 +259,9 @@ const MAPA_SECTOR_EXCEL: Record<string, string> = {
   "ventas.giceli@viza.com.py": "VENTAS",
   "venta.ana@viza.com.py": "VENTAS",
   "ventas.victor@viza.com.py": "VENTAS",
+  // FLORENCIO (Task 138, pedido del dueño): VENTAS de LA PALOMA. Se muestra
+  // igual que la planilla lo tendría; solo referencia visual del GDA.
+  "ventas.florencio@viza.com.py": "VENTAS",
   // NUEVA ESPERANZA
   "caja.ne@viza.com.py": "CAJA",
   "fac.ne@viza.com.py": "FACTURACION",
@@ -319,6 +322,10 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
   const [crearEmail, setCrearEmail] = useState("");
   const [crearContrasena, setCrearContrasena] = useState("");
   const [crearRol, setCrearRol] = useState("colaborador");
+  // Task 138 (pedido del dueño): el CREAR USUARIO elige la SUCURSAL —
+  // "para que no quede usuario sin sucursal". Empieza vacía = obliga a
+  // elegir una de las 5 (CENTRAL + las 4 de venta).
+  const [crearSucursal, setCrearSucursal] = useState("");
   const [verContrasenaCrear, setVerContrasenaCrear] = useState(false);
   const [creando, setCreando] = useState(false);
 
@@ -577,10 +584,16 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
   // Crear un usuario nuevo (Task 77): llama al POST /api/admin/usuarios que
   // ya existía en el sistema (valida, hashea con bcrypt, registra la clave
   // en PasswordLog y crea el usuario ACTIVO con el rol elegido).
+  // Task 138: ahora también manda la SUCURSAL elegida (obligatoria en el
+  // modal) y la API la asigna en UsuarioSucursal al momento de crear.
   const crearUsuario = async () => {
     const email = crearEmail.trim().toLowerCase();
     if (!email || !crearContrasena.trim()) {
       toast.error("El email y la contraseña son obligatorios");
+      return;
+    }
+    if (!crearSucursal) {
+      toast.error("Elegí la SUCURSAL del usuario (no puede quedar SIN SUCURSAL)");
       return;
     }
     setCreando(true);
@@ -593,16 +606,22 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
           name: crearNombre.trim() || undefined,
           password: crearContrasena,
           role: crearRol,
+          sucursal: crearSucursal,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `Error HTTP ${res.status}`);
-      toast.success(`Usuario creado: ${email}`);
+      if (data.sucursalAsignada === false) {
+        toast.warning(`Usuario creado: ${email}. La sucursal ${crearSucursal} no se pudo guardar — asignála desde el CRM.`, { duration: 10000 });
+      } else {
+        toast.success(`Usuario creado: ${email} · ${crearSucursal}`);
+      }
       setCrearOpen(false);
       setCrearNombre("");
       setCrearEmail("");
       setCrearContrasena("");
       setCrearRol("colaborador");
+      setCrearSucursal("");
       setVerContrasenaCrear(false);
       await cargar(true);
     } catch (e: any) {
@@ -978,7 +997,9 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                 {s}
               </option>
             ))}
-            <option value={SIN_SUCURSAL}>{SIN_SUCURSAL}</option>
+            {/* Task 138: la opción SIN SUCURSAL se quitó del filtro (pedido
+                del dueño) — ya no queda ningún usuario sin sucursal: florencio
+                fue a LA PALOMA y el CREAR USUARIO ahora exige sucursal. */}
           </select>
 
           <button
@@ -1430,8 +1451,31 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                   <option value="supremo_admin">SUPREMO ADMIN</option>
                 </select>
               </div>
+              {/* Task 138 (pedido del dueño): elegir la SUCURSAL al crear —
+                  obligatoria para que no quede usuario SIN SUCURSAL. */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wide text-stone-500 mb-1">
+                  Sucursal (obligatoria)
+                </label>
+                <select
+                  value={crearSucursal}
+                  onChange={(e) => setCrearSucursal(e.target.value)}
+                  className={`w-full h-10 px-3 rounded-lg border text-sm font-medium focus:outline-none ${
+                    crearSucursal
+                      ? "bg-stone-100 border-stone-200"
+                      : "bg-amber-50 border-amber-300"
+                  }`}
+                >
+                  <option value="">— ELEGIR SUCURSAL —</option>
+                  {SUCURSALES_GDA.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <p className="text-[11px] text-stone-500 leading-relaxed">
-                Se crea ACTIVO y queda registrado en la bitácora de contraseñas (PasswordLog), igual que un reseteo. Si el email está en la planilla, sector y sucursal se asignan solos (ej.: ventas.lorena@viza.com.py = VENTAS / KATUETE). Su número de CONTACTO aparece solo si la planilla FUN.VIZA lo tiene.
+                Se crea ACTIVO y queda registrado en la bitácora de contraseñas (PasswordLog), igual que un reseteo. La SUCURSAL se guarda al momento de crear (obligatoria desde la Task 138 — ningún usuario queda SIN SUCURSAL). Si el email está en la planilla, el SECTOR se asigna solo (ej.: ventas.lorena@viza.com.py = VENTAS). Su número de CONTACTO aparece solo si la planilla FUN.VIZA lo tiene.
               </p>
               <div className="flex gap-2 pt-1">
                 <button
@@ -1443,7 +1487,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                 </button>
                 <button
                   onClick={crearUsuario}
-                  disabled={creando || !crearEmail.trim() || !crearContrasena.trim()}
+                  disabled={creando || !crearEmail.trim() || !crearContrasena.trim() || !crearSucursal}
                   className="h-10 flex-1 rounded-lg font-bold text-xs uppercase bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {creando ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
