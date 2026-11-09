@@ -82,11 +82,13 @@ console.log("\n[5] Vista STOCK GENERAL sigue SOLO LECTURA y con las columnas de 
 // productos (la vista Stock General sigue SOLO LECTURA para la Base).
 const stockSinIdeal = stock.replace(/fetch\("\/api\/stock\/ideal",\s*\{\s*method: "PUT"/g, "");
 check("sin PUT/PATCH de productos desde la vista stock (solo se permite PUT /api/stock/ideal de la T127)", !/(method:\s*["'](PUT|PATCH)["'])/.test(stockSinIdeal));
-check("COLS_BASE sigue con las 10 columnas de la Base en orden", (() => {
+check("COLS_BASE sigue con las 10 columnas de la Base en orden (Task 136: MARCA al lado derecho de PROVEDOR)", (() => {
   const m = stock.match(/const COLS_BASE[\s\S]*?\n\];/);
   if (!m) return false;
   const keys = [...m[0].matchAll(/key: "(\w+)"/g)].map((x) => x[1]);
-  const esperado = ["fabricante", "categoria", "subGrupo", "marca", "tipo", "modelo", "capacidad", "cores", "referencia", "name"];
+  // Orden actualizado por Task 136 (v2): MARCA al lado derecho de
+  // PROVEDOR (entre PROVEDOR y GRUPO); antes de la T136 iba tras SUB-GRUPO.
+  const esperado = ["fabricante", "marca", "categoria", "subGrupo", "tipo", "modelo", "capacidad", "cores", "referencia", "name"];
   return JSON.stringify(keys) === JSON.stringify(esperado);
 })());
 

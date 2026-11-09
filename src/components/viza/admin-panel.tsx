@@ -285,6 +285,10 @@ const COLUMNS: ColDef[] = [
   // Orden de columnas a pedido del usuario (Task 97, despues del COD fijo):
   //   COD > PROVEDOR > GRUPO > SUBGRUPO > MARCA > TIPO PRODUCTO > MODELO >
   //   > CAPACIDAD > CORES > REF.FABRICA > DESCRIPCION
+  // Task 136 (v2, pedido del dueño): "MARCA ... en frente de PROVEDOR lado
+  // derecho ... atras de grupo ... seria COD > PROVEDOR > MARCA > GRUPO y
+  // etc" — MARCA quedó al LADO DERECHO de PROVEDOR (entre PROVEDOR y
+  // GRUPO; en esta tabla "atras de X" = antes de X, a la izquierda).
   // Task 98: el dueño pidió "crea una coluna nombre CORES entre la coluna
   // MODELO y CAPACIDAD" — CORES es la columna NUEVA de esta tarea (texto
   // libre, vive en la tabla aparte ProductCores, mismo patrón que
@@ -304,6 +308,17 @@ const COLUMNS: ColDef[] = [
   // Renombre visual (pedido del usuario): se muestra PROVEDOR; el campo/key
   // "fabricante" queda intacto (datos, filtro, API, import y export sin cambios).
   { key: "fabricante", label: "PROVEDOR", type: "text", group: "DATOS FINALES" },
+  // Task 136 (v2): MARCA al LADO DERECHO de PROVEDOR (entre PROVEDOR y
+  // GRUPO) — pedido del dueño: "seria COD > PROVEDOR > MARCA > GRUPO y etc".
+  // Solo cambia la POSICION visual; keys/datos/filtros/import/export
+  // intactos. MARCA sigue columna FIJA (lo era desde la Task 99, con celdas
+  // doradas) — ver FROZEN_COLUMNS, donde quedó en la MISMA posición para
+  // que las posiciones sticky sigan espejando este orden. Mismo cambio
+  // espejado en STOCK GENERAL (stock-general.tsx COLS_BASE, regla de la
+  // Task 124: mismo orden que la Base).
+  // MARCA es la columna MARCA del Excel (el botón IMPORTAR FABRICANTES que
+  // la escribía fue retirado del panel a pedido del dueño, Task 121).
+  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
   // GRUPO: en la base es el campo "categoria" (col CQ "CATEGORIA" de la
   // planilla), el mismo que ya usan el export Excel y la importación de
   // productos. Se muestra (como GRUPO) y es editable en esta tabla; la planilla
@@ -311,12 +326,11 @@ const COLUMNS: ColDef[] = [
   // del panel a pedido del dueño, Task 121).
   { key: "categoria", label: "GRUPO", type: "text", group: "DATOS FINALES" },
   { key: "subGrupo", label: "SUB-GRUPO", type: "text", group: "DATOS FINALES" },
-  // FABRICANTE y MARCA restauradas a pedido del usuario: los campos ya
-  // existían en la base de datos y en import/export Excel; ahora también se
-  // muestran y son editables en esta tabla (filtro por columna y búsqueda
-  // global ya lo soportaban). MARCA es la columna MARCA del Excel (el botón IMPORTAR FABRICANTES
-  // que la escribía fue retirado del panel a pedido del dueño, Task 121).
-  { key: "marca", label: "MARCA", type: "text", group: "DATOS FINALES" },
+  // (Historia de la Task anterior: FABRICANTE y MARCA fueron restauradas a
+  // pedido del usuario — los campos ya existían en la base de datos y en
+  // import/export Excel; filtro por columna y búsqueda global ya los
+  // soportaban. En la Task 136 MARCA se mudó al lado derecho de PROVEDOR,
+  // entre PROVEDOR y GRUPO — ver arriba.)
   // TIPO PRODUCTO (NUEVA en la tabla, Task 97): el campo "tipo" ya existía
   // en la base (col CS "Tipo" de la planilla) y en import/export Excel;
   // estaba OCULTA en esta tabla desde el pedido viejo de orden de columnas
@@ -445,9 +459,14 @@ const COLUMNS: ColDef[] = [
 // Task 99 (pedido del dueño, AMPLIA el pedido de la Task 98): "TODAS ESTAS
 // COLUNAS TIENEN QUE ESTAR FIJAS Y EL FONDO DE LAS CELDAS DE ELLAS SON
 // DOURADO COMO LA DE COD Y ACCIONES". Vuelven a quedar fijas TODAS las del
-// bloque izquierdo, EN EL ORDEN real de la tabla: PROVEDOR > GRUPO >
-// SUB-GRUPO > MARCA > TIPO PRODUCTO > MODELO > CAPACIDAD > CORES >
-// REF.FABRICA (CORES quedó a la IZQUIERDA de REF.FABRICA, corrección
+// bloque izquierdo.
+//
+// Task 136 (v2, pedido del dueño): MARCA al LADO DERECHO de PROVEDOR
+// (entre PROVEDOR y GRUPO) — "seria COD > PROVEDOR > MARCA > GRUPO y etc".
+// Sigue FIJA (lo era desde la Task 99), ahora en esa posición. El orden de
+// este array SIEMPRE tiene que espejar el de COLUMNS (las posiciones left
+// fijas se acumulan en ese orden — frozenLeftsDesde).
+// (CORES quedó a la IZQUIERDA de REF.FABRICA, corrección
 // Task 105: "COLUNA CORES ATRAS DE REF.FABRICA LADO ISQUIERDO...
 // QUEDO DEL LADO DERECHO" — "atras de X" = antes de X, criterio ya
 // validado). Las CELDAS de todas ellas
@@ -464,9 +483,9 @@ const COLUMNS: ColDef[] = [
 // orden — frozenLeftsDesde).
 const FROZEN_COLUMNS: { key: string; width: number }[] = [
   { key: "fabricante", width: 130 }, // PROVEDOR (FIJA, pedido del dueño Task 99)
+  { key: "marca", width: 100 },      // MARCA (FIJA Task 99; al LADO DERECHO de PROVEDOR, Task 136)
   { key: "categoria", width: 100 },  // GRUPO (FIJA, pedido del dueño Task 99)
   { key: "subGrupo", width: 120 },   // SUB-GRUPO (FIJA, pedido del dueño Task 99)
-  { key: "marca", width: 100 },      // MARCA (FIJA, pedido del dueño Task 99)
   { key: "tipo", width: 120 },       // TIPO PRODUCTO (FIJA, pedido del dueño Task 98/99)
   { key: "modelo", width: 130 },     // MODELO (FIJA, pedido del dueño Task 99)
   { key: "capacidad", width: 100 },  // CAPACIDAD (FIJA, pedido del dueño Task 98/99)

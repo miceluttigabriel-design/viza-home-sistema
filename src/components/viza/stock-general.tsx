@@ -135,18 +135,22 @@ interface ProdFila {
 }
 
 // ─── Task 124: columnas de LA BASE dentro de STOCK GENERAL ───
-// La MISMA orden que la tabla de la Base (Tasks 97/98/105):
-// PROVEDOR > GRUPO > SUB-GRUPO > MARCA > TIPO PRODUCTO > MODELO >
-// > CAPACIDAD > CORES > REF.FABRICA > DESCRIPCION. "grupo" es la etiqueta
+// La MISMA orden que la tabla de la Base (Tasks 97/98/105 y Task 136):
+// PROVEDOR > MARCA > GRUPO > SUB-GRUPO > TIPO PRODUCTO > MODELO >
+// > CAPACIDAD > CORES > REF.FABRICA > DESCRIPCION. (Task 136, pedido del
+// dueño: MARCA quedó al LADO DERECHO de PROVEDOR — "seria COD > PROVEDOR >
+// MARCA > GRUPO y etc" — y acá se espeja igual para seguir cumpliendo la
+// regla de esta tarea: Stock General = mismo orden que la Base. Solo
+// posición visual; keys/datos intactos.) "grupo" es la etiqueta
 // chiquita que aparece ENCIMA del nombre, igual que en la Base (PROVEDOR…
 // CORES llevan DATOS FINALES; REF.FABRICA y DESCRIPCION llevan DATOS).
 // COD va primero y STOCK/SALDO queda al final (columna propia de esta
 // vista). Solo LECTURA: para editar un dato, LA BASE.
 const COLS_BASE: Array<{ key: keyof ProdFila; label: string; grupo: string | null }> = [
   { key: "fabricante", label: "PROVEDOR", grupo: "DATOS FINALES" },
+  { key: "marca", label: "MARCA", grupo: "DATOS FINALES" }, // Task 136: al LADO DERECHO de PROVEDOR (igual que la Base)
   { key: "categoria", label: "GRUPO", grupo: "DATOS FINALES" },
   { key: "subGrupo", label: "SUB-GRUPO", grupo: "DATOS FINALES" },
-  { key: "marca", label: "MARCA", grupo: "DATOS FINALES" },
   { key: "tipo", label: "TIPO PRODUCTO", grupo: "DATOS FINALES" },
   { key: "modelo", label: "MODELO", grupo: "DATOS FINALES" },
   { key: "capacidad", label: "CAPACIDAD", grupo: "DATOS FINALES" },
