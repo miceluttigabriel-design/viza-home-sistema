@@ -31,15 +31,21 @@ export const ENCARGADOS_SUCURSAL: Record<string, string> = {
 // etiqueta visible (pedido del dueño: "vas a poner como usuario tipo ESPECIAL").
 export const TIPOS_ESPECIAL = ENCARGADOS_SUCURSAL;
 
-// ─── USUARIOS VIP (Task 139, pedido del dueño) ───────────────────────────────
+// ─── USUARIOS VIP (Task 139 + Task 147, pedido del dueño) ────────────────────
 // "filipe.campos@ y viza.compras@ estos dos usuarios el TIPO vas a poner como
-// VIP". Etiqueta visible únicamente en el GDA: NO da acceso al CRM, NO cambia
-// el rol en la base, NO cambia ningún permiso. (Si más adelante el dueño
-// quiere que alguno de estos entre al CRM, se agrega a ENCARGADOS_SUCURSAL.)
-// Valor = sucursal del usuario, informativa (hoy los dos son de CENTRAL).
+// VIP". Task 147: se suman larazago@, juliane@, julianamoleiro@ y juliozago@.
+// Etiqueta visible en el GDA y acceso al ORQUESTADOR (Task 144). Para ver el
+// CRM y la Base en SOLO LECTURA, el email también va en la lista de
+// src/lib/usuarios-consulta.ts (así lo hacen todos los VIP de hoy).
+// Valor = sucursal del usuario, informativa (todos son de CENTRAL).
 export const USUARIOS_VIP: Record<string, string> = {
   // DIRECTORIO (Task 137: sucursal CENTRAL)
   "filipe.campos@viza.com.py": "CENTRAL",
   // ENC. COMPRAS (Task 137: sucursal CENTRAL)
   "viza.compras@viza.com.py": "CENTRAL",
+  // Task 147 — VIPs (sucursal CENTRAL)
+  "larazago@viza.com.py": "CENTRAL",
+  "juliane@viza.com.py": "CENTRAL",
+  "julianamoleiro@viza.com.py": "CENTRAL",
+  "juliozago@viza.com.py": "CENTRAL",
 };

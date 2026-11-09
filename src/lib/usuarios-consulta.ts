@@ -10,6 +10,8 @@
 //   · Task 82: filipe.campos@viza.com.py — ADM solo para VISUALIZACIÓN de la
 //     Base y el CRM (misma configuración que viza.compras@: la base no la
 //     puede editar).
+//   · Task 147: larazago@, juliane@, julianamoleiro@ y juliozago@ — usuarios
+//     VIP: ven el CRM y la Base completa, pero NADA editable (misma regla).
 //
 // El control va por EMAIL y NO por rol: así el modo lectura se aplica SIEMPRE
 // para estos usuarios, tengan el rol que tengan en la base. El backend también
@@ -22,6 +24,11 @@
 export const EMAILS_SOLO_LECTURA_BASE: string[] = [
   "viza.compras@viza.com.py",
   "filipe.campos@viza.com.py",
+  // Task 147 — VIPs: CRM + Base solo lectura
+  "larazago@viza.com.py",
+  "juliane@viza.com.py",
+  "julianamoleiro@viza.com.py",
+  "juliozago@viza.com.py",
 ];
 
 // Devuelve true si el email recibido es un usuario de consulta (solo lectura).
