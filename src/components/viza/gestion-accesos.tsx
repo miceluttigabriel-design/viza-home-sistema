@@ -133,10 +133,20 @@ function tipoUsuario(role: string, email?: string): string {
 }
 
 // ─── SUCURSALES para dividir la tabla de usuarios (pedido del dueño) ───
-// MISMA lista que SUCURSALES_VIZA de src/lib/sucursal-usuario.ts, pero
-// definida ACÁ a propósito: esa lib importa Prisma (solo servidor) y este
-// componente es cliente, así que NO se puede importar de ahí.
-const SUCURSALES_GDA = ["KATUETE", "LA PALOMA", "NUEVA ESPERANZA", "SALTOS DEL GUAIRA"] as const;
+// Task 137: CENTRAL vuelve a ser una sucursal propia para USUARIOS (la
+// oficina central estaba metida "dentro de KATUETE" y el dueño pasó la lista
+// de 24 correos que deben quedar en CENTRAL). MISMA lista que
+// SUCURSALES_USUARIO de src/lib/sucursal-usuario.ts, pero definida ACÁ a
+// propósito: esa lib importa Prisma (solo servidor) y este componente es
+// cliente, así que NO se puede importar de ahí. Las sucursales de STOCK de
+// productos siguen siendo solo las 4 de venta — esto es solo de usuarios.
+const SUCURSALES_GDA = [
+  "CENTRAL",
+  "KATUETE",
+  "LA PALOMA",
+  "NUEVA ESPERANZA",
+  "SALTOS DEL GUAIRA",
+] as const;
 const SIN_SUCURSAL = "SIN SUCURSAL";
 
 // Sucursal normalizada de un usuario (mayúsculas, sin espacios). Vacía o
@@ -201,7 +211,8 @@ const MAPA_SECTOR_EXCEL: Record<string, string> = {
   "antonio.fagner@viza.com.py": "ENC. SUCURSAL",
   "librado@viza.com.py": "ENC. SUCURSAL",
   // Compras central (pedido del dueño, Task 76): Adriano Ruiz Gómez es
-  // ENC. COMPRAS (la planilla lo traía como GENERAL); su sucursal es KATUETE.
+  // ENC. COMPRAS (la planilla lo traía como GENERAL); Task 137: su sucursal
+  // es CENTRAL (antes KATUETE).
   "viza.compras@viza.com.py": "ENC. COMPRAS",
   // Administración central (planilla CENTRAL)
   "contabilidad@viza.com.py": "CONTABILIDAD",
@@ -231,7 +242,7 @@ const MAPA_SECTOR_EXCEL: Record<string, string> = {
   "ventas.paola@viza.com.py": "VENTAS",
   "ventas.richard@viza.com.py": "VENTAS",
   // Televentas (Task 77, pedido del dueño): vendedor@ (COMERCIAL VIZA HOME
-  // E.A.S) es TELEVENTAS de KATUETE (antes salía GENERAL).
+  // E.A.S) es TELEVENTAS; Task 137: sucursal CENTRAL (antes KATUETE).
   "vendedor@viza.com.py": "TELEVENTAS",
   // LORENA MERCADO PEREZ (Task 77): VENTAS de KATUETE. Se crea con el botón
   // CREAR USUARIO del GDA; se dejan los 2 emails que sigue el patrón de la
@@ -709,8 +720,9 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
   // ─── DIVISIÓN POR SUCURSAL (pedido del dueño) ───
   // Aplana los usuarios filtrados en una lista de filas para la tabla:
   // una fila-cabecera por sucursal (con su cantidad) seguida de los usuarios
-  // de esa sucursal. Orden: KATUETE, LA PALOMA, NUEVA ESPERANZA, SALTOS DEL
-  // GUAIRA; después cualquier valor viejo no listado (ej. "CENTRAL/KATUETE")
+  // de esa sucursal. Orden: CENTRAL (Task 137, casa matriz), KATUETE, LA
+  // PALOMA, NUEVA ESPERANZA, SALTOS DEL GUAIRA; después cualquier valor viejo
+  // no listado (ej. "CENTRAL/KATUETE")
   // alfabético; y "SIN SUCURSAL" siempre al final. Se conservan los filtros
   // de búsqueda y rol: solo aparecen las sucursales que tienen usuarios.
   type FilaTabla =
@@ -904,7 +916,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
 
         {/* USUARIOS POR SUCURSAL: tarjetas de resumen (pedido del dueño, Task 75).
             Cuenta sobre TODOS los usuarios (igual que la tarjeta TOTAL). */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {SUCURSALES_GDA.map((s) => (
             <div key={s} className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
               <div

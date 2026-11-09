@@ -3,10 +3,11 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
-  SUCURSALES_VIZA,
+  SUCURSALES_USUARIO,
   leerMapaSucursales,
   sembrarDesdeExcel,
   migrarCentralKatuete,
+  migrarCentral,
 } from "@/lib/sucursal-usuario";
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
@@ -152,6 +153,10 @@ export async function GET() {
     // parte que sacaba a cobranza.katuete@ de KATUETE quedó revertida —
     // vuelve a KATUETE por la siembra del mapa.)
     await migrarCentralKatuete();
+    // Task 137 (pedido del dueño): los usuarios de la oficina central que
+    // estaban en KATUETE pasan a SU sucursal CENTRAL (una sola pasada en la
+    // vida de la base; después manda lo que el admin ajuste a mano).
+    await migrarCentral();
 
     let mapaSuc = await leerMapaSucursales();
     const sinSucursal = users.filter(
@@ -206,7 +211,9 @@ export async function GET() {
 
     return NextResponse.json({
       ranking,
-      sucursales: SUCURSALES_VIZA,
+      // Task 137: la lista del CRM ahora incluye CENTRAL (asignación de
+      // usuarios). Las sucursales de STOCK siguen siendo solo las 4 de venta.
+      sucursales: SUCURSALES_USUARIO,
       totalGeneral,
     });
   } catch (error) {

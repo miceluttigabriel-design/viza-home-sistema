@@ -11,6 +11,7 @@ import {
   leerMapaSucursales,
   sembrarDesdeExcel,
   migrarCentralKatuete,
+  migrarCentral,
 } from "@/lib/sucursal-usuario";
 
 // GET /api/admin/usuarios
@@ -33,10 +34,13 @@ export async function GET() {
     // Mapa email → sucursal (tabla UsuarioSucursal). Nunca tira: internamente
     // crea la tabla si falta y degrada a mapa vacío si algo falla.
     // MISMO patrón del CRM (/api/crm/ranking): 1) migrar valores viejos
-    // ("CENTRAL/KATUETE" → "KATUETE"), 2) sembrar SOLO los usuarios que aún
-    // no tienen asignación (jamás sobrescribe lo que el admin cambió a mano
-    // en el CRM), 3) releer el mapa. Todo best-effort e idempotente.
+    // ("CENTRAL/KATUETE" → "KATUETE"), 1b) Task 137: mover a CENTRAL los
+    // usuarios de la oficina central que el dueño pasó (estaban en KATUETE),
+    // 2) sembrar SOLO los usuarios que aún no tienen asignación (jamás
+    // sobrescribe lo que el admin cambió a mano en el CRM), 3) releer el
+    // mapa. Todo best-effort e idempotente.
     await migrarCentralKatuete();
+    await migrarCentral();
 
     let mapaSucursales = await leerMapaSucursales();
     const sinSucursal = usuarios.filter(

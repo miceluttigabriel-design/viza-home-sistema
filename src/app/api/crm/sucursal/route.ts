@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { SUCURSALES_VIZA, asignarSucursal } from "@/lib/sucursal-usuario";
+import { SUCURSALES_USUARIO, asignarSucursal } from "@/lib/sucursal-usuario";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 // PUT /api/crm/sucursal — asigna (o quita) la sucursal de UN usuario para
@@ -38,7 +38,10 @@ export async function PUT(req: NextRequest) {
     if (!userEmail || !userEmail.includes("@")) {
       return NextResponse.json({ error: "Email de usuario inválido" }, { status: 400 });
     }
-    if (sucursal && !(SUCURSALES_VIZA as readonly string[]).includes(sucursal)) {
+    // Task 137: se valida contra SUCURSALES_USUARIO (incluye CENTRAL para
+    // los usuarios de la oficina central); las sucursales de STOCK siguen
+    // siendo las 4 de venta y no aceptan CENTRAL.
+    if (sucursal && !(SUCURSALES_USUARIO as readonly string[]).includes(sucursal)) {
       return NextResponse.json({ error: "Sucursal no válida" }, { status: 400 });
     }
 

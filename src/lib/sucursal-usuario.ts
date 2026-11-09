@@ -21,9 +21,10 @@
 import { db } from "@/lib/db";
 
 // Sucursales oficiales de VIZA (de la planilla de funcionarios FUN.VIZA).
-// El orden es el que se muestra en los filtros del CRM.
-// ("CENTRAL/KATUETE" dejó de existir como filtro del CRM: la oficina central
-//  pasa a trabajar dentro de "KATUETE", que ya existe como sucursal propia.)
+// Estas 4 son las SUCURSALES DE VENTA: las que tienen STOCK de productos
+// (los cuadritos del buscador, el orquestador y el stock por sucursal usan
+// esta lista). NO agregar "CENTRAL" acá: la oficina central no vende ni
+// tiene stock de productos.
 export const SUCURSALES_VIZA = [
   "KATUETE",
   "LA PALOMA",
@@ -31,39 +32,54 @@ export const SUCURSALES_VIZA = [
   "SALTOS DEL GUAIRA",
 ] as const;
 
+// Task 137 (pedido del dueño): CENTRAL vuelve a existir como sucursal propia
+// para los USUARIOS. "Tenemos usuarios en Katuete que son de Central": la
+// oficina central (directorio, contabilidad, crédito, cobranza, RR.HH,
+// marketing, televentas, etc.) vuelve a tener SU filtro, ahora en el GDA
+// (Gestión de Accesos), y sus usuarios salen de KATUETE.
+// Esta lista es la de ASIGNACIÓN DE USUARIOS (GDA + CRM: filtro, agrupación
+// de la tabla, ranking y select de asignación). Empieza con CENTRAL porque
+// es la casa matriz. Las sucursales de STOCK siguen siendo solo las 4 de
+// SUCURSALES_VIZA (arriba) — cero cambio en productos.
+export const SUCURSALES_USUARIO = ["CENTRAL", ...SUCURSALES_VIZA] as const;
+
 // Mapa email → sucursal sacado de la planilla oficial de funcionarios
 // (hoja FUN.VIZA, columnas SUCURSAL y CORREO). Solo se usa para SEMBRAR la
 // asignación automática la primera vez; después manda lo guardado en la
 // base (que el admin puede editar a mano). Emails en minúscula.
 export const MAPA_SUCURSAL_EXCEL: Record<string, string> = {
-  // CENTRAL (oficina central de VIZA, ahora dentro de KATUETE)
-  "viza@viza.com.py": "KATUETE",
-  "juliane@viza.com.py": "KATUETE",
-  "larazago@viza.com.py": "KATUETE",
-  "juliozago@viza.com.py": "KATUETE",
-  "filipe.campos@viza.com.py": "KATUETE",
-  "julianamoleiro@viza.com.py": "KATUETE",
-  "baltazar@viza.com.py": "KATUETE",
-  "contabilidad@viza.com.py": "KATUETE",
-  "sac@viza.com.py": "KATUETE",
-  "rrhh@viza.com.py": "KATUETE",
-  "auditoria.stock@viza.com.py": "KATUETE",
-  "auditoria@viza.com.py": "KATUETE",
-  "documentos@viza.com.py": "KATUETE",
-  "viza.marketing@viza.com.py": "KATUETE",
-  "viza.artes@viza.com.py": "KATUETE",
-  "viza.web@viza.com.py": "KATUETE",
-  "ventas.online@viza.com.py": "KATUETE",
-  "factura@viza.com.py": "KATUETE",
-  "sercom@viza.com.py": "KATUETE",
-  "viza.cobranza@viza.com.py": "KATUETE",
-  "credito@viza.com.py": "KATUETE",
-  "credito1@viza.com.py": "KATUETE",
+  // CENTRAL (oficina central de VIZA — Task 137, pedido del dueño: estos
+  // usuarios estaban visibles bajo KATUETE y pasan a SU filtro CENTRAL).
+  // El dueño pasó la lista exacta de 24 correos. La migración de abajo
+  // (migrarCentral) mueve los que ya estaban guardados como KATUETE.
+  "viza.cobranza@viza.com.py": "CENTRAL",
+  "auditoria.stock@viza.com.py": "CENTRAL",
+  "auditoria@viza.com.py": "CENTRAL",
+  "contabilidad@viza.com.py": "CENTRAL",
+  "credito1@viza.com.py": "CENTRAL",
+  "credito@viza.com.py": "CENTRAL",
+  "documentos@viza.com.py": "CENTRAL",
+  "factura@viza.com.py": "CENTRAL",
+  "filipe.campos@viza.com.py": "CENTRAL",
+  "julianamoleiro@viza.com.py": "CENTRAL",
+  "juliane@viza.com.py": "CENTRAL",
+  "juliozago@viza.com.py": "CENTRAL",
+  "larazago@viza.com.py": "CENTRAL",
+  "rrhh@viza.com.py": "CENTRAL",
+  "sac@viza.com.py": "CENTRAL",
+  "sercom@viza.com.py": "CENTRAL",
+  "vendedor@viza.com.py": "CENTRAL",
+  "ventas.online@viza.com.py": "CENTRAL",
+  "viza.artes@viza.com.py": "CENTRAL",
+  "viza.marketing@viza.com.py": "CENTRAL",
+  "viza.web@viza.com.py": "CENTRAL",
+  "baltazar@viza.com.py": "CENTRAL",
   // Compras central (pedido del dueño, Task 76): Adriano Ruiz Gómez
-  // (viza.compras@) es ENC. COMPRAS de la central y su sucursal es KATUETE
-  // (antes quedaba SIN SUCURSAL porque no estaba en la planilla). La siembra
-  // solo crea la fila si NO existe: jamás toca una asignación ya guardada.
-  "viza.compras@viza.com.py": "KATUETE",
+  // (viza.compras@) es ENC. COMPRAS de la central. Task 137: sucursal
+  // CENTRAL (la siembra solo crea la fila si NO existe: jamás toca una
+  // asignación ya guardada; los ya guardados los mueve migrarCentral).
+  "viza.compras@viza.com.py": "CENTRAL",
+  "viza@viza.com.py": "CENTRAL",
   // KATUETE
   // cobranza.katuete@viza.com.py vuelve a KATUETE (Task 77, pedido del
   // dueño): se vuelve a sembrar y la migración de abajo YA NO lo borra.
@@ -77,9 +93,9 @@ export const MAPA_SUCURSAL_EXCEL: Record<string, string> = {
   "ventas.emmanuel@viza.com.py": "KATUETE",
   "ventas.paola@viza.com.py": "KATUETE",
   "ventas.richard@viza.com.py": "KATUETE",
-  // Televentas (Task 77, pedido del dueño): vendedor@ (COMERCIAL VIZA HOME
-  // E.A.S) es de KATUETE. Antes quedaba SIN SUCURSAL.
-  "vendedor@viza.com.py": "KATUETE",
+  // Televentas vendedor@ (Task 77): pasó de KATUETE a CENTRAL en la Task 137
+  // (el dueño lo incluyó en su lista de 24 correos de la central — ver el
+  // bloque CENTRAL de arriba). La entrada vieja de KATUETE se quitó.
   // LORENA MERCADO PEREZ (Task 77, pedido del dueño): VENTAS de KATUETE.
   // El usuario se crea desde el GDA (botón CREAR USUARIO); se dejan los 2
   // emails que sigue el patrón de la planilla — el que no se use nunca
@@ -283,5 +299,77 @@ export async function migrarCentralKatuete(): Promise<void> {
     await intentar();
   } catch {
     // sin tabla / BD caída: degradar en silencio, el ranking sigue igual
+  }
+}
+
+// ─── Task 137 (pedido del dueño): los usuarios de la CENTRAL salen de KATUETE ───
+// La oficina central estaba trabajando "dentro de KATUETE" (decisión vieja del
+// CRM) y el dueño pidió que vuelva a tener SU sucursal: pasó la lista exacta
+// de 24 correos que deben quedar en CENTRAL (la MISMA lista que quedó en el
+// MAPA_SUCURSAL_EXCEL de arriba con valor "CENTRAL").
+//
+// Esta migración mueve en la base lo que ya estaba guardado:
+//   · filas de esos 24 emails con valor viejo "KATUETE" (u otro) → "CENTRAL";
+//   · emails de la lista que NO tienen fila todavía (quedaron "SIN SUCURSAL")
+//     → se les crea la fila en "CENTRAL".
+//
+// CORRE UNA SOLA VEZ EN LA VIDA DE LA BASE (no por instancia): antes de
+// escribir cuenta si YA existe alguien en "CENTRAL"; si existe, alguien ya
+// fue movido/asignado y NO vuelve a tocar nada — así respeta para siempre
+// cualquier cambio manual del admin después de esta primera pasada.
+//
+// Idempotente y best-effort, mismo estilo de migrarCentralKatuete: si la
+// tabla todavía no existe se crea sola y se reintenta; si aun así falla,
+// se degrada en silencio. Escribe SOLO en la tabla aparte "UsuarioSucursal":
+// NUNCA toca User, Quote ni Product.
+let migradoCentral = false;
+
+export async function migrarCentral(): Promise<void> {
+  if (migradoCentral) return;
+  migradoCentral = true; // aunque falle no se reintenta en esta instancia
+  const intentar = async (): Promise<void> => {
+    // ¿Ya hay alguien en CENTRAL? → la primera pasada ya se hizo (aquí o en
+    // otra instancia): no tocar NADA, manda lo que el admin ajuste a mano.
+    const yaHayCentral = await db.usuarioSucursal.count({
+      where: { sucursal: "CENTRAL" },
+    });
+    if (yaHayCentral > 0) return;
+
+    // Emails de la lista del dueño (los que quedaron con valor "CENTRAL"
+    // en el mapa de la planilla — única fuente de verdad).
+    const emailsCentral = Object.entries(MAPA_SUCURSAL_EXCEL)
+      .filter(([, suc]) => suc === "CENTRAL")
+      .map(([email]) => email);
+
+    // 1) Los que tienen fila (hoy en KATUETE) pasan a CENTRAL.
+    await db.usuarioSucursal.updateMany({
+      where: { userEmail: { in: emailsCentral } },
+      data: { sucursal: "CENTRAL" },
+    });
+
+    // 2) Los que NO tienen fila (SIN SUCURSAL) reciben su fila en CENTRAL.
+    const conFila = await db.usuarioSucursal.findMany({
+      where: { userEmail: { in: emailsCentral } },
+      select: { userEmail: true },
+    });
+    const yaTienen = new Set(conFila.map((f) => f.userEmail.trim().toLowerCase()));
+    for (const email of emailsCentral) {
+      if (!yaTienen.has(email)) {
+        const ok = await asignarSucursal(email, "CENTRAL");
+        if (!ok) return; // sin tabla/BD caída: degradar sin ruido
+      }
+    }
+  };
+  try {
+    await intentar();
+    return;
+  } catch (error) {
+    if (!esErrorTablaFaltante(error)) return;
+    if (!(await ensureTablaUsuarioSucursal())) return;
+  }
+  try {
+    await intentar();
+  } catch {
+    // sin tabla / BD caída: degradar en silencio, el GDA sigue igual
   }
 }

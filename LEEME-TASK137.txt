@@ -1,0 +1,118 @@
+================================================================================
+ VIZA HOME E.A.S — TASK 137 · FILTRO CENTRAL EN EL GDA
+ Sistema de Cotización y Presupuestos
+================================================================================
+
+AMIGO, QUÉ PIDISTE
+--------------------------------------------------------------------------------
+"Dentro de GDA necessitamos un filtro para CENTRAL, tenemos usuarios en
+Katuete que son de CENTRAL" — y me pasaste la lista de correos que deben
+quedar en CENTRAL.
+
+QUÉ SE HIZO
+--------------------------------------------------------------------------------
+1) EL FILTRO CENTRAL EN EL GDA (GESTIÓN DE ACCESOS)
+   · El filtro de sucursal ahora tiene: TODAS LAS SUCURSALES · CENTRAL ·
+     KATUETE · LA PALOMA · NUEVA ESPERANZA · SALTOS DEL GUAIRA · SIN SUCURSAL.
+   · CENTRAL aparece PRIMERO (es la casa matriz).
+   · La tabla se sigue dividiendo por sucursal: CENTRAL tiene su fila-cabecera
+     con su cantidad y sus usuarios debajo, igual que las demás.
+   · Las tarjetas de conteo de arriba ahora son 6 (5 sucursales + SIN
+     SUCURSAL), con la tarjeta CENTRAL incluida.
+   · El botón DESCARGAR LISTADO TXT también agrupa con CENTRAL primero.
+
+2) TUS 24 USUARIOS PASARON DE KATUETE → CENTRAL
+   La lista EXACTA que me pasaste (24 correos):
+     viza.cobranza@viza.com.py
+     auditoria.stock@viza.com.py
+     auditoria@viza.com.py
+     contabilidad@viza.com.py
+     credito1@viza.com.py
+     credito@viza.com.py
+     documentos@viza.com.py
+     factura@viza.com.py
+     filipe.campos@viza.com.py
+     julianamoleiro@viza.com.py
+     juliane@viza.com.py
+     juliozago@viza.com.py
+     larazago@viza.com.py
+     rrhh@viza.com.py
+     sac@viza.com.py
+     sercom@viza.com.py
+     vendedor@viza.com.py          (televentas)
+     ventas.online@viza.com.py
+     viza.artes@viza.com.py
+     viza.marketing@viza.com.py
+     viza.web@viza.com.py
+     baltazar@viza.com.py
+     viza.compras@viza.com.py      (enc. compras)
+     viza@viza.com.py              (supremo)
+   Todos quedan bajo el filtro CENTRAL en el GDA.
+
+   SE MUEVEN SOLOS: la primera vez que se cargue el GDA (o el CRM) después
+   del deploy, el sistema migra los que estaban guardados como KATUETE hacia
+   CENTRAL automáticamente. NO hay que tocar nada a mano. Y es UNA sola
+   pasada: después, si cambiás a alguien a mano (select del CRM), el sistema
+   NUNCA lo vuelve a mover.
+
+3) EL PERSONAL REAL DE KATUETE NO SE TOCA
+   Siguen en KATUETE: jeyson@ (enc. sucursal), cobranza.katuete@,
+   caja.katuete@, fact.katuete@, deposito.katuete@, ventas.rafael@,
+   ventas.carla@, ventas.emmanuel@, ventas.paola@, ventas.richard@,
+   ventas.lorena@ y lorena@. También quedaron igual LA PALOMA (11),
+   NUEVA ESPERANZA (9) y SALTOS DEL GUAIRA (9).
+
+4) EL CRM QUEDA COHERENTE (mismo dato, una sola fuente)
+   El dato de sucursal es EL MISMO para el GDA y para el CRM (ranking de
+   presupuestos). Por eso:
+   · El CRM ahora también muestra la pill/filtro CENTRAL y el select de
+     asignación permite poner a alguien en CENTRAL cuando lo necesites.
+   · El ranking de KATUETE queda con el personal REAL de Katuete (antes la
+     central lo inflaba). Las consultas de vendedor@ (televentas) cuentan
+     ahora en CENTRAL, como corresponde.
+
+5) LO QUE NO CAMBIA (NADA MÁS)
+   · El STOCK de productos sigue con las 4 sucursales de venta (KATUETE, LA
+     PALOMA, NUEVA ESPERANZA, SALTOS DEL GUAIRA). CENTRAL NO aparece en el
+     stock, el buscador ni el orquestador: la oficina central no tiene stock
+     de productos.
+   · Horarios del backup (08:00 / 14:00 / 23:00), correos, columnas del
+     stock, presupuestos: TODO igual que estaba.
+
+CÓMO APLICAR (igual que siempre)
+--------------------------------------------------------------------------------
+   Opción A (recomendada, conserva el autor):
+     1. git checkout main
+     2. git am task137-filtro-central-gda.patch
+        (si no funciona: git apply task137-filtro-central-gda.patch)
+     3. git push origin main   →  Vercel hace el deploy solo.
+
+   Opción B (subir el ZIP completo):
+     subí el contenido de viza-home-task137-filtro-central-gda.zip y listo.
+
+DESPUÉS DEL DEPLOY — 1 MINUTO DE PRUEBA
+--------------------------------------------------------------------------------
+   1. Entrá al GDA (GESTIÓN DE ACCESOS).
+   2. En el filtro de sucursal elegí CENTRAL → tienen que aparecer tus 24
+      correos de la central.
+   3. Elegí KATUETE → tiene que quedar solo el personal de la sucursal
+      (jeyson@, ventas.rafael@, etc. — la oficina central ya no está ahí).
+   4. Tarjetas de arriba: CENTRAL = 24 (o los que tengas dados de alta de
+      esa lista).
+   Si algo no se movió, refrescá la página una vez: la migración corre en la
+   primera carga y no se repite.
+
+VERIFICACIÓN TÉCNICA
+--------------------------------------------------------------------------------
+   node scripts/t137-verificar-filtro-central.mjs   →  42 OK · 0 FALLO
+   (además pasaron t123, t124, t126, t127, t133, t134, t135 y t136)
+   tsc sin errores · eslint 0 errores · next build OK
+
+Archivos tocados (6):
+   src/lib/sucursal-usuario.ts            (mapa CENTRAL + migración)
+   src/app/api/admin/usuarios/route.ts    (migra al cargar el GDA)
+   src/app/api/crm/ranking/route.ts       (migra + filtro CENTRAL en CRM)
+   src/app/api/crm/sucursal/route.ts      (permite asignar CENTRAL a mano)
+   src/components/viza/gestion-accesos.tsx (filtro/tarjetas/tabla del GDA)
+   scripts/t137-verificar-filtro-central.mjs (verificación)
+================================================================================
