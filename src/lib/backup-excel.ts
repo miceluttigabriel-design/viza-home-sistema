@@ -668,6 +668,73 @@ export async function generateBackupExcel(): Promise<BackupResult> {
     console.error("backup: hoja Pedido Especial Historico omitida:", error);
   }
 
+  // ===== HOJA: STOCK IDEAL (Task 127 — distribución inteligente) =====
+  // Task 133: esta tabla NACIÓ DESPUÉS del backup original (T127) y
+  // estaba quedando AFUERA del Excel — si la base se perdía, se perdía
+  // también el stock ideal de cada sucursal. Mismo patrón try/catch
+  // que las demás: si la tabla no existe todavía, la hoja se salta.
+  try {
+    const stockIdeal = await db.productStockIdeal.findMany({
+      orderBy: [{ sucursal: "asc" }, { productId: "asc" }],
+    });
+    const filasStockIdeal = stockIdeal.map((s) => ({
+      id: s.id,
+      productId: s.productId,
+      sucursal: s.sucursal,
+      ideal: s.ideal,
+      updatedAt: new Date(s.updatedAt).toISOString(),
+    }));
+    hojas.push(
+      await escribirHoja(
+        wb,
+        "Stock Ideal",
+        [
+          { header: "id", key: "id" },
+          { header: "productId", key: "productId", width: 30 },
+          { header: "sucursal", key: "sucursal", width: 20 },
+          { header: "ideal", key: "ideal" },
+          { header: "updatedAt", key: "updatedAt", width: 24 },
+        ],
+        filasStockIdeal
+      )
+    );
+  } catch (error) {
+    console.error("backup: hoja Stock Ideal omitida:", error);
+  }
+
+  // ===== HOJA: PEDIDO ESPECIAL TIPOS (los tipos que crea el admin) =====
+  // Task 133: mismo motivo que Stock Ideal — tabla nueva que quedó
+  // afuera del backup original. Sin ella, al restaurar faltarían los
+  // tipos de pedido especial que el admin cargó a mano.
+  try {
+    const peTipos = await db.pedidoEspecialTipo.findMany({
+      orderBy: [{ nombre: "asc" }],
+    });
+    const filasPeTipos = peTipos.map((t) => ({
+      id: t.id,
+      nombre: t.nombre,
+      createdBy: t.createdBy,
+      createdAt: new Date(t.createdAt).toISOString(),
+      updatedAt: new Date(t.updatedAt).toISOString(),
+    }));
+    hojas.push(
+      await escribirHoja(
+        wb,
+        "Pedido Especial Tipos",
+        [
+          { header: "id", key: "id" },
+          { header: "nombre", key: "nombre", width: 24 },
+          { header: "createdBy", key: "createdBy", width: 28 },
+          { header: "createdAt", key: "createdAt", width: 24 },
+          { header: "updatedAt", key: "updatedAt", width: 24 },
+        ],
+        filasPeTipos
+      )
+    );
+  } catch (error) {
+    console.error("backup: hoja Pedido Especial Tipos omitida:", error);
+  }
+
   // ===== GENERAR EL BUFFER =====
   // writeBuffer() devuelve un ArrayBuffer/Buffer según el runtime; lo
   // normalizamos a un Node Buffer para medir tamaño y mandarlo por correo.

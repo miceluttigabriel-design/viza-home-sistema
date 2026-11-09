@@ -20,7 +20,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { generateBackupExcel } from "@/lib/backup-excel";
-import { sendBackupEmail } from "@/lib/backup-mail";
+import { sendBackupEmail, diagnosticoSmtp, probarSmtp } from "@/lib/backup-mail";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -59,9 +59,38 @@ export async function GET(req: Request) {
 
     if (!viaBearer && !viaSession) {
       return NextResponse.json(
-        { error: "No autorizado. Se requiere CRON_SECRET (Bearer) o sesión de admin." },
+        {
+          error:
+            "No autorizado. Se requiere CRON_SECRET (Bearer) o sesión de admin.",
+          // Task 133: pista directa — si esto lo llamó Vercel Cron y da 401,
+          // casi seguro falta cargar CRON_SECRET en Vercel (Vercel lo envía
+          // solo como header Authorization: Bearer <CRON_SECRET> cuando esa
+          // variable existe). Sin esa variable, el cron queda afuera y el
+          // backup nunca corre: cargarla en Settings → Environment Variables.
+          pista: process.env.CRON_SECRET
+            ? "CRON_SECRET está cargado pero el token no coincidió."
+            : "CRON_SECRET NO está cargado en las variables de entorno: Vercel Cron queda afuera (401). Cargalo en Vercel (Settings → Environment Variables) y re-deploy.",
+        },
         { status: 401 }
       );
+    }
+
+    // ===== MODO TEST (Task 133) =====
+    // GET /api/cron/backup-excel?test=1 → NO genera el Excel: solo prueba
+    // la conexión SMTP y manda un correo chiquito de prueba al destino
+    // (viza@viza.com.py). Sirve para validar host/usuario/contraseña en 10
+    // segundos después de cargar las variables, sin esperar el cron y sin
+    // generar el archivo grande. Devuelve además el DIAGNÓSTICO completo de
+    // variables (sin secretos) para ver al instante qué falta.
+    const modoTest = new URL(req.url).searchParams.get("test") === "1";
+    if (modoTest) {
+      const resultado = await probarSmtp();
+      return NextResponse.json({
+        ok: resultado.ok,
+        modo: "test",
+        prueba: resultado,
+        diagnostico: diagnosticoSmtp(),
+      });
     }
 
     // ===== GENERAR EXCEL =====
@@ -89,6 +118,10 @@ export async function GET(req: Request) {
       messageId: sendInfo?.messageId ?? null,
       to: sendInfo?.to ?? null,
       sendError,
+      // Task 133: diagnóstico de variables (sin secretos) SIEMPRE en la
+      // respuesta — si el correo no salió, acá se ve al instante qué falta
+      // cargar en Vercel.
+      diagnostico: diagnosticoSmtp(),
       stats: {
         fecha: stats.fecha,
         durationMs: stats.durationMs,

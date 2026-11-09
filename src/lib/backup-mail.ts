@@ -46,6 +46,129 @@ function leerSmtpConfig(): SmtpConfig | null {
   return { host, port, secure, user, pass, from };
 }
 
+// ============================================================
+// DIAGNÓSTICO (Task 133, pedido del dueño: "no consegui poner bien"):
+// Devuelve QUÉ variables faltan y QUÉ valores no secretos se van a usar,
+// para que el endpoint /api/cron/backup-excel (y su modo ?test=1) puedan
+// mostrarle al dueño AL INSTANTE qué le falta cargar en Vercel — sin
+// mostrar jamás la contraseña (SMTP_PASS solo va como presente/ausente).
+// ============================================================
+export interface SmtpDiagnostico {
+  smtpHost: string | null; // valor de SMTP_HOST (no es secreto) o null si falta
+  smtpPassPresente: boolean; // true si SMTP_PASS está cargada (el VALOR nunca se devuelve)
+  smtpUser: string; // usuario SMTP que se va a usar (default: viza.cobranza@viza.com.py)
+  smtpFrom: string; // remitente visible que se va a usar
+  smtpPort: number; // puerto que se va a usar (default: 465)
+  destino: string; // correo que RECIBE el backup (default: viza@viza.com.py)
+  faltantes: string[]; // nombres exactos de las variables que faltan cargar
+  listo: boolean; // true si ya se puede enviar (host + pass presentes)
+}
+
+export function diagnosticoSmtp(): SmtpDiagnostico {
+  const host = process.env.SMTP_HOST || null;
+  const passPresente = !!process.env.SMTP_PASS;
+  const user = process.env.SMTP_USER || EMAIL_ENVIA_DEFAULT;
+  const from = process.env.SMTP_FROM || `VIZA HOME Backup <${EMAIL_ENVIA_DEFAULT}>`;
+  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
+  const destino = process.env.BACKUP_EMAIL_TO || EMAIL_RECIBE_DEFAULT;
+  const faltantes: string[] = [];
+  if (!host) faltantes.push("SMTP_HOST");
+  if (!passPresente) faltantes.push("SMTP_PASS");
+  return {
+    smtpHost: host,
+    smtpPassPresente: passPresente,
+    smtpUser: user,
+    smtpFrom: from,
+    smtpPort: port,
+    destino,
+    faltantes,
+    listo: faltantes.length === 0,
+  };
+}
+
+// ============================================================
+// PRUEBA RÁPIDA DE SMTP (Task 133): conecta al servidor SMTP y envía
+// un correo chiquito de prueba (sin adjunto, sin generar el Excel).
+// La usa el modo ?test=1 del endpoint — así el dueño valida host/
+// usuario/contraseña en 10 segundos, sin esperar el cron.
+// ============================================================
+export async function probarSmtp(): Promise<{
+  ok: boolean;
+  conexion: string; // "conectado y autenticado" | error legible
+  enviadoA: string | null; // a quién le llegó el correo de prueba
+  detalle: string; // mensaje amigable para el dueño
+}> {
+  const cfg = leerSmtpConfig();
+  if (!cfg) {
+    const diag = diagnosticoSmtp();
+    return {
+      ok: false,
+      conexion: `faltan variables: ${diag.faltantes.join(", ")}`,
+      enviadoA: null,
+      detalle:
+        `Cargá en Vercel las variables ${diag.faltantes.join(", ")} ` +
+        `(Settings → Environment Variables) y volvé a probar. ` +
+        `Usuario que se usaría: ${diag.smtpUser} · Puerto: ${diag.smtpPort}.`,
+    };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: { user: cfg.user, pass: cfg.pass },
+  });
+
+  try {
+    await transporter.verify();
+  } catch (e) {
+    const msg = (e as Error).message || String(e);
+    return {
+      ok: false,
+      conexion: msg,
+      enviadoA: null,
+      detalle:
+        `No se pudo conectar/autenticar contra ${cfg.host}:${cfg.port} ` +
+        `con el usuario ${cfg.user}. Revisá SMTP_HOST, SMTP_PORT, SMTP_USER ` +
+        `y SMTP_PASS (si es Gmail/Workspace, la contraseña tiene que ser una ` +
+        `Contraseña de aplicación de 16 letras, no la normal).`,
+    };
+  }
+
+  const to = process.env.BACKUP_EMAIL_TO || EMAIL_RECIBE_DEFAULT;
+  try {
+    await transporter.sendMail({
+      from: cfg.from,
+      to,
+      subject: "VIZA HOME — prueba de correo del backup (no responder)",
+      text:
+        "Este es un correo de PRUEBA del backup automático. Si lo recibiste, " +
+        "el correo está bien configurado: los backups van a llegar a esta " +
+        "casilla 3 veces por día (06:00, 14:00 y 22:00).",
+    });
+  } catch (e) {
+    const msg = (e as Error).message || String(e);
+    return {
+      ok: false,
+      conexion: "conectado y autenticado, pero el envío falló",
+      enviadoA: null,
+      detalle:
+        `La conexión con ${cfg.host} funcionó pero el envío a ${to} fue ` +
+        `rechazado: ${msg}. Suele ser el remitente (SMTP_FROM) que no ` +
+        `coincide con la cuenta que autentica, o el buzón sin permiso de envío.`,
+    };
+  }
+
+  return {
+    ok: true,
+    conexion: "conectado y autenticado",
+    enviadoA: to,
+    detalle:
+      `Todo funcionó: el correo de prueba llegó a ${to}. Los backups van a ` +
+      `salir por acá (adjunto Excel) 3 veces por día.`,
+  };
+}
+
 export interface SendResult {
   to: string;
   messageId: string;
@@ -59,8 +182,10 @@ export async function sendBackupEmail(
 ): Promise<SendResult> {
   const cfg = leerSmtpConfig();
   if (!cfg) {
+    const diag = diagnosticoSmtp();
     throw new Error(
-      "SMTP no configurado. Faltan SMTP_HOST y SMTP_PASS en las variables de entorno."
+      `SMTP no configurado. Falta cargar en Vercel: ${diag.faltantes.join(", ")}. ` +
+        `Usuario que se usaría: ${diag.smtpUser} · Destino: ${diag.destino}.`
     );
   }
 
