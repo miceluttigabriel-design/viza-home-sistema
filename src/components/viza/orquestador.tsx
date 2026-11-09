@@ -503,11 +503,6 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           <p className="text-[10px] sm:text-[11px] tracking-[0.3em] font-bold mt-2" style={{ color: C_STOCK }}>
             MUEBLES · ELECTRODOMÉSTICOS · HOGAR
           </p>
-          <p className="text-xs sm:text-sm text-slate-400 mt-2 font-medium">
-            {esSupremo
-              ? "Los módulos del sistema y las 4 sucursales · solo el supremo ve esta pantalla"
-              : "Los módulos del sistema y las 4 sucursales · visión general"}
-          </p>
         </div>
 
         {/* ═══ DIAGRAMA (pantallas grandes): cuadros unidos por líneas de flujo ═══ */}
@@ -560,17 +555,6 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
               <div key={nombre} className="min-h-[96px]"><SucursalCard nombre={nombre} /></div>
             ))}
           </div>
-        </div>
-
-        {/* ─── Flujo entre módulos (decorativo) ─── */}
-        <div className="mt-8 sm:mt-10 flex flex-wrap items-center justify-center gap-2 text-[10px] font-bold tracking-widest text-slate-500">
-          <span style={{ color: C_BASE }}>LA BASE</span>
-          <span className="text-slate-600">— ALIMENTA →</span>
-          <span style={{ color: C_STOCK }}>STOCK</span>
-          <span className="text-slate-600">+</span>
-          <span style={{ color: C_COTIZ }}>COTIZADOR</span>
-          <span className="text-slate-600">— DISTRIBUYE →</span>
-          <span style={{ color: C_DISTRI }}>DISTRIBUIDOR INTELIGENTE</span>
         </div>
       </main>
     </div>
