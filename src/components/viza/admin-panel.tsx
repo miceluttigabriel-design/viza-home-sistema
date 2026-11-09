@@ -31,6 +31,8 @@ import {
   Coins,
   BarChart3,
   Warehouse,
+  DatabaseBackup,
+  Send,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -48,6 +50,10 @@ import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 // Task 107 (pedido del dueño): el mini cuadrito de última actualización de stock
 // (el mismo del panel de ventas, Task 105) también DENTRO DE LA BASE.
 import { StockImportInfoCard } from "./stock-import-info-card";
+// Task 134 (pedido del dueño): interruptor ON/OFF de las COPIAS DE
+// SEGURIDAD automáticas de la Base (solo Supremo) + botón ENVIAR COPIA
+// AHORA. El Switch es el de siempre del proyecto (ui/switch.tsx).
+import { Switch } from "@/components/ui/switch";
 
 // Formatea una fracción decimal de porcentaje (0.25 = 25%) igual que la tabla
 // (valor × 100), pero compacto: 25%, 28%, 35.3%, 108.8% (sin ceros colgantes)
@@ -601,6 +607,110 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
       vivo = false;
     };
   }, []);
+
+  // ─── COPIAS DE SEGURIDAD AUTOMÁTICAS (Task 134, pedido del dueño) ───
+  // Interruptor ON/OFF que vive en la Base (solo Supremo — lista única en
+  // src/lib/permisos-backup.ts y validada igual por la API). Cuando está
+  // ACTIVADO, el cron de Vercel envía la copia de la base por correo a
+  // viza@viza.com.py a las 08:00, 14:00 y 23:00 (hora de Paraguay). El
+  // estado se guarda en la tabla ConfigBackup (auto-gestionada, ver
+  // src/lib/config-backup.ts) y se carga UNA VEZ al montar la Base.
+  // backupActivado === null = todavía cargando (switch deshabilitado).
+  const [backupActivado, setBackupActivado] = useState<boolean | null>(null);
+  const [backupSaving, setBackupSaving] = useState(false);
+  useEffect(() => {
+    if (!isSupremo) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/config-backup");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (vivo && typeof data?.activado === "boolean") {
+          setBackupActivado(data.activado);
+        }
+      } catch {
+        // sin estado — el chip queda pendiente y nada se rompe
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [isSupremo]);
+
+  // Mover el interruptor (Task 134): PUT /api/config-backup. El toast avisa
+  // AL INSTANTE si al activar faltan variables SMTP en Vercel (diagnóstico
+  // de T133, sin secretos) — así el dueño sabe exactamente qué cargar.
+  const moverCopiasSeguridad = async (nuevoEstado: boolean) => {
+    if (backupSaving) return;
+    setBackupSaving(true);
+    const toastId = toast.loading(nuevoEstado ? "Activando copias de seguridad..." : "Desactivando copias de seguridad...");
+    try {
+      const res = await fetch("/api/config-backup", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activado: nuevoEstado }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || `Error HTTP ${res.status}`);
+      }
+      setBackupActivado(data.activado);
+      if (data.activado) {
+        const diag = data.diagnostico;
+        if (diag && !diag.listo && Array.isArray(diag.faltantes) && diag.faltantes.length > 0) {
+          toast.warning(
+            `Copias ACTIVADAS — pero faltan variables en Vercel: ${diag.faltantes.join(", ")}. Cargalas (LEEME Task 134) y hacé Redeploy para que los envíos salgan.`,
+            { id: toastId, duration: 12000 }
+          );
+        } else {
+          toast.success(
+            "Copias de seguridad ACTIVADAS: envíos a viza@viza.com.py a las 08:00, 14:00 y 23:00 (hora de Paraguay).",
+            { id: toastId, duration: 8000 }
+          );
+        }
+      } else {
+        toast.success("Copias de seguridad DESACTIVADAS: los envíos automáticos quedan pausados.", { id: toastId });
+      }
+    } catch (error) {
+      toast.error(`Error: ${(error as Error).message}`, { id: toastId });
+    } finally {
+      setBackupSaving(false);
+    }
+  };
+
+  // ENVIAR COPIA AHORA (Task 134): llama al endpoint del backup logueado
+  // (sesión admin/supremo) — genera el Excel completo y lo manda YA a
+  // viza@viza.com.py, sin esperar al cron. Sale aunque el interruptor esté
+  // DESACTIVADO: es una acción explícita del dueño.
+  const enviarCopiaAhora = async () => {
+    const toastId = toast.loading("Generando la copia de la base y enviando...");
+    try {
+      const res = await fetch("/api/cron/backup-excel");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `Error HTTP ${res.status}`);
+      }
+      if (data?.skipped) {
+        toast.warning(data.motivo || "Copias desactivadas.", { id: toastId, duration: 10000 });
+        return;
+      }
+      if (data?.sent) {
+        toast.success(
+          `Copia enviada a ${data.to || "viza@viza.com.py"} — ${data.filename} (${data.sizeKb} KB).`,
+          { id: toastId, duration: 8000 }
+        );
+      } else {
+        const falt = data?.diagnostico?.faltantes;
+        const pista = Array.isArray(falt) && falt.length > 0
+          ? ` Faltan variables en Vercel: ${falt.join(", ")}.`
+          : (data?.sendError ? ` ${data.sendError}` : "");
+        throw new Error(`El correo no salió.${pista}`);
+      }
+    } catch (error) {
+      toast.error(`Error: ${(error as Error).message}`, { id: toastId, duration: 12000 });
+    }
+  };
 
   // ─── IMPORTAR EXCEL (planilla de inventario) ───
   // Estados del modal de importación de stock desde planilla de inventario
@@ -1226,10 +1336,14 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     PEDIDO ESPECIAL
                   </button>
                 )}
-                {/* Boton EXPORTAR EXCEL — oculto en MODO SOLO LECTURA (Task 78):
-                    la API de export exige admin y el modo consulta es solo
-                    para VER y FILTRAR la base. */}
-                {!esLectura && (
+                {/* Boton EXPORTAR EXCEL — Task 134 (pedido del dueño): SOLO
+                    Supremo ("el boton exportar excel es apenas para Supremo
+                    usuario"). Antes lo veían todos los admins; ahora el
+                    botón se oculta para admin común y la API
+                    /api/products/export exige supremo_admin — la MISMA regla
+                    de los dos lados. Sigue oculto en MODO SOLO LECTURA
+                    (Task 78). */}
+                {isSupremo && !esLectura && (
                 <button
                   id="btn-export-excel"
                   onClick={async () => {
@@ -1272,6 +1386,49 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   <Download className="h-3.5 w-3.5" />
                   EXPORTAR EXCEL
                 </button>
+                )}
+
+                {/* Chip COPIAS DE SEGURIDAD (Task 134, pedido del dueño) —
+                    solo Supremo: el interruptor ON/OFF de los backups
+                    automáticos. Con ACTIVADO, el sistema manda la copia de
+                    la base por correo a viza@viza.com.py a las 08:00, 14:00
+                    y 23:00 (hora de Paraguay). El estado vive en ConfigBackup
+                    (tabla auto-gestionada) y la API /api/config-backup valida
+                    SOLO Supremo / viza@viza.com.py — la misma regla de acá.
+                    Al activar, el toast avisa si faltan variables SMTP en
+                    Vercel (diagnóstico sin secretos de T133). */}
+                {isSupremo && !esLectura && (
+                  <span
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 text-xs font-semibold"
+                    title="Copias de seguridad automáticas: con el interruptor ACTIVADO el sistema manda la copia de la base a viza@viza.com.py a las 08:00, 14:00 y 23:00 (hora de Paraguay). Desactívalo y los envíos automáticos quedan pausados."
+                  >
+                    <DatabaseBackup className="h-3.5 w-3.5" />
+                    COPIAS DE SEGURIDAD:
+                    <Switch
+                      checked={backupActivado === true}
+                      disabled={backupActivado === null || backupSaving}
+                      onCheckedChange={(v) => moverCopiasSeguridad(v)}
+                      aria-label="Activar o desactivar las copias de seguridad automáticas"
+                    />
+                    {backupActivado === null ? "…" : backupActivado ? "ACTIVADAS" : "DESACTIVADAS"}
+                  </span>
+                )}
+                {/* Botón ENVIAR COPIA AHORA (Task 134, pedido del dueño) —
+                    solo Supremo: genera el Excel completo de la base y lo
+                    manda YA por correo a viza@viza.com.py, sin esperar al
+                    cron. Sirve para probar el correo y para tener la copia
+                    en mano cuando haga falta. */}
+                {isSupremo && !esLectura && (
+                  <button
+                    id="btn-backup-ahora"
+                    onClick={enviarCopiaAhora}
+                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                    title="Generar la copia de la base y enviarla YA por correo a viza@viza.com.py (sin esperar al cron)"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    ENVIAR COPIA AHORA
+                  </button>
                 )}
 
                 {/* Boton CREAR ETIQUETA (Task 84, pedido del dueño) — solo

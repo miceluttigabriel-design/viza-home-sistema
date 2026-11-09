@@ -364,6 +364,28 @@ model TasaCambio {
   actualizadoPor String   @default("SISTEMA")
 }
 
+// ============================================================
+// COPIAS DE SEGURIDAD AUTOMÁTICAS (Task 134, pedido del dueño)
+// UNA sola fila (id "ACTIVA") con el INTERRUPTOR ON/OFF de los
+// backups automáticos: cuando está ACTIVADO, el sistema envía
+// la copia de la base por correo a viza@viza.com.py tres veces
+// al día — 08:00, 14:00 y 23:00 (hora de Paraguay). El dueño lo
+// activa/desactiva desde la Base (chip COPIAS DE SEGURIDAD,
+// solo Supremo — lista única en src/lib/permisos-backup.ts).
+// Default DESACTIVADO: los envíos arrancan recién cuando el dueño
+// lo activa ("al habilitarlo ya queda activo") — y como la tabla
+// es AUTO-GESTIONADA (mismo patrón que TasaCambio, ver
+// src/lib/config-backup.ts), se crea sola en el primer uso y
+// NUNCA rompe la app: si la lectura falla, el sistema usa el
+// default (desactivado) y los envíos automáticos quedan pausados.
+// ============================================================
+model ConfigBackup {
+  id             String   @id // "ACTIVA" (fila única de configuración)
+  activado       Boolean  @default(false) // ON = envía a las 08:00 / 14:00 / 23:00
+  updatedAt      DateTime @updatedAt
+  actualizadoPor String   @default("SISTEMA")
+}
+
 model Quote {
   id            String      @id @default(cuid())
   quoteNumber   String      @unique

@@ -144,7 +144,8 @@ export async function probarSmtp(): Promise<{
       text:
         "Este es un correo de PRUEBA del backup automático. Si lo recibiste, " +
         "el correo está bien configurado: los backups van a llegar a esta " +
-        "casilla 3 veces por día (06:00, 14:00 y 22:00).",
+        "casilla 3 veces por día (08:00, 14:00 y 23:00, hora de Paraguay), " +
+        "mientras las COPIAS DE SEGURIDAD estén ACTIVADAS en la Base.",
     });
   } catch (e) {
     const msg = (e as Error).message || String(e);
@@ -201,7 +202,7 @@ export async function sendBackupEmail(
 
   // Formatear fecha/hora legible para el asunto y el cuerpo
   const fechaLegible = new Date(stats.fecha).toLocaleString("es-PY", {
-    timeZone: process.env.BACKUP_CRON_TZ || "America/Montevideo",
+    timeZone: process.env.BACKUP_CRON_TZ || "America/Asuncion",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

@@ -11,7 +11,12 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    if ((session.user as any)?.role !== "admin" && (session.user as any)?.role !== "supremo_admin") return NextResponse.json({ error: "Solo admin o supremo_admin" }, { status: 403 });
+    // Task 134 (pedido del dueño): "el boton exportar excel es apenas para
+    // Supremo usuario" — la API exige supremo_admin (antes admin o supremo),
+    // la MISMA regla que oculta el botón en la Base (admin-panel.tsx). Así
+    // la UI y el backend deciden lo mismo: aunque alguien llamara a la URL
+    // a mano, sin ser Supremo no descarga la base.
+    if ((session.user as any)?.role !== "supremo_admin") return NextResponse.json({ error: "Solo el Supremo Admin puede exportar la base" }, { status: 403 });
 
     // Cargar TODOS los productos en batches de 500
     const allProducts: any[] = [];

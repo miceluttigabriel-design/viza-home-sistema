@@ -2,9 +2,19 @@
 // Task 112: ENDPOINT DE BACKUP AUTOMÁTICO.
 // GET /api/cron/backup-excel
 //
-// Lo llama Vercel Cron (3 veces al día: 06:00, 14:00, 22:00 hora
-// de Montevideo) y también el scheduler node-cron cuando la app se
-// corre self-hosted (bun start / standalone) sin Vercel.
+// Lo llama Vercel Cron (3 veces al día: 08:00, 14:00 y 23:00 hora
+// de Paraguay = 11:00, 17:00 y 02:00 UTC — vercel.json) y también
+// el scheduler node-cron cuando la app se corre self-hosted (bun
+// start / standalone) sin Vercel.
+//
+// INTERRUPTOR ON/OFF (Task 134, pedido del dueño): los envíos
+// AUTOMÁTICOS (los que llegan con el Bearer de Vercel Cron) solo
+// salen si el interruptor COPIAS DE SEGURIDAD de la Base está
+// ACTIVADO (tabla ConfigBackup, tabla auto-gestionada en
+// src/lib/config-backup.ts). Si está DESACTIVADO el cron responde
+// skipped:true y NO manda nada — sin errores ruidosos. El envío
+// MANUAL (logueado desde el navegador, botón ENVIAR COPIA AHORA
+// de la Base) sale SIEMPRE: es acción explícita del dueño.
 //
 // AUTENTICACIÓN (una de las dos):
 //   1. Header Authorization: Bearer <CRON_SECRET>  (Vercel Cron lo envía solo)
@@ -21,6 +31,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { generateBackupExcel } from "@/lib/backup-excel";
 import { sendBackupEmail, diagnosticoSmtp, probarSmtp } from "@/lib/backup-mail";
+// Task 134: interruptor ON/OFF de los backups automáticos (Base).
+import { getConfigBackup } from "@/lib/config-backup";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -93,6 +105,28 @@ export async function GET(req: Request) {
       });
     }
 
+    // ===== INTERRUPTOR ON/OFF (Task 134, pedido del dueño) =====
+    // Los envíos AUTOMÁTICOS (cron con Bearer) solo salen si el dueño
+    // activó COPIAS DE SEGURIDAD en la Base. Si está DESACTIVADO, el cron
+    // responde skipped:true sin generar el Excel ni mandar nada. La llamada
+    // MANUAL (sesión de admin/supremo — botón ENVIAR COPIA AHORA o abrir la
+    // URL logueado) sale SIEMPRE: es acción explícita, no automatismo.
+    const configBackup = await getConfigBackup();
+    if (viaBearer && !configBackup.activado) {
+      console.log("[BACKUP-AUTO] Cron saltado: copias de seguridad DESACTIVADAS en la Base (ConfigBackup).");
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        origen: "cron",
+        backupActivado: false,
+        motivo:
+          "Las COPIAS DE SEGURIDAD automáticas están DESACTIVADAS en la Base. " +
+          "Activalas con el chip COPIAS DE SEGURIDAD (solo Supremo) — " +
+          "los envíos salen 08:00, 14:00 y 23:00 hora de Paraguay a viza@viza.com.py.",
+        diagnostico: diagnosticoSmtp(),
+      });
+    }
+
     // ===== GENERAR EXCEL =====
     const { buffer, filename, stats } = await generateBackupExcel();
 
@@ -118,6 +152,10 @@ export async function GET(req: Request) {
       messageId: sendInfo?.messageId ?? null,
       to: sendInfo?.to ?? null,
       sendError,
+      // Task 134: origen de la llamada (cron = automático, manual = botón
+      // ENVIAR COPIA AHORA / URL logueado) y estado del interruptor.
+      origen: viaBearer ? "cron" : "manual",
+      backupActivado: configBackup.activado,
       // Task 133: diagnóstico de variables (sin secretos) SIEMPRE en la
       // respuesta — si el correo no salió, acá se ve al instante qué falta
       // cargar en Vercel.

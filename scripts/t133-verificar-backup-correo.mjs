@@ -47,7 +47,10 @@ check("hojas originales siguen (Productos/Presupuestos/Usuarios...)", ["product"
 
 console.log("\n── Schedules / cron ──");
 check("3 crons en vercel.json apuntando al endpoint", (vercel.match(/"path": "\/api\/cron\/backup-excel"/g) || []).length === 3);
-check("scheduler self-hosted 06:00 / 14:00 / 22:00 intacto", instr.includes('"0 6 * * *"') && instr.includes('"0 14 * * *"') && instr.includes('"0 22 * * *"'));
+// Task 134 (pedido del dueño): horarios nuevos 08:00 / 14:00 / 23:00 hora
+// de Paraguay (antes 06:00 / 14:00 / 22:00). El check sigue en el t133
+// actualizado, y el detalle completo vive en scripts/t134-verificar-backup-toggle.mjs.
+check("scheduler self-hosted 08:00 / 14:00 / 23:00 (Task 134)", instr.includes('"0 8 * * *"') && instr.includes('"0 14 * * *"') && instr.includes('"0 23 * * *"'));
 check("en Vercel usa Vercel Cron (node-cron salta)", instr.includes("process.env.VERCEL"));
 
 console.log(`\n═══ RESULTADO: ${ok} ✓ · ${fallo} ✗ ═══`);
