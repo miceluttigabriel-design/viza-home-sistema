@@ -407,6 +407,21 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   const [cargandoEtiqueta, setCargandoEtiqueta] = useState(false);
   const [etiquetaPage, setEtiquetaPage] = useState(1);
   const [etiquetaTotal, setEtiquetaTotal] = useState(0);
+  // Task 143 (pedido del dueño): el listado por clasificación sale de la
+  // vista CUOTA y se abre desde un botón del header, en un modal. La carga
+  // de productos es EXACTAMENTE la misma (cargarPorEtiqueta); acá solo se
+  // controla la visibilidad del modal.
+  const [listaClasificadosOpen, setListaClasificadosOpen] = useState(false);
+  // Cierra el modal LISTA DE CLASIFICADOS con Escape (mismo patrón que el
+  // menú PRESUPUESTAR). El click en el fondo ya lo cierra en el overlay.
+  useEffect(() => {
+    if (!listaClasificadosOpen) return;
+    const alEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setListaClasificadosOpen(false);
+    };
+    document.addEventListener("keydown", alEscape);
+    return () => document.removeEventListener("keydown", alEscape);
+  }, [listaClasificadosOpen]);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -601,6 +616,18 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
     }
     setEtiquetaSel(id);
     cargarPorEtiqueta(id, 1, false);
+  };
+
+  // Task 143 (pedido del dueño): abrir el modal LISTA DE CLASIFICADOS.
+  // Si todavía no hay una clasificación elegida, arranca en SELECCIONADO
+  // (igual que antes se veía la lista al entrar a CUOTA). Si ya había una,
+  // se respeta la que estaba para no cambiarle el contexto al vendedor.
+  const abrirListaClasificados = () => {
+    setListaClasificadosOpen(true);
+    if (!etiquetaSel) {
+      setEtiquetaSel("verde");
+      cargarPorEtiqueta("verde", 1, false);
+    }
   };
 
   // Reset de cálculo previo cuando cambian los parámetros de entrega.
@@ -1399,6 +1426,24 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 </div>
               )}
             </div>
+            {/* === LISTA DE CLASIFICADOS (Task 143, pedido del dueño): el
+                listado de productos por etiqueta vivía dentro del plan
+                CUOTA; ahora se abre desde este botón del header en un modal
+                y deja la cotización más limpia. Sin cambios de lógica. === */}
+            <button
+              onClick={abrirListaClasificados}
+              className="h-9 px-3 sm:px-4 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all border shadow-md hover:brightness-110 shrink-0"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.10)",
+                color: DORADO_CLARO,
+                borderColor: "rgba(217,184,107,0.55)",
+              }}
+              title="Ver los productos clasificados por etiqueta"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">LISTA DE CLASIFICADOS</span>
+              <span className="sm:hidden">CLASIFICADOS</span>
+            </button>
           </div>
 
           {/* LADO DERECHO: Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión.
@@ -1417,14 +1462,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             >
               {(user.name || user.email).charAt(0).toUpperCase()}
             </div>
-            {/* Cambiar contraseña - ENTRE MEDIO del usuario y Cerrar sesión */}
+            {/* Cambiar contraseña - ENTRE MEDIO del usuario y Cerrar sesión
+                Task 143 (pedido del dueño): ambos botones ahora son DORADOS
+                plenos para destacar sobre el fondo azul del panel (antes eran
+                translúcidos y se perdían). Mismos iconos y acciones. */}
             <button
               onClick={() => setCambiarContrasenaOpen(true)}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border shrink-0"
+              className="h-10 w-10 rounded-xl flex items-center justify-center transition-all border shadow-md hover:brightness-110 shrink-0"
               style={{
-                backgroundColor: "rgba(217, 184, 107, 0.18)",
-                color: DORADO,
-                borderColor: "rgba(217,184,107,0.4)",
+                background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 55%, ${DORADO_CLARO} 100%)`,
+                color: AZUL_OSCURO,
+                borderColor: DORADO,
               }}
               title="Cambiar mi contraseña"
               aria-label="Cambiar mi contraseña"
@@ -1434,11 +1482,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {/* Cerrar sesión - AL LADO DEL USUARIO, LADO DERECHO (justo después del avatar) */}
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-colors border shrink-0"
+              className="h-10 w-10 rounded-xl flex items-center justify-center transition-all border shadow-md hover:brightness-110 shrink-0"
               style={{
-                backgroundColor: "rgba(255,255,255,0.08)",
-                color: DORADO_CLARO,
-                borderColor: "rgba(217,184,107,0.4)",
+                background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 55%, ${DORADO_CLARO} 100%)`,
+                color: AZUL_OSCURO,
+                borderColor: DORADO,
               }}
               title="Cerrar sesión"
               aria-label="Cerrar sesión"
@@ -1461,6 +1509,190 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         open={cambiarContrasenaOpen}
         onClose={() => setCambiarContrasenaOpen(false)}
       />
+
+      {/* ══════════════════════════════════════════════════════════════
+          MODAL · LISTA DE CLASIFICADOS (Task 143, pedido del dueño)
+          - Antes el listado por etiqueta vivía dentro del plan CUOTA; ahora
+            se abre desde el botón LISTA DE CLASIFICADOS del header y sirve
+            para CUALQUIER plan.
+          - SOLO LECTURA de la base: los chips listan productos por etiqueta
+            (fijas, creadas por el admin y #HASHTAG) y tocar un producto lo
+            agrega a la cotización con el MISMO handleAddProduct del buscador.
+          - Vive FUERA del <header> por el mismo motivo que los modales
+            anteriores: backdrop-blur crea un containing block y rompería el
+            position:fixed del modal.
+          ══════════════════════════════════════════════════════════════ */}
+      {listaClasificadosOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setListaClasificadosOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header azul con título y ayuda */}
+            <div
+              className="px-5 sm:px-6 py-4 flex items-start justify-between gap-3 border-b shrink-0"
+              style={{ borderColor: "#e7d9a8", background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+            >
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <LayoutGrid className="h-5 w-5 shrink-0" />
+                  LISTA DE CLASIFICADOS
+                </h3>
+                <p className="text-[11px] sm:text-xs text-white/75 mt-1">
+                  Elegí una clasificación para ver sus productos. Tocá uno para agregarlo al presupuesto.
+                </p>
+              </div>
+              <button
+                onClick={() => setListaClasificadosOpen(false)}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                title="Cerrar"
+                aria-label="Cerrar lista de clasificados"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Chips de clasificación (fijas + creadas + #HASHTAG) */}
+            <div className="px-5 sm:px-6 py-3 flex flex-wrap gap-2 border-b border-stone-200 bg-stone-50 shrink-0">
+              {[...ETIQUETAS_FIJAS, ...etiquetasCreadas].map((et) => {
+                const activa = etiquetaSel === et.id;
+                return (
+                  <button
+                    key={et.id}
+                    onClick={() => elegirEtiqueta(et.id)}
+                    className="h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    style={{
+                      borderColor: et.color,
+                      backgroundColor: activa ? et.color : "transparent",
+                      color: activa ? "#ffffff" : et.color,
+                    }}
+                    title={`Ver productos con la etiqueta ${et.nombre.toUpperCase()}`}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full inline-block shrink-0"
+                      style={{ backgroundColor: activa ? "#ffffff" : et.color }}
+                    />
+                    {et.nombre.toUpperCase()}
+                  </button>
+                );
+              })}
+              {/* #HASHTAG: misma regla del buscador (solo promos vigentes). */}
+              <button
+                onClick={() => elegirEtiqueta("hashtag")}
+                className="h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                style={{
+                  borderColor: "#155789",
+                  backgroundColor: etiquetaSel === "hashtag" ? "#155789" : "transparent",
+                  color: etiquetaSel === "hashtag" ? "#ffffff" : "#155789",
+                }}
+                title="Ver SOLO los productos con #HASHTAG vigente"
+              >
+                <span className="font-black">#</span>
+                HASHTAG
+              </button>
+            </div>
+
+            {/* Lista de productos de la clasificación elegida */}
+            <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4">
+              {cargandoEtiqueta ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="h-9 w-9 rounded-full border-4 border-stone-200 border-t-[#155789] animate-spin" />
+                  <p className="text-sm text-stone-500 font-medium">Buscando productos…</p>
+                </div>
+              ) : !etiquetaSel ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
+                  <LayoutGrid className="h-10 w-10 text-stone-300" />
+                  <p className="text-sm font-semibold text-stone-600">Elegí una clasificación arriba</p>
+                  <p className="text-xs text-stone-400 max-w-sm">
+                    Podés ver los productos de SELECCIONADO, VIZA LÍQUIDA, #HASHTAG y de todas las etiquetas creadas por el admin.
+                  </p>
+                </div>
+              ) : productosEtiqueta.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
+                  <Package className="h-10 w-10 text-stone-300" />
+                  <p className="text-sm font-semibold text-stone-600">
+                    {etiquetaSel === "hashtag"
+                      ? "No hay productos con #HASHTAG vigente"
+                      : "No hay productos con esta clasificación"}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-[11px] font-semibold uppercase text-stone-400 mb-2">
+                    {etiquetaTotal} producto{etiquetaTotal !== 1 ? "s" : ""} con{" "}
+                    {etiquetaSel === "hashtag" ? "#HASHTAG" : "esta clasificación"}
+                  </div>
+                  <div className="rounded-xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+                    {productosEtiqueta.map((p) => {
+                      const et = etiquetaDeId(p.etiquetaColor, etiquetasCreadas);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => handleAddProduct(p)}
+                          className="w-full text-left p-3 flex items-center justify-between gap-3 transition-colors hover:brightness-95"
+                          style={et ? estiloFilaEtiqueta(et) : undefined}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-stone-900 text-sm line-clamp-1">{p.name}</p>
+                            <p className="text-xs text-stone-600 mt-0.5">
+                              SKU: {p.sku}
+                              {typeof p.stock === "number" ? ` · Stock: ${p.stock}` : ""}
+                              {p.priceContado ? ` · Contado: ${formatPYG(p.priceContado)}` : ""}
+                              {p.hashtag?.valor
+                                ? ` · # ${textoHashtagValorRealGs(p.hashtag.valor)} GS`
+                                : ""}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-bold text-rose-600 text-sm whitespace-nowrap">
+                              {p.priceContado ? formatPYG(p.priceContado) : "—"}
+                            </span>
+                            <span className="h-7 px-2 rounded-lg bg-stone-900 text-white text-[11px] font-bold flex items-center gap-1">
+                              <Plus className="h-3 w-3" />
+                              Agregar
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {productosEtiqueta.length < etiquetaTotal ? (
+                    <button
+                      onClick={() => cargarPorEtiqueta(etiquetaSel, etiquetaPage + 1, true)}
+                      className="w-full mt-2 h-10 rounded-xl border-2 border-dashed border-stone-300 hover:border-rose-400 hover:bg-rose-50 text-stone-600 hover:text-rose-600 font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+                    >
+                      Mostrar más
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </div>
+
+            {/* Footer con conteo y cierre */}
+            <div className="px-5 sm:px-6 py-3 border-t border-stone-200 bg-stone-50 flex items-center justify-between gap-3 shrink-0">
+              <span className="text-xs text-stone-500">
+                {etiquetaSel
+                  ? `${etiquetaTotal} producto${etiquetaTotal !== 1 ? "s" : ""} en esta clasificación`
+                  : "Sin clasificación elegida"}
+              </span>
+              <button
+                onClick={() => setListaClasificadosOpen(false)}
+                className="h-9 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all border shadow-md hover:brightness-110"
+                style={{
+                  background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 55%, ${DORADO_CLARO} 100%)`,
+                  color: AZUL_OSCURO,
+                  borderColor: DORADO,
+                }}
+              >
+                CERRAR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════
           MODAL CRM · MI SUCURSAL (solo encargados de sucursal)
@@ -1847,126 +2079,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
           />
         </Section>
 
-        {/* 2.4. LISTADO DE PRODUCTOS CLASSIFICADOS (Task 86, pedido del dueño): listado
-            intuitivo de los productos de CADA etiqueta por separado. Toca un
-            chip → lista sus productos → click en un producto lo agrega a la
-            cotización (mismo flujo del buscador). SOLO LECTURA de la base:
-            acá no se etiqueta ni se edita nada. Los fondos usan los MISMOS
-            colores que la Base, pero el PDF del presupuesto jamás los recibe
-            (su payload mapea campos explícitos).
-            Task 120 (pedido del dueño, "apenas un cambio visual de descripción"):
-            título nuevo "LISTADO DE PRODUCTOS CLASSIFICADOS", SIN el icono de
-            etiqueta, SIN el texto de ayuda "Tocá una etiqueta..." y SIN el
-            cartel "Elegí una etiqueta de arriba..." (con etiqueta sin elegir no
-            se muestra nada). Funcionamiento idéntico. */}
-        <Section title="LISTADO DE PRODUCTOS CLASSIFICADOS" icon={null}>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {[...ETIQUETAS_FIJAS, ...etiquetasCreadas].map((et) => {
-              const activa = etiquetaSel === et.id;
-              return (
-                <button
-                  key={et.id}
-                  onClick={() => elegirEtiqueta(et.id)}
-                  className="h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                  style={{
-                    borderColor: et.color,
-                    backgroundColor: activa ? et.color : "transparent",
-                    color: activa ? "#ffffff" : et.color,
-                  }}
-                  title={`Ver productos con la etiqueta ${et.nombre.toUpperCase()}`}
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full inline-block shrink-0"
-                    style={{ backgroundColor: activa ? "#ffffff" : et.color }}
-                  />
-                  {/* Task 100: nombre de etiqueta SIEMPRE en MAYÚSCULAS. */}
-                  {et.nombre.toUpperCase()}
-                </button>
-              );
-            })}
-            {/* T123 (pedido del dueño): chip #HASHTAG al lado derecho de las
-                etiquetas (después de VIZA LIQUIDA y las demás) — toca y se
-                listan SOLO los productos con # vigente, la MISMA regla del
-                buscador: vencidos fuera de la vista de ventas. Tocar de
-                nuevo lo apaga, igual que las etiquetas. */}
-            <button
-              onClick={() => elegirEtiqueta("hashtag")}
-              className="h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-colors"
-              style={{
-                borderColor: "#155789",
-                backgroundColor: etiquetaSel === "hashtag" ? "#155789" : "transparent",
-                color: etiquetaSel === "hashtag" ? "#ffffff" : "#155789",
-              }}
-              title="Ver SOLO los productos con #HASHTAG vigente"
-            >
-              <span className="font-black">#</span>
-              HASHTAG
-            </button>
-          </div>
-          {cargandoEtiqueta ? (
-            <div className="p-4 text-sm text-stone-500 text-center">Buscando productos...</div>
-          ) : !etiquetaSel ? (
-            // Task 120: sin cartel de ayuda — con etiqueta sin elegir no se
-            // muestra nada (el dueño lo pidió borrado, incluso su recuadro).
-            null
-          ) : productosEtiqueta.length === 0 ? (
-            <div className="p-4 text-sm text-stone-500 text-center">
-              {etiquetaSel === "hashtag"
-                ? "No hay productos con #HASHTAG vigente"
-                : "No hay productos con esta etiqueta"}
-            </div>
-          ) : (
-            <>
-              <div className="text-[11px] font-semibold uppercase text-stone-400 mb-2">
-                {etiquetaTotal} producto{etiquetaTotal !== 1 ? "s" : ""} con{" "}
-                {etiquetaSel === "hashtag" ? "#HASHTAG" : "esta etiqueta"}
-              </div>
-              <div className="max-h-80 overflow-y-auto rounded-xl border border-stone-200 divide-y divide-stone-100">
-                {productosEtiqueta.map((p) => {
-                  const et = etiquetaDeId(p.etiquetaColor, etiquetasCreadas);
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => handleAddProduct(p)}
-                      className="w-full text-left p-3 flex items-center justify-between gap-3 transition-colors hover:brightness-95"
-                      style={et ? estiloFilaEtiqueta(et) : undefined}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-stone-900 text-sm line-clamp-1">{p.name}</p>
-                        <p className="text-xs text-stone-600 mt-0.5">
-                          SKU: {p.sku}
-                          {typeof p.stock === "number" ? ` · Stock: ${p.stock}` : ""}
-                          {p.priceContado ? ` · Contado: ${formatPYG(p.priceContado)}` : ""}
-                          {/* T123: en el filtro #HASHTAG cada fila muestra su # */}
-                          {p.hashtag?.valor
-                            ? ` · # ${textoHashtagValorRealGs(p.hashtag.valor)} GS`
-                            : ""}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-bold text-rose-600 text-sm whitespace-nowrap">
-                          {p.priceContado ? formatPYG(p.priceContado) : "—"}
-                        </span>
-                        <span className="h-7 px-2 rounded-lg bg-stone-900 text-white text-[11px] font-bold flex items-center gap-1">
-                          <Plus className="h-3 w-3" />
-                          Agregar
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              {productosEtiqueta.length < etiquetaTotal ? (
-                <button
-                  onClick={() => cargarPorEtiqueta(etiquetaSel, etiquetaPage + 1, true)}
-                  className="w-full mt-2 h-10 rounded-xl border-2 border-dashed border-stone-300 hover:border-rose-400 hover:bg-rose-50 text-stone-600 hover:text-rose-600 font-medium text-sm flex items-center justify-center gap-2 transition-colors"
-                >
-                  Mostrar más
-                </button>
-              ) : null}
-            </>
-          )}
-        </Section>
+        {/* 2.4. (Task 143) El LISTADO DE PRODUCTOS CLASIFICADOS se movió a un
+            modal que se abre desde el botón LISTA DE CLASIFICADOS del header.
+            Así la vista CUOTA queda más limpia y el listado está disponible
+            desde cualquier plan. Misma carga y mismos datos: solo cambió
+            dónde se muestra. */}
 
         {/* 2.5. DESCUENTO POR CASCO (AUTOMÁTICO - solo se muestra si hay casco en el carrito) */}
         {cascoEnCarrito && cascoValorExacto > 0 && (
