@@ -1375,7 +1375,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 <div
                   role="menu"
                   aria-label="Tipos de plan"
-                  className="absolute left-0 top-full mt-2 w-56 rounded-2xl overflow-hidden shadow-2xl border z-50"
+                  className="absolute left-0 top-full mt-2 w-64 rounded-2xl overflow-hidden shadow-2xl border z-50"
                   style={{
                     backgroundColor: AZUL_OSCURO,
                     borderColor: "rgba(217,184,107,0.55)",
@@ -1393,11 +1393,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                   </div>
                   {(
                     [
-                      { id: "safra", label: "SAFRA" },
-                      { id: "cotizador", label: "CUOTA" },
-                      { id: "cheque", label: "CHEQUE" },
-                      { id: "especial", label: "PEDIDO ESPECIAL" },
-                      { id: "mayorista", label: "MAYORISTA" },
+                      { id: "safra", label: "PLAN SAFRA" },
+                      { id: "cotizador", label: "PLAN CUOTA" },
+                      { id: "cheque", label: "PLAN CHEQUE" },
+                      { id: "especial", label: "PLAN PEDIDO ESPECIAL" },
+                      { id: "mayorista", label: "PRECIO MAYORISTA" },
                     ] as const
                   ).map((plan) => {
                     const activo = viewMode === plan.id;
@@ -1434,9 +1434,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               onClick={abrirListaClasificados}
               className="h-9 px-3 sm:px-4 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all border shadow-md hover:brightness-110 shrink-0"
               style={{
-                backgroundColor: "rgba(255,255,255,0.10)",
-                color: DORADO_CLARO,
-                borderColor: "rgba(217,184,107,0.55)",
+                background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 55%, ${DORADO_CLARO} 100%)`,
+                color: AZUL_OSCURO,
+                borderColor: DORADO,
               }}
               title="Ver los productos clasificados por etiqueta"
             >
