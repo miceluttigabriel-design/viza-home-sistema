@@ -15,6 +15,11 @@ import {
   asignarSucursal,
   SUCURSALES_USUARIO,
 } from "@/lib/sucursal-usuario";
+// Task 141 (pedido del dueño): número de CONTACTO editable desde el GDA.
+// La planilla FUN.VIZA sigue siendo el respaldo; lo que el dueño guarda en
+// el GDA pisa a la planilla solo para ese email. Tabla aparte, best-effort.
+import { contactoDe } from "@/lib/fun-viza-contactos";
+import { leerMapaContactos } from "@/lib/usuario-contacto";
 
 // GET /api/admin/usuarios
 // Solo el SUPREMO_ADMIN puede listar todos los usuarios con sus contraseñas (de la bitácora)
@@ -53,6 +58,10 @@ export async function GET() {
       mapaSucursales = await leerMapaSucursales();
     }
 
+    // Task 141: números editados/agregados desde el GDA. Si un email no
+    // tiene fila acá, se usa el número original de la planilla FUN.VIZA.
+    const mapaContactos = await leerMapaContactos();
+
     const resultado = await Promise.all(
       usuarios.map(async (u) => {
         const ultimoLog = await db.passwordLog.findFirst({
@@ -72,6 +81,10 @@ export async function GET() {
           cambiadoPor: ultimoLog?.cambiadoPor || null,
           // Sucursal asignada (CRM / planilla FUN.VIZA). "" = SIN SUCURSAL.
           sucursal: mapaSucursales.get(u.email.trim().toLowerCase()) || "",
+          // Contacto editable desde el GDA (Task 141). Prioridad:
+          // 1) número guardado desde el GDA, 2) planilla FUN.VIZA.
+          contacto:
+            mapaContactos.get(u.email.trim().toLowerCase()) || contactoDe(u.email),
         };
       })
     );

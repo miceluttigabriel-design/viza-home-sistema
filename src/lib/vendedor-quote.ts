@@ -17,6 +17,7 @@
 // la generación del presupuesto.
 import { leerMapaSucursales, MAPA_SUCURSAL_EXCEL } from "@/lib/sucursal-usuario";
 import { contactoDe } from "@/lib/fun-viza-contactos";
+import { leerMapaContactos } from "@/lib/usuario-contacto";
 
 export interface DatosVendedor {
   email: string;
@@ -36,6 +37,10 @@ export async function datosVendedorDeSesion(
   // Sucursal: primero la asignación guardada (editable por el admin en el
   // CRM), después la planilla FUN.VIZA. Si nada coincide, queda vacía.
   let sucursal = "";
+  // Task 141 (pedido del dueño): el número del vendedor que sale en el
+  // presupuesto es el que el dueño puede MODIFICAR/AGREGAR desde el GDA.
+  // Prioridad: 1) número guardado desde el GDA, 2) planilla FUN.VIZA.
+  let telefono = "";
   if (email) {
     try {
       const mapa = await leerMapaSucursales(); // best-effort, nunca tira
@@ -44,6 +49,12 @@ export async function datosVendedorDeSesion(
       // base caída / tabla ausente: seguir con el mapa de la planilla
     }
     if (!sucursal) sucursal = MAPA_SUCURSAL_EXCEL[email] || "";
+    try {
+      const mapContactos = await leerMapaContactos(); // best-effort, nunca tira
+      telefono = mapContactos.get(email) || "";
+    } catch {
+      // base caída / tabla ausente: seguir con la planilla
+    }
   }
 
   return {
@@ -51,6 +62,6 @@ export async function datosVendedorDeSesion(
     // Sin nombre guardado se muestra el email (que siempre existe en sesión).
     nombre: nombreSesion || email,
     sucursal,
-    telefono: email ? contactoDe(email) : "",
+    telefono: telefono || (email ? contactoDe(email) : ""),
   };
 }

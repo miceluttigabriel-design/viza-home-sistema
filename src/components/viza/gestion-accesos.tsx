@@ -22,6 +22,9 @@ import {
   MapPin,
   Phone,
   UserPlus,
+  Pencil,
+  X,
+  Trash2,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -35,9 +38,8 @@ import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
 import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
 // Task 101 (pedido del dueño): número de CONTACTO de cada usuario, sacado de
 // la planilla oficial FUN.VIZA (columna CONTACTO, coincidencia por EMAIL).
-// Lib estática y client-safe (mismo patrón que encargados-sucursal): es solo
-// referencia de lectura en el cliente, NO se guarda en la base y NO toca API.
-import { contactoDe } from "@/lib/fun-viza-contactos";
+// Task 141: ese número ahora llega en `contacto` desde /api/admin/usuarios
+// (edición guardada desde el GDA con prioridad sobre la planilla).
 
 interface AppUser {
   email: string;
@@ -58,6 +60,9 @@ interface Usuario {
   cambiadoPor: string | null;
   // Sucursal asignada (tabla UsuarioSucursal, la misma del CRM). "" = sin sucursal.
   sucursal: string;
+  // Task 141: número de contacto editable desde el GDA. Es el mismo que sale
+  // en la franja del vendedor en TODOS los presupuestos.
+  contacto: string;
 }
 
 interface HistorialItem {
@@ -97,9 +102,6 @@ function roleBadge(role: string, email?: string): { label: string; cls: string }
   if (role === "supremo_admin") {
     return { label: "SUPREMO ADMIN", cls: "bg-gradient-to-r from-amber-500 to-yellow-600 text-white border-amber-600" };
   }
-  if (role === "admin") {
-    return { label: "ADMIN", cls: "bg-sky-100 text-sky-800 border-sky-300" };
-  }
   // ESPECIAL (Task 139, pedido del dueño): los ENCARGADOS de sucursal que ven
   // el CRM de su sucursal (antes se mostraban como VIP — Task 76). Etiqueta
   // visible únicamente: el rol en la base sigue siendo colaborador y su
@@ -107,12 +109,19 @@ function roleBadge(role: string, email?: string): { label: string; cls: string }
   if (email && esEspecial(email)) {
     return { label: "ESPECIAL", cls: "bg-emerald-100 text-emerald-800 border-emerald-400" };
   }
-  // VIP (Task 139, pedido del dueño): usuarios destacados de la CENTRAL
-  // (filipe.campos@ = DIRECTORIO, viza.compras@ = ENC. COMPRAS). Etiqueta
-  // visible únicamente: NO da acceso al CRM ni cambia ningún permiso.
-  // Dorado suave, consistente con el sistema.
+  // VIP (Task 139/140/141, pedido del dueño): usuarios destacados de la
+  // CENTRAL (filipe.campos@ = DIRECTORIO, viza.compras@ = ENC. COMPRAS).
+  // "viza.compras@ ... con etiqueta dourada VIP nomas": el VIP manda sobre
+  // el rol ADMIN de la base (viza.compras@ fue sembrado como admin), así que
+  // se evalúa ANTES que admin. Etiqueta visible: no cambia permisos.
   if (email && esVip(email)) {
-    return { label: "VIP", cls: "bg-yellow-100 text-yellow-800 border-yellow-400" };
+    return {
+      label: "VIP",
+      cls: "bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 text-amber-950 border-amber-700 shadow-[0_0_8px_rgba(217,184,107,0.65)]",
+    };
+  }
+  if (role === "admin") {
+    return { label: "ADMIN", cls: "bg-sky-100 text-sky-800 border-sky-300" };
   }
   // Compat hacia atrás: representante → colaborador. Etiqueta visible con el
   // vocabulario del dueño (Supremo / Admin / ESPECIAL / VIP / Común); el rol
@@ -148,9 +157,11 @@ function esVip(email: string): boolean {
 
 function tipoUsuario(role: string, email?: string): string {
   if (role === "supremo_admin") return "SUPREMO";
-  if (role === "admin") return "ADMIN";
+  // Task 141: ESPECIAL/VIP mandan sobre el rol ADMIN de la base. Es solo la
+  // etiqueta visible del GDA; los permisos reales NO cambian.
   if (email && esEspecial(email)) return "ESPECIAL";
   if (email && esVip(email)) return "VIP";
+  if (role === "admin") return "ADMIN";
   return "COMÚN";
 }
 
@@ -326,6 +337,12 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
   const [loadingHistorial, setLoadingHistorial] = useState(false);
   const [resetando, setResetando] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  // Task 141: edición inline del CONTACTO (número que sale en el presupuesto).
+  const [editandoContactoId, setEditandoContactoId] = useState<string | null>(null);
+  const [contactoDraft, setContactoDraft] = useState("");
+  const [guardandoContacto, setGuardandoContacto] = useState<string | null>(null);
+  // Task 141: eliminación definitiva de un usuario (con confirmación doble).
+  const [eliminando, setEliminando] = useState<string | null>(null);
   // Task 82: guarda el id del usuario cuyo TIPO se está cambiando (spinner).
   const [cambiandoRol, setCambiandoRol] = useState<string | null>(null);
   // Estado para polling en tiempo real
@@ -492,6 +509,91 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
     setCopiedContactoId(id);
     setTimeout(() => setCopiedContactoId(null), 1500);
     toast.success("Número copiado");
+  };
+
+  // ─── Task 141: MODIFICAR / AGREGAR el número de contacto ───
+  // El número guardado acá es el que aparece en la franja del vendedor en
+  // TODOS los presupuestos (misma prioridad que /api/admin/usuarios).
+  const abrirEdicionContacto = (u: Usuario) => {
+    setEditandoContactoId(u.id);
+    setContactoDraft(u.contacto || "");
+  };
+
+  const cancelarEdicionContacto = () => {
+    setEditandoContactoId(null);
+    setContactoDraft("");
+  };
+
+  const guardarContacto = async (u: Usuario) => {
+    setGuardandoContacto(u.id);
+    try {
+      const res = await fetch(`/api/admin/usuarios/${u.id}/contacto`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefono: contactoDraft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "No se pudo guardar el contacto");
+      const contacto = String(data.contacto || "");
+      setUsuarios((prev) =>
+        prev.map((x) => (x.id === u.id ? { ...x, contacto } : x))
+      );
+      setEditandoContactoId(null);
+      setContactoDraft("");
+      toast.success(
+        contacto ? `Contacto actualizado: ${contacto}` : "Contacto actualizado",
+        { description: "El nuevo número sale en los próximos presupuestos" }
+      );
+    } catch (e: any) {
+      toast.error(e.message || "No se pudo guardar el contacto");
+    } finally {
+      setGuardandoContacto(null);
+    }
+  };
+
+  // ─── Task 141: ELIMINAR usuario ───
+  // Doble confirmación (aviso + escribir el email). La API vuelve a validar:
+  // solo SUPREMO, nunca la propia cuenta ni otro SUPREMO_ADMIN.
+  const eliminarUsuario = async (u: Usuario) => {
+    if (u.role === "supremo_admin") {
+      toast.error("No se puede eliminar un usuario SUPREMO_ADMIN");
+      return;
+    }
+    if (u.email.trim().toLowerCase() === (user.email || "").trim().toLowerCase()) {
+      toast.error("No puedes eliminar tu propia cuenta");
+      return;
+    }
+    const aviso = window.confirm(
+      `¿ELIMINAR DEFINITIVAMENTE el usuario ${u.email}?\n\n` +
+        "Se borra su cuenta y su historial de contraseñas. " +
+        "Los presupuestos ya emitidos NO se borran (quedan sin vínculo al usuario).\n\n" +
+        "Esta acción NO se puede deshacer."
+    );
+    if (!aviso) return;
+    const escrito = window.prompt(
+      `Para confirmar, escribí el email completo del usuario:\n${u.email}`
+    );
+    if (escrito === null) return;
+    if (escrito.trim().toLowerCase() !== u.email.trim().toLowerCase()) {
+      toast.error("El email no coincide. No se eliminó nada.");
+      return;
+    }
+
+    setEliminando(u.id);
+    try {
+      const res = await fetch(`/api/admin/usuarios/${u.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "No se pudo eliminar el usuario");
+      toast.success(`Usuario eliminado: ${u.email}`);
+      if (editandoContactoId === u.id) cancelarEdicionContacto();
+      await cargar(true);
+    } catch (e: any) {
+      toast.error(e.message || "No se pudo eliminar el usuario");
+    } finally {
+      setEliminando(null);
+    }
   };
 
   const abrirHistorial = async (u: Usuario) => {
@@ -710,7 +812,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
           lines.push(`    Email:        ${u.email}`);
           lines.push(`    Contraseña:   ${u.contrasenaActual}`);
           lines.push(`    Nombre:       ${u.name || "—"}`);
-          lines.push(`    Contacto:     ${contactoDe(u.email) || "—"}`);
+          lines.push(`    Contacto:     ${u.contacto || "—"}`);
           lines.push(`    Tipo:         ${tipoUsuario(u.role, u.email)}`);
           lines.push("");
         }
@@ -721,12 +823,20 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
     // ── Totales: por tipo y por sucursal ──
     const esComun = (r: string) => r === "colaborador" || r === "representante";
     const nSupremos = usuarios.filter((u) => u.role === "supremo_admin").length;
-    const nAdmins = usuarios.filter((u) => u.role === "admin").length;
-    // Task 139: ESPECIAL (encargados del CRM) y VIP (destacados de la central)
-    // son mutuamente excluyentes; un COMÚN es el que no es ninguno de los dos.
-    const nEspecial = usuarios.filter((u) => esComun(u.role) && esEspecial(u.email)).length;
-    const nVip = usuarios.filter((u) => esComun(u.role) && !esEspecial(u.email) && esVip(u.email)).length;
-    const nComunes = usuarios.filter((u) => esComun(u.role) && !esEspecial(u.email) && !esVip(u.email)).length;
+    // Task 141: cada etiqueta cuenta lo mismo que se ve en la columna Tipo
+    // (ESPECIAL/VIP mandan sobre el rol ADMIN de la base).
+    const nAdmins = usuarios.filter(
+      (u) => u.role === "admin" && !esEspecial(u.email) && !esVip(u.email)
+    ).length;
+    const nEspecial = usuarios.filter(
+      (u) => u.role !== "supremo_admin" && esEspecial(u.email)
+    ).length;
+    const nVip = usuarios.filter(
+      (u) => u.role !== "supremo_admin" && !esEspecial(u.email) && esVip(u.email)
+    ).length;
+    const nComunes = usuarios.filter(
+      (u) => esComun(u.role) && !esEspecial(u.email) && !esVip(u.email)
+    ).length;
     lines.push("================================================================================");
     lines.push(`  TOTAL: ${usuarios.length} usuarios`);
     lines.push(`    Por tipo:      Supremo: ${nSupremos} · Admin: ${nAdmins} · ESPECIAL: ${nEspecial} · VIP: ${nVip} · Común: ${nComunes}`);
@@ -753,10 +863,21 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
       (u.name || "").toLowerCase().includes(search.toLowerCase());
     // Compat hacia atrás: representante ≡ colaborador
     const esColaborador = (r: string) => r === "colaborador" || r === "representante";
+    // Task 141 (pedido del dueño): el filtro TIPO DE USUARIO ahora incluye
+    // VIP y ESPECIAL. Cada opción muestra exactamente la misma etiqueta que
+    // se ve en la columna Tipo (ESPECIAL/VIP mandan sobre el rol ADMIN).
     const matchRol =
-      filtroRol === "todos" ||
-      u.role === filtroRol ||
-      (filtroRol === "colaborador" && esColaborador(u.role));
+      filtroRol === "todos"
+        ? true
+        : filtroRol === "especial"
+          ? u.role !== "supremo_admin" && esEspecial(u.email)
+          : filtroRol === "vip"
+            ? u.role !== "supremo_admin" && !esEspecial(u.email) && esVip(u.email)
+            : filtroRol === "admin"
+              ? u.role === "admin" && !esEspecial(u.email) && !esVip(u.email)
+              : filtroRol === "colaborador"
+                ? esColaborador(u.role) && !esEspecial(u.email) && !esVip(u.email)
+                : u.role === filtroRol;
     // Filtro por sucursal ("todas" = no filtra, solo agrupa en secciones)
     const matchSucursal = filtroSucursal === "todas" || sucursalDe(u) === filtroSucursal;
     return matchSearch && matchRol && matchSucursal;
@@ -940,7 +1061,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               ADMIN
             </div>
             <p className="text-3xl font-black text-sky-600 mt-1">
-              {usuarios.filter((u) => u.role === "admin").length}
+              {usuarios.filter((u) => u.role === "admin" && !esEspecial(u.email) && !esVip(u.email)).length}
             </p>
           </div>
           {/* Task 139: los encargados del CRM ahora se llaman ESPECIAL. */}
@@ -949,7 +1070,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               ESPECIAL (CRM)
             </div>
             <p className="text-3xl font-black text-emerald-600 mt-1">
-              {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && esEspecial(u.email)).length}
+              {usuarios.filter((u) => u.role !== "supremo_admin" && esEspecial(u.email)).length}
             </p>
           </div>
           {/* Task 139: tarjeta VIP para los destacados de la central
@@ -959,7 +1080,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               VIP
             </div>
             <p className="text-3xl font-black text-yellow-600 mt-1">
-              {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && !esEspecial(u.email) && esVip(u.email)).length}
+              {usuarios.filter((u) => u.role !== "supremo_admin" && !esEspecial(u.email) && esVip(u.email)).length}
             </p>
           </div>
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
@@ -1018,6 +1139,9 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
             <option value="todos">TODOS</option>
             <option value="supremo_admin">SUPREMO ADMIN</option>
             <option value="admin">ADMIN</option>
+            {/* Task 141 (pedido del dueño): filtros por TIPO VIP y ESPECIAL. */}
+            <option value="especial">ESPECIAL</option>
+            <option value="vip">VIP</option>
             {/* Etiqueta con el vocabulario del dueño; el valor "colaborador" es el rol real en la base. */}
             <option value="colaborador">COMÚN</option>
           </select>
@@ -1199,9 +1323,10 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                     const u = fila.usuario;
                     const rb = roleBadge(u.role, u.email);
                     const destacado = destacadosIds.has(u.id);
-                    // Task 101: número de contacto del usuario según la planilla
-                    // FUN.VIZA. Vacío = la planilla todavía no lo tiene ("—").
-                    const tel = contactoDe(u.email);
+                    // Task 101/141: número de contacto del usuario. Prioridad:
+                    // 1) número modificado/agregado desde el GDA, 2) planilla
+                    // FUN.VIZA. Vacío = todavía no tiene número ("—").
+                    const tel = u.contacto || "";
                     return (
                       <tr
                         key={fila.key}
@@ -1221,22 +1346,83 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                             {sectorDe(u)}
                           </span>
                         </td>
-                        {/* CONTACTO según la planilla FUN.VIZA (Task 101, pedido del
-                            dueño: cada uno con su respectivo número). Solo referencia
-                            de lectura; un click copia el número. Sin número = "—". */}
+                        {/* CONTACTO (Task 101/141, pedido del dueño): es el número
+                            que sale en la franja del vendedor en TODOS los
+                            presupuestos. Se puede MODIFICAR (lápiz) y AGREGAR si
+                            todavía no tiene (botón + AGREGAR). Un click copia. */}
                         <td className="px-3 py-2.5">
-                          {tel ? (
-                            <button
-                              onClick={() => copiarContacto(tel, u.id)}
-                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-stone-100 border border-stone-200 hover:bg-amber-50 hover:border-amber-300 transition-colors group"
-                              title={`Copiar ${tel}`}
-                            >
-                              <Phone className="h-3 w-3" style={{ color: "#b89853" }} />
-                              <span className="text-xs font-mono font-medium text-stone-700 group-hover:text-stone-900">{tel}</span>
-                              {copiedContactoId === u.id && <Check className="h-3.5 w-3.5 text-green-600" />}
-                            </button>
+                          {editandoContactoId === u.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="tel"
+                                autoFocus
+                                value={contactoDraft}
+                                maxLength={40}
+                                onChange={(e) => setContactoDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    guardarContacto(u);
+                                  } else if (e.key === "Escape") {
+                                    cancelarEdicionContacto();
+                                  }
+                                }}
+                                placeholder="0983 000000"
+                                className="h-8 w-32 px-2 rounded-lg bg-white border border-amber-400 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-100"
+                                title="Número que sale en el presupuesto. Enter = guardar · Esc = cancelar"
+                              />
+                              <button
+                                onClick={() => guardarContacto(u)}
+                                disabled={guardandoContacto === u.id}
+                                className="h-8 w-8 rounded-lg flex items-center justify-center bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                                title="Guardar número"
+                              >
+                                {guardandoContacto === u.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="h-4 w-4" />
+                                )}
+                              </button>
+                              <button
+                                onClick={cancelarEdicionContacto}
+                                disabled={guardandoContacto === u.id}
+                                className="h-8 w-8 rounded-lg flex items-center justify-center text-stone-500 hover:bg-stone-100 transition-colors disabled:opacity-50"
+                                title="Cancelar"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : tel ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => copiarContacto(tel, u.id)}
+                                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-stone-100 border border-stone-200 hover:bg-amber-50 hover:border-amber-300 transition-colors group"
+                                title={`Copiar ${tel}`}
+                              >
+                                <Phone className="h-3 w-3" style={{ color: "#b89853" }} />
+                                <span className="text-xs font-mono font-medium text-stone-700 group-hover:text-stone-900">{tel}</span>
+                                {copiedContactoId === u.id && <Check className="h-3.5 w-3.5 text-green-600" />}
+                              </button>
+                              <button
+                                onClick={() => abrirEdicionContacto(u)}
+                                className="h-7 w-7 rounded-lg flex items-center justify-center text-stone-400 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                                title="Modificar número (sale en el presupuesto)"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           ) : (
-                            <span className="text-xs text-stone-300">—</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-stone-300">—</span>
+                              <button
+                                onClick={() => abrirEdicionContacto(u)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide text-amber-800 bg-amber-50 border border-amber-300 hover:bg-amber-100 transition-colors"
+                                title="Agregar el número que sale en el presupuesto"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                AGREGAR
+                              </button>
+                            </div>
                           )}
                         </td>
                         {/* TIPO DE USUARIO al lado del sector: Supremo / Admin /
@@ -1346,6 +1532,27 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                               }`}
                             >
                               {toggling === u.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+                            </button>
+                            {/* Task 141 (pedido del dueño): eliminar usuario.
+                                Doble confirmación en pantalla; la API protege
+                                la propia cuenta y a los SUPREMO_ADMIN. */}
+                            <button
+                              onClick={() => eliminarUsuario(u)}
+                              disabled={
+                                eliminando === u.id ||
+                                u.role === "supremo_admin" ||
+                                u.email.trim().toLowerCase() === (user.email || "").trim().toLowerCase()
+                              }
+                              title={
+                                u.role === "supremo_admin"
+                                  ? "No se puede eliminar al supremo"
+                                  : u.email.trim().toLowerCase() === (user.email || "").trim().toLowerCase()
+                                    ? "No puedes eliminar tu propia cuenta"
+                                    : "Eliminar usuario"
+                              }
+                              className="h-8 w-8 rounded-lg flex items-center justify-center text-red-700 hover:bg-red-100 border border-transparent hover:border-red-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              {eliminando === u.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                             </button>
                           </div>
                         </td>
