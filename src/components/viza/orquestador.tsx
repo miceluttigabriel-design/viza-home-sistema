@@ -428,7 +428,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
 
   return (
     <div
-      className="relative min-h-screen flex flex-col overflow-hidden"
+      className="relative min-h-screen flex flex-col overflow-x-clip"
       style={{
         fontFamily: FONT,
         background:
@@ -446,48 +446,10 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
         }}
       />
 
-      {/* ─── Barra superior: marca + usuario + GDA ─── */}
-      <header className="relative z-10 border-b border-white/10 bg-black/40 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div
-              className="h-10 w-10 rounded-xl flex items-center justify-center text-sm font-black shadow-lg"
-              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-            >
-              {inicial}
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white leading-none">{user.name || user.email}</p>
-              <p className="text-[10px] uppercase tracking-widest font-bold mt-1" style={{ color: DORADO }}>
-                {etiquetaUsuario}
-              </p>
-            </div>
-          </div>
-          {/* Task 144: GDA SOLO para el supremo. Admins y VIPs ven el
-              Orquestador, pero no este botón. */}
-          {esSupremo && onGoGestion && (
-            <button
-              onClick={onGoGestion}
-              className="h-9 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm hover:brightness-110"
-              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-              title="Gestión de Accesos y Contraseñas"
-            >
-              GDA
-            </button>
-          )}
-        </div>
-      </header>
-
-      <main className="relative z-10 flex-1 flex flex-col items-center px-4 sm:px-6 pt-8 pb-10">
-        {/* ─── Marca + título ─── */}
-        <div className="text-center mb-8 sm:mb-10">
-          <div
-            className="mx-auto mb-4 w-24 rounded-2xl overflow-hidden"
-            style={{ boxShadow: "0 0 0 1px rgba(217,184,107,0.35), 0 12px 40px -8px rgba(21,87,137,0.8)" }}
-          >
-            <img src="/viza-home-logo-nuevo.png" alt="VIZA HOME" className="block w-full h-auto" />
-          </div>
-          <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white">
+      {/* ─── Barra superior fija: título + usuario + GDA ─── */}
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-black/60 backdrop-blur">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <h1 className="text-base sm:text-xl lg:text-2xl font-black tracking-tight text-white text-center">
             SISTEMA ORQUESTADOR DE{" "}
             <span
               style={{
@@ -500,11 +462,37 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
               VIZA HOME
             </span>
           </h1>
-          <p className="text-[10px] sm:text-[11px] tracking-[0.3em] font-bold mt-2" style={{ color: C_STOCK }}>
-            MUEBLES · ELECTRODOMÉSTICOS · HOGAR
-          </p>
+          <span className="hidden md:block h-7 w-px bg-white/15" aria-hidden="true" />
+          <div className="flex items-center gap-3">
+            <div
+              className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-black shadow-lg shrink-0"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+            >
+              {inicial}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white leading-none truncate">{user.name || user.email}</p>
+              <p className="text-[10px] uppercase tracking-widest font-bold mt-1" style={{ color: DORADO }}>
+                {etiquetaUsuario}
+              </p>
+            </div>
+          </div>
+          {/* Task 144: GDA SOLO para el supremo. Admins y VIPs ven el
+              Orquestador, pero no este botón. */}
+          {esSupremo && onGoGestion && (
+            <button
+              onClick={onGoGestion}
+              className="h-9 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm hover:brightness-110 lg:absolute lg:right-0 lg:top-1/2 lg:-translate-y-1/2"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title="Gestión de Accesos y Contraseñas"
+            >
+              GDA
+            </button>
+          )}
         </div>
+      </header>
 
+      <main className="relative z-10 flex-1 flex flex-col items-center px-4 sm:px-6 pt-6 pb-10">
         {/* ═══ DIAGRAMA (pantallas grandes): cuadros unidos por líneas de flujo ═══ */}
         <Escenario>
           <svg width={W} height={H} className="absolute inset-0 pointer-events-none" aria-hidden="true">
