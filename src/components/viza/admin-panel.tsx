@@ -708,7 +708,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
         throw new Error(`El correo no salió.${pista}`);
       }
     } catch (error) {
-      toast.error(`Error: ${(error as Error).message}`, { id: toastId, duration: 12000 });
+      // Task 135: 20 segundos de lectura — el mensaje ahora trae la PISTA
+      // traducida de pistaSmtp() (paso a paso de Outlook/Brevo), no el
+      // error pelado del servidor.
+      toast.error(`Error: ${(error as Error).message}`, { id: toastId, duration: 20000 });
     }
   };
 

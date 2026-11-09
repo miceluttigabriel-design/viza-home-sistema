@@ -87,6 +87,86 @@ export function diagnosticoSmtp(): SmtpDiagnostico {
 }
 
 // ============================================================
+// TRADUCTOR DE ERRORES SMTP (Task 135, pedido del dueño): el error
+// "Invalid login: 535 5.7.3 AUTHENTICATION UNSUCCESSFUL" salió en
+// pantalla PELADO y no le dijo QUÉ hacer. pistaSmtp() toma el mensaje
+// crudo del servidor y devuelve instrucciones concretas en español:
+//   · 535 5.7.3 / Authentication unsuccessful → la firma clásica de
+//     Outlook/Microsoft 365 con el "SMTP autenticado" DESACTIVADO en
+//     el buzón (Microsoft lo apaga por defecto) — acá está el paso a
+//     paso para activarlo, y la alternativa Brevo.
+//   · 5.7.9 / app password → contraseña de aplicación (Gmail).
+//   · 5.7.1 / relay denied → remitente no autorizado (SMTP_FROM).
+//   · EDNS/ECONN/ETIMEDOUT → host o puerto mal.
+//   · resto de EAUTH/535 → usuario o contraseña mal.
+// Se usa en probarSmtp() y en sendBackupEmail(): el toast de la Base
+// y el modo ?test=1 muestran SIEMPRE qué hacer, nunca el texto pelado.
+// ============================================================
+export function pistaSmtp(msg: string): string {
+  const m = (msg || "").toLowerCase();
+
+  // ── Outlook / Microsoft 365: 535 5.7.3 Authentication unsuccessful ──
+  // Es EL error exacto que le apareció al dueño (BL3APR03...PROD.OUTLOOK.COM).
+  // 1ª causa: buzón con SMTP AUTH desactivado (default de Microsoft).
+  // 2ª causa: contraseña mal en SMTP_PASS.
+  if (m.includes("5.7.3") || m.includes("authentication unsuccessful")) {
+    return (
+      "Microsoft RECHAZÓ el usuario/contraseña (535 5.7.3). Con buzones de Outlook/Microsoft 365 la causa #1 es que el buzón tiene el 'SMTP autenticado' DESACTIVADO (Microsoft lo apaga por defecto). " +
+      "Activalo: admin.microsoft.com → Usuarios activos → el buzón que envía → pestaña CORREO → 'Administrar aplicaciones de correo electrónico' → tildar SMTP AUTENTICADO → Guardar (demora unos minutos en aplicar). " +
+      "Causa #2: la contraseña cargada en SMTP_PASS no es la del buzón — recargala sin espacios. " +
+      "Alternativa sin tocar Microsoft (recomendada): cuenta gratis en brevo.com (300 correos/día) y cambiar SMTP_HOST=smtp-relay.brevo.com · SMTP_PORT=587 · SMTP_USER y SMTP_PASS con la clave SMTP de Brevo — pasos completos en el LEEME Task 135. " +
+      "Después probá rápido abriendo /api/cron/backup-excel?test=1 logueado como Supremo."
+    );
+  }
+
+  // ── Gmail/Workspace: 534 5.7.9 → pide Contraseña de aplicación ──
+  if (
+    m.includes("5.7.9") ||
+    m.includes("application-specific") ||
+    m.includes("app password") ||
+    m.includes("contraseña de aplicación")
+  ) {
+    return (
+      "El servidor pide CONTRASEÑA DE APLICACIÓN (5.7.9): la contraseña normal no sirve. " +
+      "En Gmail/Workspace: cuenta Google → Seguridad → Verificación en 2 pasos → Contraseñas de aplicación → crear una de 16 letras y cargarla en SMTP_PASS."
+    );
+  }
+
+  // ── Remitente no autorizado (relay denied / 5.7.1) ──
+  if (m.includes("5.7.1") || m.includes("relay")) {
+    return (
+      "El servidor no permite enviar desde ese remitente (5.7.1): SMTP_FROM tiene que coincidir con el buzón que autentica (SMTP_USER) o estar autorizado en el proveedor."
+    );
+  }
+
+  // ── No conecta: host o puerto mal ──
+  if (
+    m.includes("edns") ||
+    m.includes("econn") ||
+    m.includes("etimedout") ||
+    m.includes("eai_again")
+  ) {
+    return (
+      "No se pudo conectar al servidor SMTP: revisá SMTP_HOST y SMTP_PORT " +
+      "(Outlook: smtp.office365.com y puerto 587 · Brevo: smtp-relay.brevo.com y 587 · Gmail: smtp.gmail.com y 465)."
+    );
+  }
+
+  // ── Resto de errores de login (535 genérico / EAUTH) ──
+  if (m.includes("eauth") || m.includes("invalid login") || m.includes("535")) {
+    return (
+      "Login rechazado por el servidor SMTP: revisá SMTP_USER (el correo COMPLETO del buzón) y SMTP_PASS (sin espacios). " +
+      "Probá después abriendo /api/cron/backup-excel?test=1 logueado como Supremo."
+    );
+  }
+
+  // ── Fallback: cualquier otro error SMTP ──
+  return (
+    "Revisá las variables SMTP en Vercel (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM) y probá abriendo /api/cron/backup-excel?test=1 logueado como Supremo."
+  );
+}
+
+// ============================================================
 // PRUEBA RÁPIDA DE SMTP (Task 133): conecta al servidor SMTP y envía
 // un correo chiquito de prueba (sin adjunto, sin generar el Excel).
 // La usa el modo ?test=1 del endpoint — así el dueño valida host/
@@ -127,11 +207,10 @@ export async function probarSmtp(): Promise<{
       ok: false,
       conexion: msg,
       enviadoA: null,
-      detalle:
-        `No se pudo conectar/autenticar contra ${cfg.host}:${cfg.port} ` +
-        `con el usuario ${cfg.user}. Revisá SMTP_HOST, SMTP_PORT, SMTP_USER ` +
-        `y SMTP_PASS (si es Gmail/Workspace, la contraseña tiene que ser una ` +
-        `Contraseña de aplicación de 16 letras, no la normal).`,
+      // Task 135: instrucciones concretas según el error (535 5.7.3 →
+      // activar SMTP autenticado en Microsoft, 5.7.9 → contraseña de
+      // aplicación, etc.) en vez del texto pelado del servidor.
+      detalle: pistaSmtp(msg),
     };
   }
 
@@ -153,10 +232,9 @@ export async function probarSmtp(): Promise<{
       ok: false,
       conexion: "conectado y autenticado, pero el envío falló",
       enviadoA: null,
-      detalle:
-        `La conexión con ${cfg.host} funcionó pero el envío a ${to} fue ` +
-        `rechazado: ${msg}. Suele ser el remitente (SMTP_FROM) que no ` +
-        `coincide con la cuenta que autentica, o el buzón sin permiso de envío.`,
+      // Task 135: pista traducida (incluye el caso "el envío fue
+      // rechazado por remitente no autorizado" — 5.7.1).
+      detalle: `El envío a ${to} fue rechazado por ${cfg.host}: ${pistaSmtp(msg)}`,
     };
   }
 
@@ -254,20 +332,32 @@ Por seguridad, este backup EXCLUYE la tabla PasswordLog y el campo <code>passwor
 <p style="font-size: 12px; color: #999;">Generado automáticamente por VIZA HOME E.A.S (Task 112)</p>
 </div>`;
 
-  const info = await transporter.sendMail({
-    from: cfg.from,
-    to,
-    subject: `Backup VIZA HOME — ${fechaLegible}`,
-    text: texto,
-    html,
-    attachments: [
-      {
-        filename,
-        content: buffer,
-        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      },
-    ],
-  });
+  // Task 135: si el servidor rechaza el envío (p. ej. 535 5.7.3 de
+  // Outlook con el SMTP autenticado desactivado), NO devolvemos el
+  // mensaje pelado: le agregamos la PISTA traducida con el paso a
+  // paso. El toast de la Base y el cron muestran la instrucción.
+  let info;
+  try {
+    info = await transporter.sendMail({
+      from: cfg.from,
+      to,
+      subject: `Backup VIZA HOME — ${fechaLegible}`,
+      text: texto,
+      html,
+      attachments: [
+        {
+          filename,
+          content: buffer,
+          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        },
+      ],
+    });
+  } catch (e) {
+    const msg = (e as Error).message || String(e);
+    throw new Error(
+      `${pistaSmtp(msg)} — Detalle técnico del servidor: ${msg}`
+    );
+  }
 
   const accepted = info.accepted?.length > 0;
   if (!accepted) {
