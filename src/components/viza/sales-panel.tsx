@@ -22,6 +22,7 @@ import {
   LayoutGrid,
   BarChart3,
   Boxes,
+  Check,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "sonner";
@@ -356,6 +357,34 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   const [calcDone, setCalcDone] = useState(false); // si ya se calculó al menos una vez
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [viewMode, setViewMode] = useState<"cotizador" | "safra" | "cheque" | "mayorista" | "especial">("cotizador");
+  // Task 142 (pedido del dueño): un solo botón dorado PRESUPUESTAR que abre
+  // el menú con los 5 tipos de plan (SAFRA / CUOTA / CHEQUE / PEDIDO ESPECIAL
+  // / MAYORISTA). Antes eran 5 botones sueltos en el header; ahora el panel
+  // queda más limpio sin cambiar NINGUNA pantalla ni ningún cálculo.
+  const [presupuestarOpen, setPresupuestarOpen] = useState(false);
+  const presupuestarRef = useRef<HTMLDivElement | null>(null);
+
+  // Cierra el menú PRESUPUESTAR al hacer click afuera o con Escape.
+  useEffect(() => {
+    if (!presupuestarOpen) return;
+    const alClickAfuera = (e: MouseEvent) => {
+      if (
+        presupuestarRef.current &&
+        !presupuestarRef.current.contains(e.target as Node)
+      ) {
+        setPresupuestarOpen(false);
+      }
+    };
+    const alEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPresupuestarOpen(false);
+    };
+    document.addEventListener("mousedown", alClickAfuera);
+    document.addEventListener("keydown", alEscape);
+    return () => {
+      document.removeEventListener("mousedown", alClickAfuera);
+      document.removeEventListener("keydown", alEscape);
+    };
+  }, [presupuestarOpen]);
   // Modal: cambiar mi propia contraseña (visible para todos los roles)
   const [cambiarContrasenaOpen, setCambiarContrasenaOpen] = useState(false);
   // CRM de mi sucursal (solo encargados): ranking de presupuestos SOLO LECTURA
@@ -1289,65 +1318,87 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 <span>VER BASE</span>
               </button>
             )}
-            {/* === TOGGLE MODO COTIZADOR / PLAN SAFRA / CON CHEQUE (al lado de BASE) === */}
-            <button
-              onClick={() => setViewMode("cotizador")}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
-              style={
-                viewMode === "cotizador"
-                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
-                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
-              }
-            >
-              CUOTA
-            </button>
-            <button
-              onClick={() => setViewMode("safra")}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
-              style={
-                viewMode === "safra"
-                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
-                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
-              }
-            >
-              SAFRA
-            </button>
-            <button
-              onClick={() => setViewMode("cheque")}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
-              style={
-                viewMode === "cheque"
-                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
-                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
-              }
-            >
-              CHEQUE
-            </button>
-            <button
-              onClick={() => setViewMode("mayorista")}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
-              style={
-                viewMode === "mayorista"
-                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
-                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
-              }
-            >
-              MAYORISTA
-            </button>
-            {/* === PEDIDO ESPECIAL (Task 113, pedido del dueño): costo → proveedor
-                → tipo de producto → descripción → plan; el sistema calcula con
-                los % de la Base para esa combinación (misma fórmula de siempre). === */}
-            <button
-              onClick={() => setViewMode("especial")}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all border shrink-0"
-              style={
-                viewMode === "especial"
-                  ? { backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }
-                  : { backgroundColor: "rgba(255,255,255,0.08)", color: DORADO_CLARO, borderColor: "rgba(217,184,107,0.4)" }
-              }
-            >
-              PEDIDO ESPECIAL
-            </button>
+            {/* === PRESUPUESTAR (Task 142, pedido del dueño): UN solo botón
+                dorado que abre el menú con los 5 tipos de plan (SAFRA / CUOTA
+                / CHEQUE / PEDIDO ESPECIAL / MAYORISTA). Antes eran 5 botones
+                sueltos; ahora el panel queda más limpio. La lógica es la
+                MISMA de siempre: cada opción hace exactamente el mismo
+                setViewMode que hacía su botón anterior. === */}
+            <div ref={presupuestarRef} className="relative shrink-0">
+              <button
+                onClick={() => setPresupuestarOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={presupuestarOpen}
+                className="h-9 px-3 sm:px-4 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all border shadow-md hover:brightness-110 shrink-0"
+                style={{
+                  background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 55%, ${DORADO_CLARO} 100%)`,
+                  color: AZUL_OSCURO,
+                  borderColor: DORADO,
+                }}
+                title="Elegir el tipo de plan para presupuestar"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>PRESUPUESTAR</span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform ${presupuestarOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {presupuestarOpen && (
+                <div
+                  role="menu"
+                  aria-label="Tipos de plan"
+                  className="absolute left-0 top-full mt-2 w-56 rounded-2xl overflow-hidden shadow-2xl border z-50"
+                  style={{
+                    backgroundColor: AZUL_OSCURO,
+                    borderColor: "rgba(217,184,107,0.55)",
+                  }}
+                >
+                  <div
+                    className="px-3 py-2 text-[10px] font-black uppercase tracking-widest"
+                    style={{
+                      color: DORADO_CLARO,
+                      backgroundColor: "rgba(217,184,107,0.10)",
+                      borderBottom: "1px solid rgba(217,184,107,0.25)",
+                    }}
+                  >
+                    Tipo de plan
+                  </div>
+                  {(
+                    [
+                      { id: "safra", label: "SAFRA" },
+                      { id: "cotizador", label: "CUOTA" },
+                      { id: "cheque", label: "CHEQUE" },
+                      { id: "especial", label: "PEDIDO ESPECIAL" },
+                      { id: "mayorista", label: "MAYORISTA" },
+                    ] as const
+                  ).map((plan) => {
+                    const activo = viewMode === plan.id;
+                    return (
+                      <button
+                        key={plan.id}
+                        role="menuitem"
+                        onClick={() => {
+                          setViewMode(plan.id);
+                          setPresupuestarOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-xs sm:text-sm font-bold uppercase tracking-wide transition-colors ${
+                          activo ? "" : "hover:bg-white/10"
+                        }`}
+                        style={
+                          activo
+                            ? { backgroundColor: DORADO, color: AZUL_OSCURO }
+                            : { color: DORADO_CLARO }
+                        }
+                      >
+                        <span>{plan.label}</span>
+                        {activo && <Check className="h-4 w-4" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* LADO DERECHO: Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión.
