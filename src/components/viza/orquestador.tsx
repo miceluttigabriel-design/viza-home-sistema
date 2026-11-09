@@ -2,7 +2,11 @@
 
 // ═══════════════════════════════════════════════════════════════════
 // SISTEMA ORQUESTADOR DE VIZA HOME — rediseño "tema oscuro + identidad VIZA"
-// Pantalla "desde arriba" que ve SOLO el supremo_admin al entrar.
+// Pantalla "desde arriba" del sistema.
+//
+// Task 144 (pedido del dueño): además del SUPREMO, también pueden verla los
+// ADMINS y los usuarios VIP. El GDA y las acciones críticas (IMPORTAR EXCEL,
+// DISTRIBUCIÓN INTELIGENTE) siguen siendo SOLO del supremo.
 //
 // Distribución del dibujo del dueño (se mantiene EXACTA):
 //   · ARRIBA: STOCK GENERAL → vista inventario
@@ -14,12 +18,13 @@
 //
 // Marca: azul #155789 · dorado #D9B86B · logo /viza-home-logo-nuevo.png
 // SOLO ES VISUALIZACIÓN: no toca datos, no toca APIs, no toca la base.
-// Los demás roles nunca llegan a esta pantalla (page.tsx decide por rol).
+// page.tsx decide qué roles llegan a esta pantalla.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Database, Boxes, Calculator, Network, MapPin, Link2, ArrowRight } from "lucide-react";
+import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
 
 // Sucursales oficiales de VIZA (misma lista que SUCURSALES_VIZA en
 // src/lib/sucursal-usuario.ts, en el orden del dueño). Se repite acá SOLO
@@ -51,7 +56,9 @@ interface OrquestadorProps {
   onGoBase: () => void;
   onGoStock: () => void;
   onGoSales: () => void;
-  onGoGestion: () => void;
+  // Task 144: SOLO el supremo recibe esta prop. Si no llega, el botón GDA
+  // no se renderiza para admins ni VIPs.
+  onGoGestion?: () => void;
 }
 
 // ─── Tarjeta de módulo (una sola pieza reutilizada por todos) ───
@@ -411,6 +418,13 @@ function Conector({ color = DORADO }: { color?: string }) {
 
 export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion }: OrquestadorProps) {
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
+  const esSupremo = user.role === "supremo_admin";
+  const esVip = !!USUARIOS_VIP[user.email.trim().toLowerCase()];
+  const etiquetaUsuario = esSupremo
+    ? "SUPREMO · ACCESO TOTAL"
+    : esVip
+      ? "VIP · ACCESO"
+      : "ADMINISTRADOR";
 
   return (
     <div
@@ -445,18 +459,22 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
             <div>
               <p className="text-sm font-bold text-white leading-none">{user.name || user.email}</p>
               <p className="text-[10px] uppercase tracking-widest font-bold mt-1" style={{ color: DORADO }}>
-                SUPREMO · ACCESO TOTAL
+                {etiquetaUsuario}
               </p>
             </div>
           </div>
-          <button
-            onClick={onGoGestion}
-            className="h-9 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm hover:brightness-110"
-            style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
-            title="Gestión de Accesos y Contraseñas"
-          >
-            GDA
-          </button>
+          {/* Task 144: GDA SOLO para el supremo. Admins y VIPs ven el
+              Orquestador, pero no este botón. */}
+          {esSupremo && onGoGestion && (
+            <button
+              onClick={onGoGestion}
+              className="h-9 px-4 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-sm hover:brightness-110"
+              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
+              title="Gestión de Accesos y Contraseñas"
+            >
+              GDA
+            </button>
+          )}
         </div>
       </header>
 
@@ -486,7 +504,9 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
             MUEBLES · ELECTRODOMÉSTICOS · HOGAR
           </p>
           <p className="text-xs sm:text-sm text-slate-400 mt-2 font-medium">
-            Los módulos del sistema y las 4 sucursales · solo el supremo ve esta pantalla
+            {esSupremo
+              ? "Los módulos del sistema y las 4 sucursales · solo el supremo ve esta pantalla"
+              : "Los módulos del sistema y las 4 sucursales · visión general"}
           </p>
         </div>
 

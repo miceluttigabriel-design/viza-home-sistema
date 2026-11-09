@@ -16,6 +16,7 @@ import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 // ZAGO PEREIRA) ve el botón IR A STOCK GENERAL y puede entrar a esa vista
 // fuera del supremo (lista única en src/lib/acceso-stock-general.ts).
 import { puedeIrAStockGeneral } from "@/lib/acceso-stock-general";
+import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -62,17 +63,28 @@ export default function Home() {
     role,
   };
 
+  // Task 144 (pedido del dueño): el ORQUESTADOR deja de ser exclusivo del
+  // supremo. También pueden VERLO los ADMINS y los usuarios VIP (los dos de
+  // USUARIOS_VIP: filipe.campos@ y viza.compras@). Los permisos de cada
+  // módulo NO cambian: el GDA, IMPORTAR EXCEL y DISTRIBUCIÓN INTELIGENTE
+  // siguen siendo SOLO para el supremo (se controlan más abajo y en cada
+  // componente).
+  const emailUsuario = user.email.trim().toLowerCase();
+  const esVip = !!USUARIOS_VIP[emailUsuario];
+  const puedeVerOrquestador =
+    role === "supremo_admin" || role === "admin" || esVip;
+
   // Task 127: ¿este usuario tiene el botón IR A STOCK GENERAL? (hoy: solo
   // viza@viza.com.py — VILMAR CESAR ZAGO PEREIRA; el supremo ya entra por
   // su ORQUESTADOR de siempre). Si la vista "stock" llega pedida por
   // cualquier otro email, se ignora y cae a su vista normal.
   const verStockGeneral = puedeIrAStockGeneral(user.email);
 
-  // Vista efectiva (Task 91): si todavía no navegó (null), la inicial es
-  // por rol → supremo cae en el ORQUESTADOR; todos los demás, donde ya
-  // caían antes (admin → base, colaborador → panel). Cero cambios para
-  // los que no son supremo.
-  const view = adminView ?? (role === "supremo_admin" ? "orquestador" : "admin");
+  // Vista efectiva (Task 91 + Task 144): si todavía no navegó (null), la
+  // inicial es el ORQUESTADOR para el SUPREMO, los ADMINS y los VIPs (todos
+  // los que pueden verlo). El resto sigue cayendo donde caía antes
+  // (colaborador/consulta → panel de ventas).
+  const view = adminView ?? (puedeVerOrquestador ? "orquestador" : "admin");
 
   // ═══ SOLO LECTURA TOTAL (Task 79 + Task 82, pedido del dueño) ═══
   // Usuarios de CONSULTA (lista única en src/lib/usuarios-consulta.ts):
@@ -88,15 +100,48 @@ export default function Home() {
   // (onGoBase SOLO se pasa a estos emails; ningún otro usuario lo recibe).
   const esConsultaBase = esEmailSoloLectura(user.email);
   if (esConsultaBase) {
+    // Task 144: los consulta que además son VIP (filipe.campos@ y
+    // viza.compras@) pueden abrir el ORQUESTADOR. Siguen siendo SOLO LECTURA
+    // en la Base y NO reciben onGoGestion (GDA solo supremo).
+    if (view === "orquestador" && puedeVerOrquestador) {
+      return (
+        <Orquestador
+          user={user}
+          onGoBase={() => setAdminView("base")}
+          onGoStock={() => setAdminView("stock")}
+          onGoSales={() => setAdminView("sales")}
+        />
+      );
+    }
+    if (view === "stock" && puedeVerOrquestador) {
+      return (
+        <StockGeneral
+          user={user}
+          onGoOrquestador={() => setAdminView("orquestador")}
+          onGoBase={() => setAdminView("base")}
+          onGoSales={() => setAdminView("sales")}
+        />
+      );
+    }
     if (view === "base") {
       return (
-        <AdminPanel user={user} onGoSales={() => setAdminView("sales")} modoLectura />
+        <AdminPanel
+          user={user}
+          onGoSales={() => setAdminView("sales")}
+          onGoOrquestador={
+            puedeVerOrquestador ? () => setAdminView("orquestador") : undefined
+          }
+          modoLectura
+        />
       );
     }
     return (
       <SalesPanel
         user={user}
         onGoBase={() => setAdminView("base")}
+        onGoOrquestador={
+          puedeVerOrquestador ? () => setAdminView("orquestador") : undefined
+        }
       />
     );
   }
@@ -123,17 +168,40 @@ export default function Home() {
   }
 
   // Admin "común" → entra DIRECTO a la BASE (Task 91: igual que siempre)
-  // y puede cambiar a Ventas (sin Gestión de Accesos). NO ve el orquestador.
+  // y puede cambiar a Ventas (sin Gestión de Accesos).
+  // Task 144 (pedido del dueño): el ADMIN también puede ver el ORQUESTADOR.
+  // No recibe onGoGestion: el GDA sigue siendo SOLO del supremo.
   if (role === "admin") {
-    if (view === "sales") {
-      return <SalesPanel user={user} onGoAdmin={() => setAdminView("admin")} />;
+    if (view === "orquestador" && puedeVerOrquestador) {
+      return (
+        <Orquestador
+          user={user}
+          onGoBase={() => setAdminView("admin")}
+          onGoStock={() => setAdminView("stock")}
+          onGoSales={() => setAdminView("sales")}
+        />
+      );
     }
-    // Task 127: VILMAR (viza@viza.com.py) puede entrar al STOCK GENERAL desde
-    // su botón de la BASE (con BASE y COTIZADOR para volver).
-    if (view === "stock" && verStockGeneral) {
+    if (view === "sales") {
+      return (
+        <SalesPanel
+          user={user}
+          onGoAdmin={() => setAdminView("admin")}
+          onGoOrquestador={
+            puedeVerOrquestador ? () => setAdminView("orquestador") : undefined
+          }
+        />
+      );
+    }
+    // Task 127 + 144: el ADMIN puede entrar al STOCK GENERAL desde el
+    // ORQUESTADOR (y VILMAR desde su botón de siempre). Sin GDA.
+    if (view === "stock" && (verStockGeneral || puedeVerOrquestador)) {
       return (
         <StockGeneral
           user={user}
+          onGoOrquestador={
+            puedeVerOrquestador ? () => setAdminView("orquestador") : undefined
+          }
           onGoBase={() => setAdminView("admin")}
           onGoSales={() => setAdminView("sales")}
         />
@@ -143,6 +211,9 @@ export default function Home() {
       <AdminPanel
         user={user}
         onGoSales={() => setAdminView("sales")}
+        onGoOrquestador={
+          puedeVerOrquestador ? () => setAdminView("orquestador") : undefined
+        }
         onGoStock={verStockGeneral ? () => setAdminView("stock") : undefined}
       />
     );

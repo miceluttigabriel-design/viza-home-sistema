@@ -670,12 +670,12 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
           {/* Task 125: sin max-w-7xl — el contenido del header llega a las
               mismas extremidades que las cards de abajo (alineados). */}
           <div className="flex items-center gap-2">
-            {esSupremo && onGoOrquestador && (
+            {onGoOrquestador && (
               <button
                 onClick={onGoOrquestador}
                 className="h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
                 style={{ backgroundColor: "#FFFFFF", color: AZUL }}
-                title="Volver al Orquestador (solo supremo)"
+                title="Volver al Orquestador"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">ORQUESTADOR</span>
@@ -691,18 +691,21 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {/* Task 127: DISTRIBUCIÓN INTELIGENTE — la ve quien entra a esta
-                vista (supremo y el usuario habilitado viza@viza.com.py). */}
-            <button
-              onClick={abrirDistribucion}
-              className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
-              style={{ backgroundColor: "#FFFFFF", color: AZUL }}
-              title="Reporte de transferencias internas entre sucursales (de donde sobra a donde falta)"
-            >
-              <ArrowLeftRight className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">DISTRIBUCIÓN INTELIGENTE</span>
-              <span className="sm:hidden">DISTRIB.</span>
-            </button>
+            {/* Task 144 (pedido del dueño): DISTRIBUCIÓN INTELIGENTE es
+                SOLO para el usuario SUPREMO. Admins y VIPs pueden ver el
+                Orquestador y el Stock, pero este botón no se les muestra. */}
+            {esSupremo && (
+              <button
+                onClick={abrirDistribucion}
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
+                style={{ backgroundColor: "#FFFFFF", color: AZUL }}
+                title="Reporte de transferencias internas entre sucursales (de donde sobra a donde falta)"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">DISTRIBUCIÓN INTELIGENTE</span>
+                <span className="sm:hidden">DISTRIB.</span>
+              </button>
+            )}
             {esSupremo && (
               <>
                 <input
