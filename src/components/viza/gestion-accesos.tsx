@@ -1245,14 +1245,6 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
           </div>
         </div>
 
-        {/* Aviso */}
-        <div className="bg-amber-50 border-l-4 border-amber-400 rounded-r-xl p-3 flex items-start gap-2 text-amber-900">
-          <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-          <p className="text-xs sm:text-sm leading-relaxed">
-            <strong>IMPORTANTE:</strong> Este panel es visible únicamente para el <strong>SUPREMO ADMINISTRADOR</strong>. Las contraseñas se muestran en texto plano para fines de recuperación y auditoría. Cada cambio de contraseña queda registrado en la bitácora (tabla <code className="bg-amber-100 px-1 rounded">PasswordLog</code>).
-          </p>
-        </div>
-
         {/* Tabla de usuarios */}
         <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
