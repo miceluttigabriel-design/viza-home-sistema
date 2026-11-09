@@ -86,8 +86,7 @@ check("COLS_BASE sigue con las 10 columnas de la Base en orden", (() => {
   const m = stock.match(/const COLS_BASE[\s\S]*?\n\];/);
   if (!m) return false;
   const keys = [...m[0].matchAll(/key: "(\w+)"/g)].map((x) => x[1]);
-  // Task 129: MARCA quedó entre PROVEDOR y GRUPO (mismo orden en la Base)
-  const esperado = ["fabricante", "marca", "categoria", "subGrupo", "tipo", "modelo", "capacidad", "cores", "referencia", "name"];
+  const esperado = ["fabricante", "categoria", "subGrupo", "marca", "tipo", "modelo", "capacidad", "cores", "referencia", "name"];
   return JSON.stringify(keys) === JSON.stringify(esperado);
 })());
 
