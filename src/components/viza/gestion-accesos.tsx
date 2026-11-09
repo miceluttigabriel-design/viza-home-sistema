@@ -30,6 +30,9 @@ import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 // la API /api/crm/ranking para decidir quién ve el CRM). Lib estática y
 // client-safe: no importa Prisma ni la base (ver cabecera del archivo).
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+// Task 139 (pedido del dueño): usuarios VIP de la central (filipe.campos@,
+// viza.compras@) — solo la etiqueta visible; misma lib client-safe.
+import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
 // Task 101 (pedido del dueño): número de CONTACTO de cada usuario, sacado de
 // la planilla oficial FUN.VIZA (columna CONTACTO, coincidencia por EMAIL).
 // Lib estática y client-safe (mismo patrón que encargados-sucursal): es solo
@@ -97,15 +100,23 @@ function roleBadge(role: string, email?: string): { label: string; cls: string }
   if (role === "admin") {
     return { label: "ADMIN", cls: "bg-sky-100 text-sky-800 border-sky-300" };
   }
-  // VIP (Task 76, pedido del dueño): usuario Común que es ENCARGADO de
-  // sucursal y por eso SÍ puede ver el CRM de presupuestos de su sucursal
-  // (los otros Común no lo ven). Etiqueta visible únicamente: el rol en la
-  // base sigue siendo colaborador. Dorado suave, consistente con el sistema.
+  // ESPECIAL (Task 139, pedido del dueño): los ENCARGADOS de sucursal que ven
+  // el CRM de su sucursal (antes se mostraban como VIP — Task 76). Etiqueta
+  // visible únicamente: el rol en la base sigue siendo colaborador y su
+  // acceso al CRM NO cambia nada. Verde esmeralda, distinto del VIP.
+  if (email && esEspecial(email)) {
+    return { label: "ESPECIAL", cls: "bg-emerald-100 text-emerald-800 border-emerald-400" };
+  }
+  // VIP (Task 139, pedido del dueño): usuarios destacados de la CENTRAL
+  // (filipe.campos@ = DIRECTORIO, viza.compras@ = ENC. COMPRAS). Etiqueta
+  // visible únicamente: NO da acceso al CRM ni cambia ningún permiso.
+  // Dorado suave, consistente con el sistema.
   if (email && esVip(email)) {
     return { label: "VIP", cls: "bg-yellow-100 text-yellow-800 border-yellow-400" };
   }
   // Compat hacia atrás: representante → colaborador. Etiqueta visible con el
-  // vocabulario del dueño (Supremo / Admin / VIP / Común); el rol en la base no cambia.
+  // vocabulario del dueño (Supremo / Admin / ESPECIAL / VIP / Común); el rol
+  // en la base no cambia.
   return { label: "COMÚN", cls: "bg-stone-100 text-stone-700 border-stone-300" };
 }
 
@@ -114,20 +125,31 @@ function formatPYG(n: number | null | undefined): string {
   return "Gs " + Math.round(v).toLocaleString("es-PY");
 }
 
-// ─── TIPO DE USUARIO (vocabulario del dueño: Supremo / Admin / VIP / Común) ───
+// ─── TIPO DE USUARIO (vocabulario del dueño: Supremo / Admin / ESPECIAL / VIP / Común) ───
 // Es SOLO la etiqueta visible del rol guardado en la base: supremo_admin →
 // SUPREMO, admin → ADMIN, colaborador/representante → COMÚN. No cambia
 // ningún dato, permiso ni consulta.
-// VIP (Task 76, pedido del dueño): Común que ve el CRM como encargado de
-// sucursal — MISMA lista ENCARGADOS_SUCURSAL que habilita el botón CRM en
-// el panel de ventas y el acceso por la API. Fuente única de verdad.
-function esVip(email: string): boolean {
+// ESPECIAL (Task 139, pedido del dueño: "jeyson / antonio.fagner / danwillian /
+// librado vas a poner como usuario tipo ESPECIAL"): los 4 ENCARGADOS de
+// sucursal que ven el CRM — MISMA lista ENCARGADOS_SUCURSAL que habilita el
+// botón CRM en el panel de ventas y el acceso por la API. Fuente única de
+// verdad. Solo cambió el NOMBRE de la etiqueta (antes VIP); el acceso no
+// se toca.
+function esEspecial(email: string): boolean {
   return !!ENCARGADOS_SUCURSAL[(email || "").trim().toLowerCase()];
+}
+
+// VIP (Task 139, pedido del dueño: "filipe.campos y viza.compras el TIPO vas
+// a poner como VIP"): lista USUARIOS_VIP de la central. Etiqueta visible
+// únicamente — no da acceso al CRM ni cambia permisos.
+function esVip(email: string): boolean {
+  return !!USUARIOS_VIP[(email || "").trim().toLowerCase()];
 }
 
 function tipoUsuario(role: string, email?: string): string {
   if (role === "supremo_admin") return "SUPREMO";
   if (role === "admin") return "ADMIN";
+  if (email && esEspecial(email)) return "ESPECIAL";
   if (email && esVip(email)) return "VIP";
   return "COMÚN";
 }
@@ -205,7 +227,8 @@ const MAPA_SECTOR_EXCEL: Record<string, string> = {
   // Gerencias
   "baltazar@viza.com.py": "GERENTE ADMINISTRATIVO",
   // Encargados de sucursal (en la planilla dicen GERENTE; el dueño pidió
-  // mostrarlos como ENC. SUCURSAL — Task 76). Estos 4 son los VIP del CRM.
+  // mostrarlos como ENC. SUCURSAL — Task 76). Task 139: estos 4 son los
+  // ESPECIAL del CRM (antes se mostraban como VIP).
   "jeyson@viza.com.py": "ENC. SUCURSAL",
   "danwillian@viza.com.py": "ENC. SUCURSAL",
   "antonio.fagner@viza.com.py": "ENC. SUCURSAL",
@@ -641,7 +664,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
     lines.push("================================================================================");
     lines.push("");
     lines.push("  ORGANIZACIÓN: SUCURSAL → SECTOR (planilla FUN.VIZA) → usuarios.");
-    lines.push("  TIPO DE USUARIO: SUPREMO = acceso total · ADMIN = Admin + Ventas · VIP = ve el CRM de su sucursal · COMÚN = solo Ventas.");
+    lines.push("  TIPO DE USUARIO: SUPREMO = acceso total · ADMIN = Admin + Ventas · ESPECIAL = encargado que ve el CRM de su sucursal · VIP = destacado de la central · COMÚN = solo Ventas.");
     lines.push("  CONTACTO: número de teléfono de la planilla FUN.VIZA (columna CONTACTO); '—' = la planilla todavía no lo tiene.");
     lines.push("");
 
@@ -699,11 +722,14 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
     const esComun = (r: string) => r === "colaborador" || r === "representante";
     const nSupremos = usuarios.filter((u) => u.role === "supremo_admin").length;
     const nAdmins = usuarios.filter((u) => u.role === "admin").length;
-    const nVip = usuarios.filter((u) => esComun(u.role) && esVip(u.email)).length;
-    const nComunes = usuarios.filter((u) => esComun(u.role) && !esVip(u.email)).length;
+    // Task 139: ESPECIAL (encargados del CRM) y VIP (destacados de la central)
+    // son mutuamente excluyentes; un COMÚN es el que no es ninguno de los dos.
+    const nEspecial = usuarios.filter((u) => esComun(u.role) && esEspecial(u.email)).length;
+    const nVip = usuarios.filter((u) => esComun(u.role) && !esEspecial(u.email) && esVip(u.email)).length;
+    const nComunes = usuarios.filter((u) => esComun(u.role) && !esEspecial(u.email) && !esVip(u.email)).length;
     lines.push("================================================================================");
     lines.push(`  TOTAL: ${usuarios.length} usuarios`);
-    lines.push(`    Por tipo:      Supremo: ${nSupremos} · Admin: ${nAdmins} · VIP: ${nVip} · Común: ${nComunes}`);
+    lines.push(`    Por tipo:      Supremo: ${nSupremos} · Admin: ${nAdmins} · ESPECIAL: ${nEspecial} · VIP: ${nVip} · Común: ${nComunes}`);
     lines.push(`    Por sucursal:  ${ordenSuc.map((s) => `${s}: ${gruposSuc.get(s)!.length}`).join(" · ")}`);
     lines.push("================================================================================");
 
@@ -891,8 +917,10 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
       />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {/* Tarjeta de resumen (Task 76: se agrega la tarjeta VIP al lado de Común) */}
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+        {/* Tarjeta de resumen (Task 76: tarjetas por tipo; Task 139: la
+            tarjeta VIP (CRM) pasa a llamarse ESPECIAL (CRM) y se agrega la
+            tarjeta VIP al lado — Supremo / Admin / ESPECIAL / VIP / Común) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
             <div className="flex items-center gap-2 text-stone-500 text-[11px] uppercase font-semibold tracking-wide">
               <AlertCircle className="h-4 w-4" /> TOTAL USUARIOS
@@ -915,12 +943,23 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               {usuarios.filter((u) => u.role === "admin").length}
             </p>
           </div>
+          {/* Task 139: los encargados del CRM ahora se llaman ESPECIAL. */}
+          <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
+            <div className="flex items-center gap-2 text-emerald-700 text-[11px] uppercase font-semibold tracking-wide">
+              ESPECIAL (CRM)
+            </div>
+            <p className="text-3xl font-black text-emerald-600 mt-1">
+              {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && esEspecial(u.email)).length}
+            </p>
+          </div>
+          {/* Task 139: tarjeta VIP para los destacados de la central
+              (filipe.campos@ y viza.compras@ — solo etiqueta). */}
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
             <div className="flex items-center gap-2 text-yellow-700 text-[11px] uppercase font-semibold tracking-wide">
-              VIP (CRM)
+              VIP
             </div>
             <p className="text-3xl font-black text-yellow-600 mt-1">
-              {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && esVip(u.email)).length}
+              {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && !esEspecial(u.email) && esVip(u.email)).length}
             </p>
           </div>
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
@@ -928,14 +967,17 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               COMÚN
             </div>
             <p className="text-3xl font-black text-stone-700 mt-1">
-              {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && !esVip(u.email)).length}
+              {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && !esEspecial(u.email) && !esVip(u.email)).length}
             </p>
           </div>
         </div>
 
         {/* USUARIOS POR SUCURSAL: tarjetas de resumen (pedido del dueño, Task 75).
-            Cuenta sobre TODOS los usuarios (igual que la tarjeta TOTAL). */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            Cuenta sobre TODOS los usuarios (igual que la tarjeta TOTAL).
+            Task 139 (pedido del dueño): el cuadrito SIN SUCURSAL se borró —
+            ya no queda ningún usuario sin sucursal (florencio fue a LA
+            PALOMA y el CREAR USUARIO exige sucursal desde la Task 138). */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {SUCURSALES_GDA.map((s) => (
             <div key={s} className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
               <div
@@ -949,14 +991,10 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               </p>
             </div>
           ))}
-          <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
-            <div className="flex items-center gap-1.5 text-[11px] uppercase font-semibold tracking-wide text-stone-400">
-              <MapPin className="h-3.5 w-3.5" /> {SIN_SUCURSAL}
-            </div>
-            <p className="text-3xl font-black text-stone-400 mt-1">
-              {usuarios.filter((u) => sucursalDe(u) === SIN_SUCURSAL).length}
-            </p>
-          </div>
+          {/* Task 139: cuadrito SIN SUCURSAL borrado (pedido del dueño). Si
+              algún usuario viejo quedara sin sucursal igual no se pierde:
+              la tabla lo agrupa al final bajo SIN SUCURSAL solo cuando
+              existe alguno (fila defensiva, normalmente invisible). */}
         </div>
 
         {/* Barra de acciones */}
@@ -1100,7 +1138,8 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Usuario</th>
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Nombre</th>
                   {/* SECTOR (planilla FUN.VIZA) con el TIPO DE USUARIO al lado
-                      (Supremo / Admin / VIP / Común) — pedido del dueño, Tasks 75/76. */}
+                      (Supremo / Admin / ESPECIAL / VIP / Común) — pedido del
+                      dueño, Tasks 75/76/139. */}
                   <th className="text-left px-3 py-3 font-semibold text-[11px] uppercase tracking-wider">Sector</th>
                   {/* CONTACTO (planilla FUN.VIZA, columna CONTACTO) — Task 101,
                       pedido del dueño: cada usuario con su respectivo número.
@@ -1200,26 +1239,40 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                             <span className="text-xs text-stone-300">—</span>
                           )}
                         </td>
-                        {/* TIPO DE USUARIO al lado del sector: Supremo / Admin / VIP / Común.
-                            Task 82: para usuarios NO supremo el tipo es un SELECT — el dueño
-                            (SUPREMO) puede cambiar COMÚN ↔ ADMIN directo acá, sin tocar la
-                            base. Los supremos quedan con la etiqueta fija (nadie toca su tipo). */}
+                        {/* TIPO DE USUARIO al lado del sector: Supremo / Admin /
+                            ESPECIAL / VIP / Común. Task 82: para usuarios NO supremo
+                            el rol es un SELECT — el dueño (SUPREMO) puede cambiar
+                            COMÚN ↔ ADMIN directo acá, sin tocar la base. Task 139:
+                            los ESPECIAL (encargados del CRM) y los VIP (destacados
+                            de la central) muestran su pill al lado del select; el
+                            select sigue manejando el ROL real de la base. Los
+                            supremos quedan con la etiqueta fija (nadie toca su tipo). */}
                         <td className="px-3 py-2.5">
                           {u.role === "supremo_admin" ? (
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}>
                               {rb.label}
                             </span>
                           ) : (
-                            <select
-                              value={u.role === "admin" ? "admin" : "colaborador"}
-                              onChange={(e) => cambiarRol(u, e.target.value)}
-                              disabled={cambiandoRol === u.id}
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide outline-none cursor-pointer disabled:opacity-50 ${rb.cls}`}
-                              title="Cambiar tipo de usuario (COMÚN ↔ ADMIN). Solo SUPREMO."
-                            >
-                              <option value="colaborador">COMÚN</option>
-                              <option value="admin">ADMIN</option>
-                            </select>
+                            <span className="inline-flex items-center gap-1.5">
+                              {(rb.label === "ESPECIAL" || rb.label === "VIP") && (
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}
+                                  title="Etiqueta del dueño (no cambia el rol de la base)"
+                                >
+                                  {rb.label}
+                                </span>
+                              )}
+                              <select
+                                value={u.role === "admin" ? "admin" : "colaborador"}
+                                onChange={(e) => cambiarRol(u, e.target.value)}
+                                disabled={cambiandoRol === u.id}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide outline-none cursor-pointer disabled:opacity-50 bg-stone-100 text-stone-700 border-stone-300"
+                                title="Cambiar rol del usuario (COMÚN ↔ ADMIN). Solo SUPREMO."
+                              >
+                                <option value="colaborador">COMÚN</option>
+                                <option value="admin">ADMIN</option>
+                              </select>
+                            </span>
                           )}
                         </td>
                         <td className="px-3 py-2.5">

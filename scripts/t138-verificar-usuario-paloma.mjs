@@ -78,8 +78,13 @@ check("el <select> del filtro ya NO tiene la opción SIN SUCURSAL",
   !/<option value=\{SIN_SUCURSAL\}>/.test(gda));
 check("SUCURSALES_USUARIO sigue con CENTRAL + 4 de venta (sin cambios T137)",
   /export const SUCURSALES_USUARIO = \["CENTRAL", \.\.\.SUCURSALES_VIZA\] as const;/.test(lib));
-check("la tarjeta de conteo SIN SUCURSAL sigue (por si algún viejo queda, muestra 0)",
-  /sucursalDe\(u\) === SIN_SUCURSAL\)\.length/.test(gda));
+// Task 139 (pedido del dueño): el cuadrito SIN SUCURSAL se BORRÓ. La fila
+// defensiva de la tabla sigue (solo aparece si algún usuario viejo quedara
+// sin sucursal — hoy es invisible porque ya no queda ninguno).
+check("la tarjeta SIN SUCURSAL ya no existe (borrada en Task 139)",
+  !/text-stone-400 mt-1">\s*\{usuarios\.filter\(\(u\) => sucursalDe\(u\) === SIN_SUCURSAL\)/.test(gda));
+check("el grupo defensivo SIN SUCURSAL de la tabla sigue (solo si existe alguno)",
+  /grupos\.has\(SIN_SUCURSAL\) \? \[SIN_SUCURSAL\] : \[\]/.test(gda));
 
 // ── 6. Nada más se rompió ──
 console.log("\n[6] Preservado del sistema");

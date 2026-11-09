@@ -22,3 +22,24 @@ export const ENCARGADOS_SUCURSAL: Record<string, string> = {
   // SALTOS DEL GUAIRA — LIBRADO JUSTO FRANCO AQUINO
   "librado@viza.com.py": "SALTOS DEL GUAIRA",
 };
+
+// ─── TIPO ESPECIAL (Task 139, pedido del dueño) ──────────────────────────────
+// Los 4 encargados de arriba ahora se muestran en el GDA con el TIPO
+// "ESPECIAL" (antes se mostraban como VIP). Su ACCESO AL CRM NO CAMBIA NADA:
+// esta misma lista ENCARGADOS_SUCURSAL sigue habilitando el botón CRM y el
+// acceso por la API exactamente igual que antes — solo cambió el nombre de la
+// etiqueta visible (pedido del dueño: "vas a poner como usuario tipo ESPECIAL").
+export const TIPOS_ESPECIAL = ENCARGADOS_SUCURSAL;
+
+// ─── USUARIOS VIP (Task 139, pedido del dueño) ───────────────────────────────
+// "filipe.campos@ y viza.compras@ estos dos usuarios el TIPO vas a poner como
+// VIP". Etiqueta visible únicamente en el GDA: NO da acceso al CRM, NO cambia
+// el rol en la base, NO cambia ningún permiso. (Si más adelante el dueño
+// quiere que alguno de estos entre al CRM, se agrega a ENCARGADOS_SUCURSAL.)
+// Valor = sucursal del usuario, informativa (hoy los dos son de CENTRAL).
+export const USUARIOS_VIP: Record<string, string> = {
+  // DIRECTORIO (Task 137: sucursal CENTRAL)
+  "filipe.campos@viza.com.py": "CENTRAL",
+  // ENC. COMPRAS (Task 137: sucursal CENTRAL)
+  "viza.compras@viza.com.py": "CENTRAL",
+};
