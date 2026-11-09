@@ -1242,37 +1242,38 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                         {/* TIPO DE USUARIO al lado del sector: Supremo / Admin /
                             ESPECIAL / VIP / Común. Task 82: para usuarios NO supremo
                             el rol es un SELECT — el dueño (SUPREMO) puede cambiar
-                            COMÚN ↔ ADMIN directo acá, sin tocar la base. Task 139:
-                            los ESPECIAL (encargados del CRM) y los VIP (destacados
-                            de la central) muestran su pill al lado del select; el
-                            select sigue manejando el ROL real de la base. Los
-                            supremos quedan con la etiqueta fija (nadie toca su tipo). */}
+                            COMÚN ↔ ADMIN directo acá, sin tocar la base. Task 140
+                            (pedido del dueño: "el TIPO de usuario si es VIP no
+                            necessita aparecer do lado COMUN"): el ESPECIAL (verde)
+                            y el VIP (dorado) ahora se muestran SOLOS — su etiqueta
+                            de TIPO reemplaza al select COMÚN/ADMIN, sin COMÚN al
+                            lado. Solo etiqueta: el ROL real de la base NO cambia
+                            nada. Los supremos siguen con la etiqueta fija (nadie
+                            toca su tipo) y el resto de los usuarios con el select
+                            COMÚN ↔ ADMIN de siempre. */}
                         <td className="px-3 py-2.5">
                           {u.role === "supremo_admin" ? (
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}>
                               {rb.label}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5">
-                              {(rb.label === "ESPECIAL" || rb.label === "VIP") && (
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}
-                                  title="Etiqueta del dueño (no cambia el rol de la base)"
-                                >
-                                  {rb.label}
-                                </span>
-                              )}
-                              <select
-                                value={u.role === "admin" ? "admin" : "colaborador"}
-                                onChange={(e) => cambiarRol(u, e.target.value)}
-                                disabled={cambiandoRol === u.id}
-                                className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide outline-none cursor-pointer disabled:opacity-50 bg-stone-100 text-stone-700 border-stone-300"
-                                title="Cambiar rol del usuario (COMÚN ↔ ADMIN). Solo SUPREMO."
-                              >
-                                <option value="colaborador">COMÚN</option>
-                                <option value="admin">ADMIN</option>
-                              </select>
+                          ) : rb.label === "ESPECIAL" || rb.label === "VIP" ? (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}
+                              title="TIPO del usuario (no cambia el rol de la base)"
+                            >
+                              {rb.label}
                             </span>
+                          ) : (
+                            <select
+                              value={u.role === "admin" ? "admin" : "colaborador"}
+                              onChange={(e) => cambiarRol(u, e.target.value)}
+                              disabled={cambiandoRol === u.id}
+                              className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide outline-none cursor-pointer disabled:opacity-50 bg-stone-100 text-stone-700 border-stone-300"
+                              title="Cambiar rol del usuario (COMÚN ↔ ADMIN). Solo SUPREMO."
+                            >
+                              <option value="colaborador">COMÚN</option>
+                              <option value="admin">ADMIN</option>
+                            </select>
                           )}
                         </td>
                         <td className="px-3 py-2.5">

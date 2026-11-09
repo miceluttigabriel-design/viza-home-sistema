@@ -91,14 +91,18 @@ check("la tarjeta COMÚN excluye ESPECIAL y VIP",
 check("la grilla de tarjetas de tipo es de 6 columnas (lg:grid-cols-6)",
   /Tarjeta de resumen[\s\S]{0,400}grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6/.test(gda));
 
-// ── 5. Pill ESPECIAL/VIP en la tabla (al lado del select de rol) ──
-console.log("\n[5] Pill ESPECIAL/VIP junto al select de rol en la tabla");
+// ── 5. Pill ESPECIAL/VIP en la tabla (Task 140: SOLO, sin select COMÚN al lado) ──
+console.log("\n[5] Pill ESPECIAL/VIP SOLO en la tabla (Task 140: sin COMÚN al lado)");
 check("la tabla muestra la pill solo para ESPECIAL o VIP",
-  /\(rb\.label === "ESPECIAL" \|\| rb\.label === "VIP"\)/.test(gda));
-check("el select de rol sigue existiendo (COMÚN ↔ ADMIN, Task 82)",
+  /rb\.label === "ESPECIAL" \|\| rb\.label === "VIP"/.test(gda));
+check("ESPECIAL/VIP: la etiqueta de TIPO aparece SOLA (rama propia del ternario)",
+  /\) : rb\.label === "ESPECIAL" \|\| rb\.label === "VIP" \? \(/.test(gda));
+check("ya NO existe el envoltorio pill+select (el COMÚN ya no queda al lado)",
+  !/<span className="inline-flex items-center gap-1\.5">/.test(gda));
+check("el select de rol sigue existiendo para el resto (COMÚN ↔ ADMIN, Task 82)",
   /<option value="colaborador">COMÚN<\/option>\s*\n\s*<option value="admin">ADMIN<\/option>/.test(gda));
 check("los supremos siguen con etiqueta fija (sin select)",
-  /u\.role === "supremo_admin" \? \([\s\S]{0,300}rb\.label\s*\}\s*<\/span>\s*\) : \(/.test(gda));
+  /u\.role === "supremo_admin" \? \([\s\S]{0,300}rb\.label\s*\}\s*<\/span>\s*\) : rb\.label/.test(gda));
 
 // ── 6. TXT descargable ──
 console.log("\n[6] Listado TXT con el vocabulario nuevo");
