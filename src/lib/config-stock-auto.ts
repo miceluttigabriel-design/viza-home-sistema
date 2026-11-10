@@ -206,7 +206,9 @@ export async function pedirCorridaStockAuto(por: string): Promise<boolean> {
 }
 
 // Senal de vida de la PC (el robot la manda en cada consulta). Se escribe
-// como maximo cada 4 minutos para no castigar la base con cada ping.
+// como maximo cada 2 minutos para no castigar la base con cada ping, pero
+// lo suficientemente seguido como para que el chip de la Base diga la
+// verdad ("en linea hace X") y no quede viejo.
 export async function registrarHeartbeatStockAuto(): Promise<void> {
   try {
     const ok = await ensureTablaConfigStockAuto();
@@ -217,7 +219,7 @@ export async function registrarHeartbeatStockAuto(): Promise<void> {
        ON CONFLICT ("id") DO UPDATE SET
          "heartbeat" = NOW()
        WHERE "ConfigStockAuto"."heartbeat" IS NULL
-          OR "ConfigStockAuto"."heartbeat" < NOW() - INTERVAL '4 minutes'`,
+          OR "ConfigStockAuto"."heartbeat" < NOW() - INTERVAL '2 minutes'`,
       CONFIG_STOCK_AUTO_ID
     );
   } catch {
