@@ -29,7 +29,9 @@ import type {
 //     stock después y ventas detectadas)
 //   · distribuciones agrupadas por TIPO y COLOR, con COD, origen,
 //     destino y cantidad
-//   · necesidades / faltantes sin cobertura
+//
+// La NECESIDAD DE COMPRA ya no vive acá: la analiza el ENCARGADO DE
+// COMPRA (su propio botón, informe y PDF).
 //
 // Solo transferencias entre sucursales. NUNCA compras a proveedores.
 // ═══════════════════════════════════════════════════════════════════
@@ -485,64 +487,6 @@ export function generarPdfEncargado(
           }
         });
         y += 6;
-      }
-    }
-  }
-
-  // ───────────── NECESIDADES / FALTANTES ─────────────
-  if (plan.necesidades.length > 0) {
-    tituloSeccion("NECESIDADES DETECTADAS / FALTANTES");
-    parrafo(
-      "Necesidades detectadas antes de aplicar el plan. VENDIDO = unidades que bajaron desde el último análisis (venta/consumo). SIN CUBRIR = lo que no se pudo completar con excedentes internos. El Encargado NO genera compras a proveedores: solo informa la necesidad para que el equipo decida.",
-      7.4,
-      GREY
-    );
-
-    const colsNec: Columna[] = [
-      { label: "SUCURSAL", w: 90 },
-      { label: "COD", w: 46 },
-      { label: "PRODUCTO", w: 150 },
-      { label: "COLOR", w: 56 },
-      { label: "STOCK", w: 34, align: "right" },
-      { label: "OBJ.", w: 42, align: "right" },
-      { label: "FALTA", w: 34, align: "right" },
-      { label: "VEND.", w: 38, align: "right" },
-      { label: "SIN CUBRIR", w: 33, align: "right" },
-    ];
-    if (encabezadoTabla(colsNec)) {
-      const top = plan.necesidades.slice(0, 60);
-      top.forEach((n, i) => {
-        const valores = [
-          n.sucursal,
-          n.sku,
-          n.producto,
-          n.color || "—",
-          fmtNum(n.saldo),
-          fmtNum(n.objetivo),
-          fmtNum(n.falta),
-          fmtNum(n.vendido),
-          n.faltaSinCubrir > 0 ? fmtNum(n.faltaSinCubrir) : "—",
-        ];
-        const ok = filaTabla(colsNec, valores, {
-          zebra: i % 2 === 1,
-          color: n.vendido > 0 ? [180, 83, 9] : DARK,
-        });
-        if (!ok) {
-          nuevaPagina(true);
-          encabezadoTabla(colsNec);
-          filaTabla(colsNec, valores, { color: n.vendido > 0 ? [180, 83, 9] : DARK });
-        }
-      });
-      if (plan.necesidades.length > top.length) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.8);
-        doc.setTextColor(...GREY);
-        doc.text(
-          `… y ${plan.necesidades.length - top.length} necesidad(es) más en el sistema.`,
-          MARGEN,
-          y + 9
-        );
-        y += 18;
       }
     }
   }

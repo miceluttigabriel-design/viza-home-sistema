@@ -118,7 +118,7 @@ export function EncargadoDistribucion({
   const [iaCargando, setIaCargando] = useState(false);
   const [pdfCargando, setPdfCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"plan" | "analisis" | "necesidades">("plan");
+  const [tab, setTab] = useState<"plan" | "analisis">("plan");
   const [vigilando, setVigilando] = useState(true);
   const [ultima, setUltima] = useState<Date | null>(null);
   const [busqueda, setBusqueda] = useState("");
@@ -310,7 +310,6 @@ export function EncargadoDistribucion({
               [
                 ["plan", "PLAN", plan?.filas.length ?? 0],
                 ["analisis", "ANÁLISIS IA", 0],
-                ["necesidades", "NECESIDADES", plan?.necesidades.length ?? 0],
               ] as const
             ).map(([id, label, count]) => (
               <button
@@ -782,109 +781,6 @@ export function EncargadoDistribucion({
                     </button>
                   </div>
                 )
-              )}
-            </>
-          )}
-
-          {/* ═════════ NECESIDADES ═════════ */}
-          {plan && tab === "necesidades" && (
-            <>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                <p className="text-[10px] font-black tracking-widest text-amber-800 uppercase mb-1">
-                  Necesidades detectadas
-                </p>
-                <p className="text-[10px] text-amber-800 font-medium leading-snug">
-                  Necesidades detectadas antes de aplicar el plan. VENDIDO indica cuántas unidades
-                  bajaron desde el último análisis (venta/consumo) y SIN CUBRIR lo que no se pudo
-                  completar con excedentes internos. El Encargado no genera compras a proveedores:
-                  solo informa la necesidad.
-                </p>
-              </div>
-
-              {plan.necesidades.length === 0 ? (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-                  <CheckCircle2 className="h-7 w-7 text-emerald-600 mx-auto mb-2" />
-                  <p className="text-sm font-black text-emerald-800">Sin necesidades pendientes</p>
-                  <p className="text-xs text-emerald-700 mt-1">
-                    Las cuatro sucursales están en su objetivo.
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-stone-200 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-stone-50 border-b border-stone-200">
-                          <th className="text-left px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">SUCURSAL</th>
-                          <th className="text-left px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">COD</th>
-                          <th className="text-left px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">PRODUCTO</th>
-                          <th className="text-left px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">COLOR</th>
-                          <th className="text-right px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">STOCK</th>
-                          <th className="text-right px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">OBJETIVO</th>
-                          <th className="text-right px-3 py-2 text-[8px] font-black tracking-widest text-amber-600">FALTA</th>
-                          <th className="text-right px-3 py-2 text-[8px] font-black tracking-widest text-red-600">VENDIDO</th>
-                          <th className="text-right px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">SIN CUBRIR</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {plan.necesidades.slice(0, 200).map((n, i) => (
-                          <tr
-                            key={`${n.sucursal}-${n.sku}-${i}`}
-                            className="border-b border-stone-100 hover:bg-amber-50/40"
-                          >
-                            <td className="px-3 py-2 font-bold text-stone-700 whitespace-nowrap">{n.sucursal}</td>
-                            <td className="px-3 py-2 font-mono font-bold text-stone-800 whitespace-nowrap">{n.sku}</td>
-                            <td className="px-3 py-2">
-                              <div className="text-stone-700 font-semibold max-w-[230px] truncate" title={n.producto}>
-                                {n.producto}
-                              </div>
-                              {n.tipo && (
-                                <div className="text-[8px] text-stone-400 font-medium">{n.tipo}</div>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              <ChipColores colores={n.colores} color={n.color} />
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-stone-600">{fmtNum(n.saldo)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-stone-600">{fmtNum(n.objetivo)}</td>
-                            <td className="px-3 py-2 text-right">
-                              <span className="inline-block min-w-[2rem] rounded-lg bg-amber-100 px-2 py-0.5 font-black text-amber-700 tabular-nums">
-                                {fmtNum(n.falta)}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              {n.vendido > 0 ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-black text-red-700">
-                                  <TrendingDown className="h-2.5 w-2.5" />
-                                  {fmtNum(n.vendido)}
-                                </span>
-                              ) : (
-                                <span className="text-stone-300">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              {n.faltaSinCubrir > 0 ? (
-                                <span className="inline-block min-w-[2rem] rounded-lg bg-stone-100 px-2 py-0.5 font-black text-stone-600 tabular-nums">
-                                  {fmtNum(n.faltaSinCubrir)}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[9px] font-black text-emerald-600">
-                                  <CheckCircle2 className="h-3 w-3" />
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-              {plan.necesidades.length > 200 && (
-                <p className="text-[9px] text-stone-400 font-medium">
-                  Mostrando las 200 necesidades más grandes de {fmtNum(plan.necesidades.length)}.
-                  El PDF incluye las principales.
-                </p>
               )}
             </>
           )}

@@ -242,7 +242,8 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
 // Dos cuadritos MENORES en el lugar del antiguo "Distribuidor Inteligente":
 //   · ENCARGADO DE DISTRIBUCIÓN → ACTIVO: analiza Base + Stock de las 4
 //     sucursales y genera el plan + PDF (solo transferencias internas).
-//   · AGENTE DE COMPRA          → ligado al Encargado de Distribución.
+//   · ENCARGADO DE COMPRA       → ACTIVO: analiza la necesidad de compra
+//     de la red (stock + CENTRAL + ventas) y arma el informe + PDF.
 function AgenteCard({
   c,
   icon,
@@ -315,14 +316,16 @@ function AgenteDistribucionCard({ onClick }: { onClick?: () => void }) {
   );
 }
 
-function AgenteCompraCard() {
+function AgenteCompraCard({ onClick }: { onClick?: () => void }) {
   return (
     <AgenteCard
       c={C_COMPRA}
       icon={<ShoppingCart className="h-5 w-5" style={{ color: C_COMPRA }} />}
-      titulo="AGENTE DE COMPRA"
-      subtitulo="Compras · Abastecimiento"
+      titulo="ENCARGADO DE COMPRA"
+      subtitulo="IA · Necesidad de compra · Proveedor"
       ligado="LIGADO AL ENCARGADO DE DISTRIBUCIÓN"
+      estado="ACTIVO"
+      onClick={onClick}
     />
   );
 }
@@ -611,7 +614,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           <div style={place(POS.base)}><BaseCard onClick={onGoBase} /></div>
           <div style={place(POS.cotizador)}><CotizadorCard onClick={onGoSales} /></div>
           <div style={place(POS.distribucion)}><AgenteDistribucionCard onClick={onGoStock} /></div>
-          <div style={place(POS.compra)}><AgenteCompraCard /></div>
+          <div style={place(POS.compra)}><AgenteCompraCard onClick={onGoStock} /></div>
           {SUCURSALES_CUADROS.map((nombre, i) => (
             <div key={nombre} style={place({ x: SUC_X, y: SUC_Y[i], w: SUC_W, h: SUC_H })}>
               <SucursalCard nombre={nombre} />
@@ -630,7 +633,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           <Conector color={C_STOCK} />
           <div className="min-h-[180px]"><AgenteDistribucionCard onClick={onGoStock} /></div>
           <Conector color={C_COMPRA} />
-          <div className="min-h-[180px]"><AgenteCompraCard /></div>
+          <div className="min-h-[180px]"><AgenteCompraCard onClick={onGoStock} /></div>
           <Conector color={C_DISTRI} />
           <div className="grid grid-cols-2 gap-2.5">
             {SUCURSALES_CUADROS.map((nombre) => (

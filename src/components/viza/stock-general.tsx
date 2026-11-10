@@ -66,9 +66,11 @@ import {
   Check,
   Warehouse,
   X,
+  ShoppingCart,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EncargadoDistribucion } from "./encargado-distribucion";
+import { EncargadoCompra } from "./encargado-compra";
 
 const AZUL = "#0d3d5e";
 const DORADO = "#D9B86B";
@@ -464,6 +466,12 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
   // plan + PDF. NO escribe stock: solo recomienda transferencias internas.
   const [encargadoOpen, setEncargadoOpen] = useState(false);
 
+  // ═══ ENCARGADO DE COMPRA (Task 161, pedido del dueño) ═══
+  // Analiza la NECESIDAD DE COMPRA de la red: stock de las 4 sucursales +
+  // CENTRAL + ventas detectadas, agrupada por PROVEEDOR (FABRICANTE).
+  // Solo recomienda: no genera órdenes de compra. Exclusivo del supremo.
+  const [compraOpen, setCompraOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-stone-100">
       {/* ─── Header (mismo lenguaje visual que los demás paneles) ─── */}
@@ -508,6 +516,21 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
                 <Sparkles className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">ENCARGADO DE DISTRIBUCIÓN</span>
                 <span className="sm:hidden">ENCARGADO</span>
+              </button>
+            )}
+            {/* Task 161 (pedido del dueño): COMPRA INTELIGENTE abre el
+                ENCARGADO DE COMPRA (necesidades + proveedores + IA + PDF).
+                Igual que el de distribución, SOLO lo ve el usuario supremo. */}
+            {esSupremo && (
+              <button
+                onClick={() => setCompraOpen(true)}
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-110 shrink-0"
+                style={{ background: "linear-gradient(135deg, #0e7490 0%, #155e75 100%)", color: "#ffffff" }}
+                title="COMPRA INTELIGENTE: el Encargado de Compra analiza la necesidad de compra de la red por proveedor y genera el PDF (solo recomendación)"
+              >
+                <ShoppingCart className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">COMPRA INTELIGENTE</span>
+                <span className="sm:hidden">COMPRA</span>
               </button>
             )}
             {esSupremo && (
@@ -995,6 +1018,9 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
         open={encargadoOpen}
         onClose={() => setEncargadoOpen(false)}
       />
+
+      {/* ═══ MODAL: ENCARGADO DE COMPRA (Task 161) ═══ */}
+      <EncargadoCompra open={compraOpen} onClose={() => setCompraOpen(false)} />
 
       {/* ═══ MODAL: IMPORTAR PLANILLA (mismo motor que tenía LA BASE + sucursales) ═══ */}
       {importOpen && (

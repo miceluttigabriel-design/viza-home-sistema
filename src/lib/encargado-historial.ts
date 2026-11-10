@@ -1,23 +1,33 @@
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE DISTRIBUCIÓN — HISTORIAL DE STOCK (Task 160)
+// ENCARGADOS · HISTORIAL DE STOCK (Task 160/161)
 //
-// El dueño pidió que el Encargado esté "activo viendo cuál producto bajó
-// en cuál sucursal... porque cada vez que actualizo el stock algunos
+// El dueño pidió que los encargados estén "activos viendo cuál producto
+// bajó en cuál sucursal... porque cada vez que actualizo el stock algunos
 // bajan la cantidad y significa que fueron vendidos".
 //
-// Para eso guardamos una foto del saldo por producto/sucursal en cada
+// Para eso se guarda una foto del saldo por producto/sucursal en cada
 // análisis. En la siguiente pasada:
 //   · saldoPrevio = lo que había la última vez
 //   · vendido     = MAX(0, saldoPrevio − saldoActual)
 //
-// Tabla APARTE y AUTO-GESTIONADA (mismo patrón que StockSucursal /
-// ProductStockIdeal / ProductCores): si no existe se crea sola con SQL
-// idempotente y NUNCA rompe la app. No toca el modelo Product ni el
+// Hay UNA TABLA POR ENCARGADO para que no se pisen:
+//   · EncargadoStockHistorial → distribución
+//   · CompraStockHistorial    → compra
+// Tablas APARTE y AUTO-GESTIONADAS: si no existen se crean solas con SQL
+// idempotente y NUNCA rompen la app. No tocan el modelo Product ni el
 // schema de Prisma.
 // ═══════════════════════════════════════════════════════════════════
 
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+
+// Whitelist estricta: el nombre de tabla NUNCA viene de afuera.
+const TABLAS = {
+  distribucion: "EncargadoStockHistorial",
+  compra: "CompraStockHistorial",
+} as const;
+
+export type HistorialTipo = keyof typeof TABLAS;
 
 export interface HistorialEncargadoNodo {
   saldoPrevio: number;
@@ -31,7 +41,10 @@ export interface GuardarHistorialResultado {
   errores: string[];
 }
 
-let estadoTabla: "desconocida" | "lista" | "sinDDL" = "desconocida";
+const estadoTabla: Record<string, "desconocida" | "lista" | "sinDDL"> = {
+  distribucion: "desconocida",
+  compra: "desconocida",
+};
 
 const esErrorTablaFaltante = (error: unknown): boolean => {
   const code = (error as { code?: string } | null)?.code;
@@ -43,28 +56,33 @@ const esErrorTablaFaltante = (error: unknown): boolean => {
   );
 };
 
-export async function ensureTablaEncargadoHistorial(): Promise<boolean> {
-  if (estadoTabla === "lista") return true;
-  if (estadoTabla === "sinDDL") return false;
+function nombreTabla(tipo: HistorialTipo): string {
+  return TABLAS[tipo];
+}
+
+export async function ensureTablaHistorial(tipo: HistorialTipo): Promise<boolean> {
+  if (estadoTabla[tipo] === "lista") return true;
+  if (estadoTabla[tipo] === "sinDDL") return false;
+  const tabla = nombreTabla(tipo);
   try {
     await db.$executeRawUnsafe(
-      `CREATE TABLE IF NOT EXISTS "EncargadoStockHistorial" (
+      `CREATE TABLE IF NOT EXISTS "${tabla}" (
          "productId" TEXT NOT NULL,
          "sucursal" TEXT NOT NULL,
          "saldo" DOUBLE PRECISION NOT NULL DEFAULT 0,
          "vendido" DOUBLE PRECISION NOT NULL DEFAULT 0,
          "capturadoAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-         CONSTRAINT "EncargadoStockHistorial_pkey" PRIMARY KEY ("productId", "sucursal")
+         CONSTRAINT "${tabla}_pkey" PRIMARY KEY ("productId", "sucursal")
        )`
     );
     await db.$executeRawUnsafe(
-      `CREATE INDEX IF NOT EXISTS "EncargadoStockHistorial_sucursal_idx"
-         ON "EncargadoStockHistorial"("sucursal")`
+      `CREATE INDEX IF NOT EXISTS "${tabla}_sucursal_idx"
+         ON "${tabla}"("sucursal")`
     );
-    estadoTabla = "lista";
+    estadoTabla[tipo] = "lista";
     return true;
   } catch {
-    estadoTabla = "sinDDL";
+    estadoTabla[tipo] = "sinDDL";
     return false;
   }
 }
@@ -82,52 +100,47 @@ function numero(v: unknown): number {
   return Number.isFinite(x) ? x : 0;
 }
 
-export async function leerHistorialEncargado(): Promise<
-  Map<string, Map<string, HistorialEncargadoNodo>>
-> {
+function agregarFila(
+  mapa: Map<string, Map<string, HistorialEncargadoNodo>>,
+  f: FilaHistorial
+) {
+  let porProducto = mapa.get(f.productId);
+  if (!porProducto) {
+    porProducto = new Map<string, HistorialEncargadoNodo>();
+    mapa.set(f.productId, porProducto);
+  }
+  const fecha = f.capturadoAt ? new Date(f.capturadoAt) : null;
+  porProducto.set(f.sucursal, {
+    saldoPrevio: Math.max(0, Math.round(numero(f.saldo))),
+    vendido: Math.max(0, Math.round(numero(f.vendido))),
+    capturadoAt: fecha && !Number.isNaN(fecha.getTime()) ? fecha : null,
+  });
+}
+
+async function leerFilas(tipo: HistorialTipo): Promise<FilaHistorial[]> {
+  const tabla = nombreTabla(tipo);
+  // El nombre sale de la whitelist: interpolación segura.
+  return db.$queryRawUnsafe<FilaHistorial[]>(
+    `SELECT "productId", "sucursal", "saldo", "vendido", "capturadoAt"
+       FROM "${tabla}"`
+  );
+}
+
+export async function leerHistorial(
+  tipo: HistorialTipo
+): Promise<Map<string, Map<string, HistorialEncargadoNodo>>> {
   const mapa = new Map<string, Map<string, HistorialEncargadoNodo>>();
   try {
-    if (!(await ensureTablaEncargadoHistorial())) return mapa;
-    const filas = await db.$queryRawUnsafe<FilaHistorial[]>(
-      `SELECT "productId", "sucursal", "saldo", "vendido", "capturadoAt"
-         FROM "EncargadoStockHistorial"`
-    );
-    for (const f of filas) {
-      let porProducto = mapa.get(f.productId);
-      if (!porProducto) {
-        porProducto = new Map<string, HistorialEncargadoNodo>();
-        mapa.set(f.productId, porProducto);
-      }
-      const fecha = f.capturadoAt ? new Date(f.capturadoAt) : null;
-      porProducto.set(f.sucursal, {
-        saldoPrevio: Math.max(0, Math.round(numero(f.saldo))),
-        vendido: Math.max(0, Math.round(numero(f.vendido))),
-        capturadoAt: fecha && !Number.isNaN(fecha.getTime()) ? fecha : null,
-      });
-    }
+    if (!(await ensureTablaHistorial(tipo))) return mapa;
+    const filas = await leerFilas(tipo);
+    for (const f of filas) agregarFila(mapa, f);
     return mapa;
   } catch (error) {
     if (!esErrorTablaFaltante(error)) return mapa;
-    // Si la tabla no existía, el ensure de arriba ya la crea. Reintento.
     try {
-      if (!(await ensureTablaEncargadoHistorial())) return mapa;
-      const filas = await db.$queryRawUnsafe<FilaHistorial[]>(
-        `SELECT "productId", "sucursal", "saldo", "vendido", "capturadoAt"
-           FROM "EncargadoStockHistorial"`
-      );
-      for (const f of filas) {
-        let porProducto = mapa.get(f.productId);
-        if (!porProducto) {
-          porProducto = new Map<string, HistorialEncargadoNodo>();
-          mapa.set(f.productId, porProducto);
-        }
-        const fecha = f.capturadoAt ? new Date(f.capturadoAt) : null;
-        porProducto.set(f.sucursal, {
-          saldoPrevio: Math.max(0, Math.round(numero(f.saldo))),
-          vendido: Math.max(0, Math.round(numero(f.vendido))),
-          capturadoAt: fecha && !Number.isNaN(fecha.getTime()) ? fecha : null,
-        });
-      }
+      if (!(await ensureTablaHistorial(tipo))) return mapa;
+      const filas = await leerFilas(tipo);
+      for (const f of filas) agregarFila(mapa, f);
     } catch {
       // silencio: el análisis sigue sin historial
     }
@@ -137,19 +150,21 @@ export async function leerHistorialEncargado(): Promise<
 
 const LOTE = 200;
 
-export async function guardarSnapshotEncargado(
+export async function guardarSnapshot(
+  tipo: HistorialTipo,
   actual: Map<string, Map<string, number>>
 ): Promise<GuardarHistorialResultado> {
+  const tabla = nombreTabla(tipo);
   const resultado: GuardarHistorialResultado = { ok: false, filas: 0, errores: [] };
   try {
-    if (!(await ensureTablaEncargadoHistorial())) {
+    if (!(await ensureTablaHistorial(tipo))) {
       resultado.errores.push(
-        "No se pudo crear/verificar la tabla EncargadoStockHistorial. El análisis sigue funcionando, pero sin detectar ventas entre pasadas."
+        `No se pudo crear/verificar la tabla ${tabla}. El análisis sigue funcionando, pero sin detectar ventas entre pasadas.`
       );
       return resultado;
     }
 
-    const previo = await leerHistorialEncargado();
+    const previo = await leerHistorial(tipo);
     const ids = new Set<string>([...previo.keys(), ...actual.keys()]);
     const filas: Array<{
       productId: string;
@@ -185,7 +200,7 @@ export async function guardarSnapshotEncargado(
           ", "
         );
         const sql = Prisma.sql`
-          INSERT INTO "EncargadoStockHistorial"
+          INSERT INTO ${Prisma.raw(`"${tabla}"`)}
             ("productId", "sucursal", "saldo", "vendido", "capturadoAt")
           VALUES ${values}
           ON CONFLICT ("productId", "sucursal") DO UPDATE
@@ -206,4 +221,17 @@ export async function guardarSnapshotEncargado(
     resultado.errores.push(error?.message || String(error));
     return resultado;
   }
+}
+
+// ── Compatibilidad con el código de la Task 160 (distribución) ──
+export function ensureTablaEncargadoHistorial(): Promise<boolean> {
+  return ensureTablaHistorial("distribucion");
+}
+
+export function leerHistorialEncargado() {
+  return leerHistorial("distribucion");
+}
+
+export function guardarSnapshotEncargado(actual: Map<string, Map<string, number>>) {
+  return guardarSnapshot("distribucion", actual);
 }

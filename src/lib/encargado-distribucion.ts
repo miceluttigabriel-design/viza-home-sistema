@@ -45,6 +45,8 @@ export interface EntradaProductoEncargado {
   tipo: string | null;
   categoria: string | null;
   marca: string | null;
+  /** fabricante de la Base = PROVEEDOR del producto */
+  proveedor?: string | null;
   modelo: string | null;
   colores: string[];
   /** CORES tal cual viene de la Base (respaldo si no se parseó antes) */

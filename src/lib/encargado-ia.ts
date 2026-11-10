@@ -21,6 +21,7 @@ import type {
   AnalisisEncargadoIA,
   PlanEncargado,
 } from "@/lib/encargado-distribucion";
+import type { AnalisisCompraIA, PlanCompra } from "@/lib/encargado-compra";
 
 const MODELO_DEFAULT = "meta/llama-3.3-70b-instruct";
 const BASE_URL_DEFAULT = "https://integrate.api.nvidia.com/v1";
@@ -294,6 +295,216 @@ export async function analizarPlanConIA(
         ? "La IA tardó más de 30 segundos y se canceló."
         : error?.message || String(error);
     return analisisRespaldo(plan, `No se pudo consultar NVIDIA NIM: ${motivo}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ENCARGADO DE COMPRA — ANÁLISIS CON IA (Task 161)
+// La IA NO calcula la necesidad: el motor de compra ya la calculó.
+// Solo interpreta, prioriza por proveedor y redacta el informe.
+// ═══════════════════════════════════════════════════════════════════
+
+export function analisisCompraRespaldo(
+  plan: PlanCompra,
+  motivo?: string
+): AnalisisCompraIA {
+  const r = plan.resumen;
+  const resumen =
+    r.productos > 0
+      ? `Analicé ${r.productosAnalizados} códigos con stock en las 4 sucursales. Hay necesidad de compra en ${r.productos} código(s): ${r.unidades} unidad(es) para ${r.proveedores} proveedor(es).`
+      : `Analicé ${r.productosAnalizados} códigos con stock en las 4 sucursales. No hay necesidad de compra: la red está cubierta con el stock actual y las transferencias internas.`;
+
+  const prioridades = plan.filas.slice(0, 6).map((f) => {
+    const venta =
+      f.vendidoRed > 0 ? ` · se vendieron ${f.vendidoRed}` : "";
+    return `${f.proveedor} · ${f.producto} (${f.sku})${
+      f.color ? ` · color ${f.color}` : ""
+    } — comprar ${f.compra}${venta}${
+      f.central > 0 ? ` · CENTRAL tiene ${f.central}` : ""
+    }`;
+  });
+
+  const recomendaciones = plan.proveedores.slice(0, 8).map(
+    (p) =>
+      `${p.proveedor}: ${p.unidades} unidad(es) en ${p.productos} código(s)${
+        p.prioritarios > 0 ? ` · ${p.prioritarios} en prioridad ALTA` : ""
+      }.`
+  );
+
+  const mensaje =
+    r.productos === 0
+      ? "No hay compras sugeridas. Si falta mercadería en una sucursal, primero usá el ENCARGADO DE DISTRIBUCIÓN."
+      : "Esta es una recomendación de compra: el sistema no genera órdenes ni compra a proveedores.";
+
+  return {
+    activa: false,
+    modelo: null,
+    resumen,
+    prioridades,
+    alertas: plan.alertas.slice(0, 8),
+    recomendaciones,
+    mensaje,
+    error: motivo,
+  };
+}
+
+function contextoCompra(plan: PlanCompra) {
+  return {
+    fecha: plan.generadoEn,
+    modo:
+      plan.modo === "IDEAL"
+        ? "Stock Ideal configurado"
+        : plan.modo === "VENTAS"
+          ? "Reposición de ventas detectadas"
+          : "Ideal + ventas detectadas",
+    sucursales: plan.sucursales,
+    resumen: plan.resumen,
+    proveedores: plan.proveedores,
+    necesidades: plan.filas.slice(0, 90).map((f) => ({
+      codigo: f.sku,
+      producto: f.producto,
+      tipo: f.tipo,
+      color: f.color,
+      marca: f.marca,
+      proveedor: f.proveedor,
+      stockSucursales: f.stockSucursales,
+      stockCentral: f.central,
+      objetivoRed: f.objetivoRed,
+      faltaRed: f.faltaRed,
+      compraSugerida: f.compra,
+      vendidoRed: f.vendidoRed,
+      prioridad: f.prioridad,
+      detalleSucursales: f.detalle.map((d) => ({
+        sucursal: d.sucursal,
+        stock: d.saldo,
+        objetivo: d.objetivo,
+        falta: d.falta,
+        vendido: d.vendido,
+      })),
+    })),
+    alertasDelMotor: plan.alertas.slice(0, 20),
+  };
+}
+
+const SYSTEM_PROMPT_COMPRA = `Sos el ENCARGADO DE COMPRA de VIZA HOME (Paraguay).
+Trabajás dentro del sistema, con el stock real por sucursal y las ventas
+detectadas entre análisis. Tu función es analizar la NECESIDAD DE COMPRA de la
+red (NUEVA ESPERANZA, KATUETE, LA PALOMA y SALTOS DEL GUAIRA + CENTRAL).
+
+REGLAS QUE NUNCA PODÉS ROMPER:
+1. El sistema SOLO recomienda compras: NUNCA generás una orden de compra ni
+   decís que la compra ya fue hecha.
+2. Primero se usa el stock de CENTRAL y las transferencias internas. Solo es
+   necesidad de compra lo que queda sin cubrir después de eso.
+3. Leés el TIPO, el COLOR (CORES), el PROVEEDOR (columna FABRICANTE) y las
+   cantidades. Agrupá la recomendación por proveedor cuando sea posible.
+4. Las unidades que bajaron desde el último análisis son VENTAS: priorizá esos
+   códigos y los que están en quiebre (0 en sucursales).
+5. No inventes números: usá EXACTAMENTE las necesidades y cantidades del JSON.
+6. Si hay códigos sin PROVEEDOR, avisá que hay que completarlo en la Base.
+
+Respondé SOLO con un objeto JSON válido, sin markdown ni texto extra:
+{
+  "resumen": "2 a 4 frases en español, concreto y profesional",
+  "prioridades": ["hasta 6 prioridades concretas de compra"],
+  "alertas": ["hasta 6 riesgos o datos que el dueño debe saber"],
+  "recomendaciones": ["hasta 8 recomendaciones agrupadas por proveedor"],
+  "mensaje": "1 o 2 frases de cierre para el dueño"
+}`;
+
+export async function analizarCompraConIA(
+  plan: PlanCompra
+): Promise<AnalisisCompraIA> {
+  const key = apiKey();
+  if (!key) {
+    return analisisCompraRespaldo(
+      plan,
+      "NVIDIA_API_KEY no está configurada. Se muestra el análisis determinístico del Encargado de Compra."
+    );
+  }
+
+  const controlador = new AbortController();
+  const timer = setTimeout(() => controlador.abort(), TIMEOUT_MS);
+
+  try {
+    const respuesta = await fetch(`${baseUrl()}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: modelo(),
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT_COMPRA },
+          {
+            role: "user",
+            content: `Este es el plan determinístico del Encargado de Compra. Interpretalo y redactá el informe:\n${JSON.stringify(
+              contextoCompra(plan)
+            )}`,
+          },
+        ],
+        temperature: 0.2,
+        top_p: 0.9,
+        max_tokens: 1400,
+        stream: false,
+      }),
+      signal: controlador.signal,
+    });
+
+    if (!respuesta.ok) {
+      const detalle = await respuesta.text().catch(() => "");
+      return analisisCompraRespaldo(
+        plan,
+        `NVIDIA NIM respondió HTTP ${respuesta.status}${detalle ? `: ${detalle.slice(0, 220)}` : ""}.`
+      );
+    }
+
+    const data: any = await respuesta.json().catch(() => null);
+    const contenido = texto(
+      data?.choices?.[0]?.message?.content ??
+        data?.choices?.[0]?.text ??
+        data?.output_text ??
+        ""
+    );
+
+    if (!contenido) {
+      return analisisCompraRespaldo(plan, "NVIDIA NIM devolvió una respuesta vacía.");
+    }
+
+    const json = extraerJson(contenido);
+    const respaldo = analisisCompraRespaldo(plan);
+    if (!json) {
+      return {
+        ...respaldo,
+        activa: true,
+        modelo: modelo(),
+        resumen: contenido.slice(0, 1200) || respaldo.resumen,
+        error: "La IA respondió en texto libre; se completó con el análisis determinístico.",
+      };
+    }
+
+    return {
+      activa: true,
+      modelo: modelo(),
+      resumen: texto(json.resumen) || respaldo.resumen,
+      prioridades: lista(json.prioridades).length
+        ? lista(json.prioridades)
+        : respaldo.prioridades,
+      alertas: lista(json.alertas).length ? lista(json.alertas) : respaldo.alertas,
+      recomendaciones: lista(json.recomendaciones).length
+        ? lista(json.recomendaciones)
+        : respaldo.recomendaciones,
+      mensaje: texto(json.mensaje) || respaldo.mensaje,
+    };
+  } catch (error: any) {
+    const motivo =
+      error?.name === "AbortError"
+        ? "La IA tardó más de 30 segundos y se canceló."
+        : error?.message || String(error);
+    return analisisCompraRespaldo(plan, `No se pudo consultar NVIDIA NIM: ${motivo}`);
   } finally {
     clearTimeout(timer);
   }
