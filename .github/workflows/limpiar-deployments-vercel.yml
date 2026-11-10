@@ -1,9 +1,14 @@
-name: Limpieza automatica de deployments (Vercel)
+name: Limpieza DIARIA de deployments (Vercel)
+
+# NO ES PARTE DEL CI. Es un workflow SEPARADO que solo hace una cosa:
+# borrar los deployments viejos de Vercel todos los dias.
+# El CI (.github/workflows/ci.yml) solo corre typecheck + lint en los push.
 
 on:
   schedule:
     # TODOS LOS DIAS a las 14:00 UTC = 11:00 hora Paraguay/Uruguay.
     # Antes corria solo los lunes ('0 14 * * 1'). Ahora es diario.
+    # GitHub puede atrasarlo unos minutos si hay mucha cola.
     - cron: '0 14 * * *'
   # Permite correrlo a mano: GitHub -> Actions -> Run workflow
   workflow_dispatch:
@@ -17,13 +22,15 @@ concurrency:
 
 jobs:
   limpiar:
+    name: Limpiar deployments viejos
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Bajar el repo (para leer el script)
         uses: actions/checkout@v4
 
-      # Los 5 deployments mas recientes NUNCA se borran (red de rollback).
+      # Los 5 deployments mas recientes NUNCA se borran (red de rollback)
+      # y el deployment de produccion en vivo tampoco.
       # El resto se borra si tiene mas de 1 dia de vida.
       - name: Borrar deployments viejos de Vercel
         env:
@@ -31,3 +38,13 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
         run: node .github/scripts/limpiar-vercel-deployments.mjs
+
+      # Muestra el resultado en la pagina del run sin tener que abrir el log.
+      - name: Mostrar resumen
+        if: always()
+        run: |
+          if [ -n "$GITHUB_STEP_SUMMARY" ] && [ -s "$GITHUB_STEP_SUMMARY" ]; then
+            echo "Resumen escrito arriba (seccion Summary de este run)."
+          else
+            echo "No se genero resumen. Abri el paso 'Borrar deployments viejos de Vercel'."
+          fi

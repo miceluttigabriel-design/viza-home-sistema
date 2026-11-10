@@ -1,7 +1,14 @@
 #!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+
 // ============================================================
-// VIZA HOME - Limpiador de deployments viejos de Vercel (v2)
+// VIZA HOME - Limpiador de deployments viejos de Vercel (v4)
 // ------------------------------------------------------------
+// NOVEDAD v4: RESUMEN VISIBLE EN LA PAGINA DEL RUN.
+//   Al terminar escribe una tabla en "Summary" de GitHub Actions
+//   (cuantos reviso, cuantos borro, cuantos conservo, errores y
+//   la lista de los borrados). Asi no hay que bucear en el log.
+//
 // NOVEDAD v2: AUTO-DIAGNOSTICO.
 //   - Valida el token y muestra el usuario de Vercel.
 //   - Prueba solo las combinaciones (con/sin teamId).
@@ -32,8 +39,92 @@ const PAGINAS_MAX = 4;      // revisa hasta 400 deployments por corrida
 const base = process.env.VERCEL_API_BASE || "https://api.vercel.com";
 const MS_DIA = 24 * 60 * 60 * 1000;
 
-if (!TOKEN) { console.error("X Falta el secret VERCEL_TOKEN"); process.exit(1); }
-if (!PROJECT_ID) { console.error("X Falta el secret VERCEL_PROJECT_ID (debe empezar con prj_)"); process.exit(1); }
+// ---------- Resumen visible en la pagina del run (GitHub Summary) ----------
+const RESUMEN_ARCHIVO = process.env.GITHUB_STEP_SUMMARY || "";
+function resumen(linea = "") {
+  if (!RESUMEN_ARCHIVO) return;
+  try {
+    appendFileSync(RESUMEN_ARCHIVO, linea + "\n");
+  } catch {
+    /* si falla el resumen, el run sigue igual */
+  }
+}
+
+// Datos que se muestran al final
+const informe = {
+  revisados: 0,
+  borrados: [],
+  conservadosUltimos: 0,
+  conservadosProduccion: 0,
+  conservadosNuevos: 0,
+  errores: [],
+  produccion: "",
+  problema: "",
+};
+
+function horaUTC(ms = Date.now()) {
+  return new Date(ms).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+}
+
+function escribirResumen() {
+  const borrados = informe.borrados;
+  resumen("# Limpieza automatica de deployments (Vercel)");
+  resumen();
+  resumen(`| Dato | Valor |`);
+  resumen(`| --- | --- |`);
+  resumen(`| Corrida | ${horaUTC()} |`);
+  resumen(`| Deployments revisados | **${informe.revisados}** |`);
+  resumen(`| **Borrados** | **${borrados.length}** |`);
+  resumen(`| Conservados: los 5 ultimos | ${informe.conservadosUltimos} |`);
+  resumen(`| Conservados: produccion en vivo | ${informe.conservadosProduccion} |`);
+  resumen(`| Conservados: menos de ${EDAD_MINIMA_DIAS} dia(s) | ${informe.conservadosNuevos} |`);
+  resumen(`| Errores | ${informe.errores.length} |`);
+  if (informe.produccion) resumen(`| Produccion protegida | \`${informe.produccion}\` |`);
+  resumen();
+
+  if (informe.problema) {
+    resumen(`## No se pudo limpiar`);
+    resumen();
+    resumen(informe.problema);
+    resumen();
+    resumen("Tus datos, la base de datos y el sistema en produccion NO fueron tocados.");
+    return;
+  }
+
+  resumen(`## Borrados (${borrados.length})`);
+  resumen();
+  if (borrados.length === 0) {
+    resumen("Ninguno. No habia deployments con mas de " + EDAD_MINIMA_DIAS + " dia fuera de los 5 ultimos.");
+  } else {
+    resumen("| # | Deployment | Fecha | Estado |");
+    resumen("| --- | --- | --- | --- |");
+    const MAX = 60;
+    borrados.slice(0, MAX).forEach((d, i) => {
+      resumen(`| ${i + 1} | \`${d.uid}\` | ${d.fecha} | ${d.estado} |`);
+    });
+    if (borrados.length > MAX) resumen(`\n... y ${borrados.length - MAX} mas (ver el log completo).`);
+  }
+
+  if (informe.errores.length > 0) {
+    resumen();
+    resumen(`## Errores (${informe.errores.length})`);
+    resumen();
+    informe.errores.slice(0, 20).forEach((e) => resumen(`- \`${e.uid}\` (${e.fecha}): ${e.motivo}`));
+  }
+}
+
+if (!TOKEN) {
+  console.error("X Falta el secret VERCEL_TOKEN");
+  informe.problema = "Falta el secret `VERCEL_TOKEN` en GitHub (Settings -> Secrets and variables -> Actions).";
+  escribirResumen();
+  process.exit(1);
+}
+if (!PROJECT_ID) {
+  console.error("X Falta el secret VERCEL_PROJECT_ID (debe empezar con prj_)");
+  informe.problema = "Falta el secret `VERCEL_PROJECT_ID` en GitHub.";
+  escribirResumen();
+  process.exit(1);
+}
 
 async function api(path, method = "GET", reintento = 0) {
   const res = await fetch(base + path, {
@@ -65,9 +156,8 @@ async function probarListado(query) {
 }
 
 async function main() {
-  console.log("== Viza Home - limpieza de deployments viejos de Vercel (v3 - diaria) ==");
-  console.log(`Config: conserva los ultimos ${MANTENER_ULTIMOS} | no toca nada con menos de ${EDAD_MINIMA_DIAS} dias`);
-
+  console.log("== Viza Home - limpieza de deployments viejos de Vercel (v4 - diaria) ==");
+  console.log(`Config: conserva los ultimos ${MANTENER_ULTIMOS} | no toca nada con menos de ${EDAD_MINIMA_DIAS} dia(s)`);
   // ---- FASE 1: validar el token ----
   try {
     const u = await api("/v2/user");
@@ -142,6 +232,9 @@ async function main() {
     console.log("  3) El secret VERCEL_PROJECT_ID no corresponde (la lista de proyectos accesibles de arriba");
     console.log("     muestra los nombres e IDs reales).");
     console.log("Tus datos y tu sistema NO fueron tocados. No se borro nada.");
+    informe.problema =
+      "Ninguna combinacion fue autorizada por Vercel. Revisa: (1) el secret `VERCEL_TOKEN` debe tener scope **FULL ACCOUNT**; (2) que no sea un token viejo/borrado; (3) que `VERCEL_PROJECT_ID` sea el correcto. El log trae los proyectos accesibles con sus IDs reales.";
+    escribirResumen();
     process.exit(1);
   }
 
@@ -162,17 +255,15 @@ async function main() {
   }
   todos.sort((a, b) => b.createdAt - a.createdAt);
   console.log(`Deployments encontrados: ${todos.length}`);
+  informe.revisados = todos.length;
 
   // Red de seguridad extra: el deployment de PRODUCCION que esta sirviendo
   // el dominio nunca se borra, aunque quede fuera de los 5 mas recientes.
   const produccion = todos.find((d) => d.target === "production");
   if (produccion) {
+    informe.produccion = produccion.uid;
     console.log(`Produccion protegida: ${produccion.uid} | ${new Date(produccion.createdAt).toISOString().slice(0, 10)}`);
   }
-
-  let borrados = 0;
-  let conservados = 0;
-  let errores = 0;
 
   for (let i = 0; i < todos.length; i++) {
     const d = todos[i];
@@ -182,17 +273,17 @@ async function main() {
 
     if (i < MANTENER_ULTIMOS) {
       console.log(`CONSERVAR (ultimo ${i + 1}) ${info}`);
-      conservados++;
+      informe.conservadosUltimos++;
       continue;
     }
     if (produccion && d.uid === produccion.uid) {
       console.log(`CONSERVAR (produccion en vivo) ${info}`);
-      conservados++;
+      informe.conservadosProduccion++;
       continue;
     }
     if (ahora - d.createdAt < edadMinima) {
       console.log(`CONSERVAR (menos de ${EDAD_MINIMA_DIAS} dias) ${info}`);
-      conservados++;
+      informe.conservadosNuevos++;
       continue;
     }
     try {
@@ -200,19 +291,24 @@ async function main() {
       if (modoConTeam) path += `?teamId=${encodeURIComponent(TEAM_ID)}`;
       await api(path, "DELETE");
       console.log(`BORRADO ${info}`);
-      borrados++;
+      informe.borrados.push({ uid: d.uid, fecha, estado });
     } catch (e) {
       console.log(`ERROR (se salta) ${info} : ${corto(e.message)}`);
-      errores++;
+      informe.errores.push({ uid: d.uid, fecha, motivo: corto(e.message) });
     }
     await new Promise((r) => setTimeout(r, 300)); // respetar limites de la API
   }
 
+  const conservados =
+    informe.conservadosUltimos + informe.conservadosProduccion + informe.conservadosNuevos;
   console.log("----------------------------------------------------------");
-  console.log(`RESUMEN: ${borrados} borrados | ${conservados} conservados | ${errores} errores`);
+  console.log(
+    `RESUMEN: ${informe.borrados.length} borrados | ${conservados} conservados | ${informe.errores.length} errores`
+  );
   console.log("Listo. Base de datos y sistema en produccion NO fueron tocados.");
+  escribirResumen();
 
-  if (borrados === 0 && errores > 0) {
+  if (informe.borrados.length === 0 && informe.errores.length > 0) {
     console.error("No se pudo borrar ninguno: revisa el log de arriba.");
     process.exit(1);
   }
@@ -220,5 +316,7 @@ async function main() {
 
 main().catch((e) => {
   console.error(`FALLO GENERAL: ${e.message}`);
+  informe.problema = `Fallo general: ${e.message}`;
+  escribirResumen();
   process.exit(1);
 });
