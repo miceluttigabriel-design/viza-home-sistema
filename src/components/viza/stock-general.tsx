@@ -47,6 +47,7 @@ import { suscribirseAEdicionesProductos } from "@/lib/replicacion-productos";
 import {
   ArrowLeft,
   ArrowLeftRight,
+  Sparkles,
   Boxes,
   Layers,
   Tags,
@@ -65,6 +66,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { EncargadoDistribucion } from "./encargado-distribucion";
 
 const AZUL = "#0d3d5e";
 const DORADO = "#D9B86B";
@@ -509,6 +511,12 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
   const [distAviso, setDistAviso] = useState<string | null>(null);
   const [distSucursales, setDistSucursales] = useState<string[]>([]);
 
+  // ═══ ENCARGADO DE DISTRIBUCIÓN (Task 160, pedido del dueño) ═══
+  // Analiza toda la Base + Stock General de las 4 sucursales, respeta el
+  // tipo y el color (CORES), detecta bajadas de stock (ventas) y arma el
+  // plan + PDF. NO escribe stock: solo recomienda transferencias internas.
+  const [encargadoOpen, setEncargadoOpen] = useState(false);
+
   const cargarDistribucion = useCallback(async () => {
     setDistCargando(true);
     try {
@@ -695,6 +703,18 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
             {/* Task 144 (pedido del dueño): DISTRIBUCIÓN INTELIGENTE es
                 SOLO para el usuario SUPREMO. Admins y VIPs pueden ver el
                 Orquestador y el Stock, pero este botón no se les muestra. */}
+            {esSupremo && (
+              <button
+                onClick={() => setEncargadoOpen(true)}
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-110 shrink-0"
+                style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL }}
+                title="ENCARGADO DE DISTRIBUCIÓN con IA: analiza tipo, color y stock de las 4 sucursales y genera el plan + PDF (solo transferencias internas)"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">ENCARGADO DE DISTRIBUCIÓN</span>
+                <span className="sm:hidden">ENCARGADO</span>
+              </button>
+            )}
             {esSupremo && (
               <button
                 onClick={abrirDistribucion}
@@ -1186,6 +1206,12 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
           </div>
         </div>
       </main>
+
+      {/* ═══ MODAL: ENCARGADO DE DISTRIBUCIÓN (Task 160) ═══ */}
+      <EncargadoDistribucion
+        open={encargadoOpen}
+        onClose={() => setEncargadoOpen(false)}
+      />
 
       {/* ═══ MODAL: DISTRIBUCIÓN INTELIGENTE (Task 127 — transferencias internas) ═══ */}
       {distOpen && (

@@ -14,10 +14,10 @@
 //       STOCK GENERAL → vista inventario
 //       LA BASE → AdminPanel
 //       COTIZADOR → SalesPanel
-//   · DERECHA (ligado al Stock): AGENTE DE DISTRIBUCIÓN (PRÓXIMAMENTE)
+//   · DERECHA (ligado al Stock): ENCARGADO DE DISTRIBUCIÓN (activo, con IA)
 //     —ligado a los 4 cuadritos de sucursales: NUEVA ESPERANZA · KATUETE ·
 //       LA PALOMA · SALTOS DEL GUAIRA— y debajo AGENTE DE COMPRA
-//     (ligado al Agente de Distribución).
+//     (ligado al Encargado de Distribución).
 //
 // Marca: azul #155789 · dorado #D9B86B · logo /viza-home-logo-nuevo.png
 // SOLO ES VISUALIZACIÓN: no toca datos, no toca APIs, no toca la base.
@@ -238,33 +238,40 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
   );
 }
 
-// ─── Agents cards (Task 159, pedido del dueño) ───
+// ─── Agents cards (Task 159/160, pedido del dueño) ───
 // Dos cuadritos MENORES en el lugar del antiguo "Distribuidor Inteligente":
-//   · AGENTE DE DISTRIBUCIÓN → ligado a los 4 cuadritos de sucursales.
-//   · AGENTE DE COMPRA       → ligado al Agente de Distribución.
-// Es SOLO visual (por ahora): no toca datos ni APIs.
+//   · ENCARGADO DE DISTRIBUCIÓN → ACTIVO: analiza Base + Stock de las 4
+//     sucursales y genera el plan + PDF (solo transferencias internas).
+//   · AGENTE DE COMPRA          → ligado al Encargado de Distribución.
 function AgenteCard({
   c,
   icon,
   titulo,
   subtitulo,
   ligado,
+  estado = "PRÓXIMAMENTE",
+  onClick,
 }: {
   c: string;
   icon: ReactNode;
   titulo: string;
   subtitulo: string;
   ligado: string;
+  estado?: string;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className="relative overflow-hidden h-full w-full rounded-2xl p-3.5 flex flex-col select-none"
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className="relative overflow-hidden h-full w-full rounded-2xl p-3.5 flex flex-col select-none text-left transition-transform hover:scale-[1.02] disabled:hover:scale-100 disabled:cursor-default"
       style={{
         background: `linear-gradient(155deg, ${c}1f 0%, rgba(9,12,17,0.94) 55%)`,
         border: `1px dashed ${c}55`,
         boxShadow: `0 10px 30px -16px ${c}66`,
       }}
-      title={`${titulo} — próximo paso del sistema`}
+      title={`${titulo}${onClick ? " — abrir Stock General" : " — próximo paso del sistema"}`}
     >
       <span
         className="absolute inset-x-0 top-0 h-[2px]"
@@ -277,7 +284,7 @@ function AgenteCard({
         >
           {icon}
         </div>
-        <Pill c={c}>PRÓXIMAMENTE</Pill>
+        <Pill c={c}>{estado}</Pill>
       </div>
       <h3 className="text-[13px] font-black text-white leading-tight tracking-tight mt-2.5">{titulo}</h3>
       <p className="text-[9px] font-bold uppercase tracking-wide mt-1" style={{ color: c }}>
@@ -290,18 +297,20 @@ function AgenteCard({
         <Link2 className="h-3 w-3 shrink-0" />
         {ligado}
       </div>
-    </div>
+    </button>
   );
 }
 
-function AgenteDistribucionCard() {
+function AgenteDistribucionCard({ onClick }: { onClick?: () => void }) {
   return (
     <AgenteCard
       c={C_DISTRI}
       icon={<Network className="h-5 w-5" style={{ color: C_DISTRI }} />}
-      titulo="AGENTE DE DISTRIBUCIÓN"
-      subtitulo="Sucursales · Canales"
+      titulo="ENCARGADO DE DISTRIBUCIÓN"
+      subtitulo="IA · Tipo · Color · Stock"
       ligado="LIGADO A LAS 4 SUCURSALES"
+      estado="ACTIVO"
+      onClick={onClick}
     />
   );
 }
@@ -313,7 +322,7 @@ function AgenteCompraCard() {
       icon={<ShoppingCart className="h-5 w-5" style={{ color: C_COMPRA }} />}
       titulo="AGENTE DE COMPRA"
       subtitulo="Compras · Abastecimiento"
-      ligado="LIGADO AL AGENTE DE DISTRIBUCIÓN"
+      ligado="LIGADO AL ENCARGADO DE DISTRIBUCIÓN"
     />
   );
 }
@@ -326,7 +335,7 @@ function SucursalCard({ nombre }: { nombre: string }) {
         background: `linear-gradient(155deg, ${C_DISTRI}1a, rgba(9,12,17,0.94) 70%)`,
         border: `1px dashed ${C_DISTRI}55`,
       }}
-      title={`${nombre} — se activará con el Agente de Distribución`}
+      title={`${nombre} — stock controlado por el Encargado de Distribución`}
     >
       <MapPin className="h-4 w-4 mb-1.5" style={{ color: C_DISTRI }} />
       <p className="text-[11px] font-black text-white leading-tight">{nombre}</p>
@@ -447,9 +456,9 @@ function Leyenda() {
       </p>
       <div className="flex flex-col gap-2">
         {fila(DORADO, false, "La Base alimenta con datos al Stock y al Cotizador")}
-        {fila(C_STOCK, false, "El Stock se liga al Agente de Distribución")}
-        {fila(C_COMPRA, true, "El Agente de Compra está ligado al Agente de Distribución")}
-        {fila(C_DISTRI, true, "El Agente de Distribución reparte a las 4 sucursales (próximamente)")}
+        {fila(C_STOCK, false, "El Stock se liga al Encargado de Distribución")}
+        {fila(C_COMPRA, true, "El Agente de Compra está ligado al Encargado de Distribución")}
+        {fila(C_DISTRI, false, "El Encargado de Distribución activo reparte entre las 4 sucursales")}
       </div>
       <p className="mt-auto text-[11px] font-bold italic" style={{ color: DORADO }}>
         Todo para tu hogar, en un solo lugar.
@@ -601,7 +610,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           <div style={place(POS.stock)}><StockCard onClick={onGoStock} /></div>
           <div style={place(POS.base)}><BaseCard onClick={onGoBase} /></div>
           <div style={place(POS.cotizador)}><CotizadorCard onClick={onGoSales} /></div>
-          <div style={place(POS.distribucion)}><AgenteDistribucionCard /></div>
+          <div style={place(POS.distribucion)}><AgenteDistribucionCard onClick={onGoStock} /></div>
           <div style={place(POS.compra)}><AgenteCompraCard /></div>
           {SUCURSALES_CUADROS.map((nombre, i) => (
             <div key={nombre} style={place({ x: SUC_X, y: SUC_Y[i], w: SUC_W, h: SUC_H })}>
@@ -619,7 +628,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           <Conector />
           <div className="min-h-[200px]"><CotizadorCard onClick={onGoSales} /></div>
           <Conector color={C_STOCK} />
-          <div className="min-h-[180px]"><AgenteDistribucionCard /></div>
+          <div className="min-h-[180px]"><AgenteDistribucionCard onClick={onGoStock} /></div>
           <Conector color={C_COMPRA} />
           <div className="min-h-[180px]"><AgenteCompraCard /></div>
           <Conector color={C_DISTRI} />
