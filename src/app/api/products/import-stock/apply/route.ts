@@ -98,6 +98,24 @@ const UPDATE_BATCH_SIZE = 200;
 const COST_UPDATE_BATCH_SIZE = 100;
 
 // ─────────────────────────────────────────────────────────────
+// Valor de una columna numérica para el CASE del update de costo.
+//
+// IMPORTANTE (bug 42804 "column rsToGs is of type double precision but
+// expression is of type text"): Prisma manda los parámetros NULL con tipo
+// TEXTO, y Postgres termina armando el CASE entero como TEXT → rechaza la
+// asignación a una columna double precision y TODO el lote de costo falla
+// (por eso los costos no se actualizaban). Solución: los NULL van como
+// literal NULL (sin parámetro) y los valores SIEMPRE como número, nunca
+// como texto.
+// ─────────────────────────────────────────────────────────────
+function valorNumericoSql(v: unknown): Prisma.Sql | number {
+  if (v === null || v === undefined || v === "") return Prisma.raw("NULL");
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return Prisma.raw("NULL");
+  return n;
+}
+
+// ─────────────────────────────────────────────────────────────
 // recalcExistingWithNewCostGs: recalcula la cadena de costos de un producto
 // EXISTENTE cuando la planilla trae un costo nuevo (COSTO UNIT. ULTIMA COMPRA
 // → COSTO GS), SIN TOCAR las márgenes ni los porcentajes que el admin ya
@@ -438,6 +456,10 @@ export async function POST(req: NextRequest) {
     //     trae es igual al guardado → solo se actualiza el stock.
     const stockOnlyUpdates: Array<{ sku: string; stock: number }> = [];
     const costUpdates: Array<{ sku: string; data: Record<string, number | null> }> = [];
+    // Cuántos códigos quedaron con el costo PROTEGIDO (celda dorada/amarilla:
+    // el admin lo editó a mano). Solo se les actualiza el stock. Se informa en
+    // la respuesta para poder verificar que la regla se respetó.
+    let costosProtegidos = 0;
     for (const u of allUpdates) {
       const row = existingRowsMap.get(u.sku);
       const costoExcel = u.costoNuevo;
@@ -446,6 +468,7 @@ export async function POST(req: NextRequest) {
       // importación NO le cambia el costo: entra directo como "solo stock",
       // sin importar lo que traiga el Excel (aunque sea un costo distinto).
       if (row && protegidosIds.has(row.id)) {
+        costosProtegidos++;
         stockOnlyUpdates.push({ sku: u.sku, stock: u.stock });
         continue;
       }
@@ -582,7 +605,10 @@ export async function POST(req: NextRequest) {
       const setFragments = COST_UPDATE_COLS.map((col) =>
         Prisma.sql`${Prisma.raw(`"${col}"`)} = CASE ${Prisma.join(
           batch.map((item) =>
-            Prisma.sql`WHEN "sku" = ${item.sku} THEN ${item.data[col] ?? null}`
+            // valorNumericoSql: NULL literal y números reales (nunca texto),
+            // si no Postgres rechaza el CASE contra columnas double precision
+            // (bug 42804, ver el comentario de la función).
+            Prisma.sql`WHEN "sku" = ${item.sku} THEN ${valorNumericoSql(item.data[col])}`
           ),
           ' '
         )} END`
@@ -727,6 +753,9 @@ export async function POST(req: NextRequest) {
       creados,
       actualizados: actualizadosCount,
       conCostoActualizado,
+      // Códigos con costo PROTEGIDO (celda dorada/amarilla: editado a mano
+      // por el admin). A estos NO se les toca el costo: solo el stock.
+      costosProtegidos,
       margenesAutomaticas,
       conSafraAutomatica,
       // Task 157: códigos existentes a los que se les completó proveedor/marca

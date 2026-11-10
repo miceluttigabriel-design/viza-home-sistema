@@ -19,7 +19,6 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
-  Download,
   AlertTriangle,
   FileSpreadsheet,
   Tag,
@@ -1344,57 +1343,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     PEDIDO ESPECIAL
                   </button>
                 )}
-                {/* Boton EXPORTAR EXCEL — Task 134 (pedido del dueño): SOLO
-                    Supremo ("el boton exportar excel es apenas para Supremo
-                    usuario"). Antes lo veían todos los admins; ahora el
-                    botón se oculta para admin común y la API
-                    /api/products/export exige supremo_admin — la MISMA regla
-                    de los dos lados. Sigue oculto en MODO SOLO LECTURA
-                    (Task 78). */}
-                {isSupremo && !esLectura && (
-                <button
-                  id="btn-export-excel"
-                  onClick={async () => {
-                    const btn = document.getElementById("btn-export-excel") as HTMLButtonElement;
-                    if (btn) { btn.disabled = true; btn.style.opacity = "0.6"; }
-                    const toastId = toast.loading("Preparando exportacion...");
-                    try {
-                      const res = await fetch("/api/products/export");
-                      if (!res.ok) {
-                        const errData = await res.json().catch(() => ({ error: "Error del servidor" }));
-                        throw new Error(errData.error || `Error HTTP ${res.status}`);
-                      }
-                      const blob = await res.blob();
-                      if (!blob || blob.size < 100) {
-                        throw new Error("El archivo generado esta vacio");
-                      }
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      const now = new Date();
-                      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
-                      const timeStr = now.toTimeString().slice(0, 5).replace(/:/g, "");
-                      a.download = `BACKUP_VIZA_HOME_${dateStr}_${timeStr}.csv`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      setTimeout(() => URL.revokeObjectURL(url), 1000);
-                      toast.success(`Exportacion completada. ${(blob.size / 1024).toFixed(0)} KB descargados.`, { id: toastId });
-                    } catch (error) {
-                      console.error("Error export:", error);
-                      toast.error(`Error: ${(error as Error).message}`, { id: toastId });
-                    } finally {
-                      if (btn) { btn.disabled = false; btn.style.opacity = "1"; }
-                    }
-                  }}
-                  className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
-                  style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
-                  title="Exportar todos los productos a Excel"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  EXPORTAR EXCEL
-                </button>
-                )}
+                {/* Boton EXPORTAR EXCEL — ELIMINADO (pedido del dueño): ya no
+                    hace falta. La copia de la base se manda sola por correo
+                    con las COPIAS DE SEGURIDAD (08:00 / 14:00 / 23:00) y el
+                    boton ENVIAR COPIA AHORA cubre el "quiero la copia ya".
+                    La API /api/products/export queda publicada por si algun
+                    dia hace falta, pero el boton ya no se muestra. */}
 
                 {/* Chip COPIAS DE SEGURIDAD (Task 134, pedido del dueño) —
                     solo Supremo: el interruptor ON/OFF de los backups
