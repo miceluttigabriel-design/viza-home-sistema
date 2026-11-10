@@ -1,7 +1,7 @@
 "use client";
 
 // ═══════════════════════════════════════════════════════════════════
-// TASK 98 — STOCK GENERAL · FILTRO POR SUCURSAL + IMPORTAR INVENTARIO
+// TASK 98 — STOCK GENERAL · FILTRO POR SUCURSAL + IMPORTAR PLANILLA
 // (pedido del dueño: "tenemos que hacer um filtro para poder ver por
 // sucursal... lo que esta Central es nuestro deposito Central y los
 // otros son por cada sucursal... tenemos que dividir bien... y un buton
@@ -11,14 +11,14 @@
 //     cada sucursal (KATUETE, NUEVA ESPERANZA, SALTOS DEL GUAIRA, LA
 //     PALOMA...). Las cards, el gráfico por sub-grupo y la tabla
 //     responden al filtro activo.
-//   · IMPORTAR INVENTARIO: mismo motor de importación de siempre
-//     (preview → confirmar → apply). El apply de la Task 98 divide el
-//     saldo POR SUCURSAL (tabla aparte StockSucursal) además del stock
-//     global de siempre. Antes de confirmar, el dueño ve CUÁNTAS filas,
-//     SKUs y unidades caen en cada sucursal.
+//   · IMPORTAR PLANILLA: el ÚNICO botón de importación del sistema (Task 152).
+//     Mismo motor de siempre que tenía LA BASE (preview → confirmar → apply).
+//     El apply de la Task 98 divide el saldo POR SUCURSAL (tabla aparte
+//     StockSucursal) además del stock global de siempre. Antes de confirmar,
+//     el dueño ve CUÁNTAS filas, SKUs y unidades caen en cada sucursal.
 //   · Vista SOLO LECTURA igual que siempre: para editar un producto, LA
-//     BASE. Nada se edita desde acá; la importación es la MISMA de la
-//     BASE (mismas reglas de costos protegidos, márgenes automáticas…).
+//     BASE. Nada se edita desde acá; la importación conserva TODAS las
+//     reglas de la BASE (costos protegidos, márgenes y SAFRA automáticas…).
 //
 // Datos: UN endpoint nuevo (GET /api/stock/general) alimenta TODO
 // (cards + pills + gráfico + tabla) para que nada se desincronice.
@@ -408,7 +408,8 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
   const maxStockCat = stats?.bySubgrupo?.reduce((m, c) => Math.max(m, c.stock), 0) ?? 0;
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
 
-  // ═══ IMPORTAR INVENTARIO (mismo motor que LA BASE, con reparto por sucursal) ═══
+  // ═══ IMPORTAR PLANILLA (Task 152: el único botón de importación del sistema;
+  //     mismo motor que tenía LA BASE, con reparto por sucursal) ═══
   const [importOpen, setImportOpen] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importApplying, setImportApplying] = useState(false);
@@ -722,10 +723,10 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
                   onClick={abrirImport}
                   className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-110 shrink-0 text-white"
                   style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
-                  title="Importar planilla de inventario del ERP (stock + sucursales + nuevos productos)"
+                  title="Importar planilla del ERP (stock + sucursales + nuevos productos)"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  <span>IMPORTAR INVENTARIO</span>
+                  <span>IMPORTAR PLANILLA</span>
                 </button>
               </>
             )}
@@ -859,7 +860,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
 
             {sucursales.length === 0 && (
               <p className="text-[11px] text-stone-400 font-medium self-center">
-                Todavía no hay sucursales cargadas. Usá IMPORTAR INVENTARIO con la planilla del ERP (columna SUCURSAL) para activar este filtro.
+                Todavía no hay sucursales cargadas. Usá IMPORTAR PLANILLA con la planilla del ERP (columna SUCURSAL) para activar este filtro.
               </p>
             )}
           </div>
@@ -1363,7 +1364,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
                   {distSucursales.length === 0 ? (
                     <div className="rounded-xl p-4 border border-amber-200 bg-amber-50">
                       <p className="text-xs font-bold text-amber-800">
-                        Todavía no hay sucursales con inventario. Importá la planilla del ERP (IMPORTAR INVENTARIO) primero.
+                        Todavía no hay sucursales con inventario. Importá la planilla del ERP (IMPORTAR PLANILLA) primero.
                       </p>
                     </div>
                   ) : (
@@ -1503,7 +1504,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
         </div>
       )}
 
-      {/* ═══ MODAL: IMPORTAR INVENTARIO (mismo motor que LA BASE + sucursales) ═══ */}
+      {/* ═══ MODAL: IMPORTAR PLANILLA (mismo motor que tenía LA BASE + sucursales) ═══ */}
       {importOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
@@ -1511,7 +1512,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "#e7e5e4" }}>
               <h3 className="font-black text-lg flex items-center gap-2" style={{ color: AZUL }}>
                 <Upload className="h-5 w-5" />
-                IMPORTAR INVENTARIO
+                IMPORTAR PLANILLA
               </h3>
               <button
                 onClick={() => { if (!importLoading && !importApplying) setImportOpen(false); }}
@@ -1527,7 +1528,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
               {importLoading && (
                 <div className="flex flex-col items-center justify-center py-10 gap-3">
                   <Loader2 className="h-8 w-8 animate-spin text-sky-600" />
-                  <p className="text-sm text-stone-500 font-medium">Procesando el inventario del ERP…</p>
+                  <p className="text-sm text-stone-500 font-medium">Procesando la planilla del ERP…</p>
                 </div>
               )}
 

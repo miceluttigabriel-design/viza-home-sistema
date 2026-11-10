@@ -103,7 +103,7 @@ export async function GET(_req: NextRequest) {
         filas: [],
         resumen: { transferencias: 0, unidades: 0, productos: 0, faltanteNoCubierto: 0, sucursalesConFaltante: [] },
         aviso:
-          "Todavía no hay inventario por sucursal. Importá la planilla del ERP desde IMPORTAR INVENTARIO (columna SUCURSAL) para activar el módulo.",
+          "Todavía no hay inventario por sucursal. Importá la planilla del ERP desde IMPORTAR PLANILLA (columna SUCURSAL) para activar el módulo.",
       });
     }
 
