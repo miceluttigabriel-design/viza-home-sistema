@@ -148,6 +148,40 @@ export async function leerHistorial(
   }
 }
 
+// Task 161 (pedido del dueño): "cada vez que actualizo el stock, si baja es
+// porque fue vendido". Para que la detección funcione sin importar cuál de
+// los dos encargados se abrió primero, se lee la ÚLTIMA foto conocida de
+// CADA producto/sucursal entre las dos tablas (la fila más reciente gana).
+// Así no se pierde la bajada si el dueño abrió Distribución antes que Compra.
+export async function leerUltimaFoto(
+  preferido: HistorialTipo = "compra"
+): Promise<Map<string, Map<string, HistorialEncargadoNodo>>> {
+  const orden: HistorialTipo[] =
+    preferido === "compra" ? ["distribucion", "compra"] : ["compra", "distribucion"];
+  const mapa = new Map<string, Map<string, HistorialEncargadoNodo>>();
+
+  for (const tipo of orden) {
+    const parcial = await leerHistorial(tipo);
+    for (const [productId, porNodo] of parcial) {
+      let destino = mapa.get(productId);
+      if (!destino) {
+        destino = new Map<string, HistorialEncargadoNodo>();
+        mapa.set(productId, destino);
+      }
+      for (const [sucursal, nodo] of porNodo) {
+        const actual = destino.get(sucursal);
+        const tNuevo = nodo.capturadoAt ? nodo.capturadoAt.getTime() : 0;
+        const tActual = actual?.capturadoAt ? actual.capturadoAt.getTime() : -1;
+        if (!actual || tNuevo > tActual || (tNuevo === tActual && tipo === preferido)) {
+          destino.set(sucursal, nodo);
+        }
+      }
+    }
+  }
+
+  return mapa;
+}
+
 const LOTE = 200;
 
 export async function guardarSnapshot(

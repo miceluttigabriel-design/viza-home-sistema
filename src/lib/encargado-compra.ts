@@ -84,6 +84,22 @@ export interface ProveedorCompra {
   prioritarios: number;
 }
 
+// Venta detectada por BAJA DE STOCK en una sucursal desde la última foto:
+//   anterior = lo que había antes, actual = lo que hay hoy, vendido = la baja.
+// El dueño pidió que esto se muestre aunque la sucursal haya quedado en 0 o
+// el producto ya no aparezca en ninguna sucursal.
+export interface VentaCompra {
+  sku: string;
+  producto: string;
+  tipo: string | null;
+  color: string | null;
+  proveedor: string;
+  sucursal: string;
+  anterior: number;
+  actual: number;
+  vendido: number;
+}
+
 export interface ResumenCompra {
   productos: number;
   unidades: number;
@@ -108,6 +124,8 @@ export interface PlanCompra {
   nodos: string[];
   filas: FilaCompra[];
   proveedores: ProveedorCompra[];
+  /** bajas de stock por sucursal (aunque el producto ya no exista en la red) */
+  ventas: VentaCompra[];
   resumen: ResumenCompra;
   alertas: string[];
 }
@@ -192,6 +210,7 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   const generadoEn = entrada.generadoEn || new Date().toISOString();
 
   const filas: FilaCompra[] = [];
+  const ventas: VentaCompra[] = [];
   const alertas = new Set<string>();
   let productosAnalizados = 0;
   let productosConVenta = 0;
@@ -217,6 +236,11 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
 
     productosAnalizados += 1;
 
+    const proveedor =
+      String(producto.proveedor || "").trim().toUpperCase() || "SIN PROVEEDOR";
+    const colores = Array.isArray(producto.colores) ? producto.colores : [];
+    const colorTexto = colores.length > 0 ? colores.join(" / ") : null;
+
     const { objetivos, conIdeal: tieneIdeal } = objetivoSucursales(producto, sucursales);
     if (tieneIdeal) conIdeal += 1;
     else sinIdeal += 1;
@@ -237,10 +261,28 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
     unidadesEnCentral += central;
     if (vendidoRed > 0) productosConVenta += 1;
 
+    // Bajas de stock por sucursal: se muestran SIEMPRE, aunque la red ya
+    // tenga stock suficiente o el producto haya quedado en 0 en todas.
+    for (const s of sucursales) {
+      const vendidoSucursal = entero(producto.vendido[s]);
+      if (vendidoSucursal <= 0) continue;
+      const actual = entero(producto.saldos[s]);
+      ventas.push({
+        sku: producto.sku,
+        producto: producto.nombre,
+        tipo: producto.tipo,
+        color: colorTexto,
+        proveedor,
+        sucursal: s,
+        anterior: actual + vendidoSucursal,
+        actual,
+        vendido: vendidoSucursal,
+      });
+    }
+
     const faltaRed = Math.max(0, objetivoRed - stockRed);
     if (faltaRed <= 0) continue;
 
-    const proveedor = String(producto.proveedor || "").trim().toUpperCase() || "SIN PROVEEDOR";
     if (proveedor === "SIN PROVEEDOR") sinProveedor += 1;
 
     const detalle: DetalleSucursalCompra[] = sucursales.map((s, i) => {
@@ -254,8 +296,6 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
       };
     });
 
-    const colores = Array.isArray(producto.colores) ? producto.colores : [];
-    const colorTexto = colores.length > 0 ? colores.join(" / ") : null;
     const prioridad = prioridadDe(stockSucursales, objetivoRed, vendidoRed, detalle);
 
     const saldos: Record<string, number> = {};
@@ -295,6 +335,14 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
     if (color !== 0) return color;
     return compararCodigo(a.sku, b.sku);
   });
+
+  // ── Ventas: mayor baja primero, después por código y sucursal ──
+  ventas.sort(
+    (a, b) =>
+      b.vendido - a.vendido ||
+      compararCodigo(a.sku, b.sku) ||
+      a.sucursal.localeCompare(b.sucursal, "es")
+  );
 
   // ── Agrupado por proveedor ──
   const mapaProv = new Map<string, ProveedorCompra>();
@@ -360,6 +408,7 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
     nodos,
     filas,
     proveedores,
+    ventas,
     resumen: {
       productos: filas.length,
       unidades: filas.reduce((acc, f) => acc + f.compra, 0),

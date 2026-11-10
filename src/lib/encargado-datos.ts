@@ -7,7 +7,9 @@
 //   · saldo real por producto/sucursal (incluye filas en 0)
 //   · STOCK IDEAL por producto/sucursal (si está configurado)
 //   · CORES (colores) de la Base
-//   · ventas detectadas = bajada del saldo desde el último análisis
+//   · ventas detectadas = bajada del saldo desde la última foto conocida
+//     (se toma la más reciente entre Distribución y Compra). Incluye los
+//     productos que quedaron en 0 y ya no figuran en ninguna sucursal.
 //
 // Así los dos encargados miran EXACTAMENTE la misma foto del stock y no
 // pueden desincronizarse. No escribe nada: solo lectura.
@@ -24,7 +26,7 @@ import {
   DEPOSITO_CENTRAL,
   type EntradaProductoEncargado,
 } from "@/lib/encargado-distribucion";
-import { leerHistorial, type HistorialTipo } from "@/lib/encargado-historial";
+import { leerUltimaFoto, type HistorialTipo } from "@/lib/encargado-historial";
 
 export interface DatosEncargado {
   nodos: string[];
@@ -71,17 +73,33 @@ export async function cargarDatosEncargado(
     porNodo.set(sucursal, saldo);
   }
 
-  // ── Productos: los que tienen stock + los que tienen ideal ──
-  const idsConIdeal = await productIdsConIdeal();
-  const ids = Array.from(
-    new Set<string>([...saldosPorProducto.keys(), ...idsConIdeal])
-  );
+  // ── Productos: los que tienen stock + los que tienen ideal + los que
+  //    tenían saldo en la última foto (aunque hoy ya no estén en ninguna
+  //    sucursal: esa bajada también fue una venta) ──
+  const [idsConIdeal, historial] = await Promise.all([
+    productIdsConIdeal(),
+    leerUltimaFoto(tipoHistorial),
+  ]);
+
+  const idsSet = new Set<string>([
+    ...saldosPorProducto.keys(),
+    ...idsConIdeal,
+  ]);
+  for (const [productId, porNodo] of historial) {
+    for (const nodo of porNodo.values()) {
+      if (nodo.saldoPrevio > 0) {
+        idsSet.add(productId);
+        break;
+      }
+    }
+  }
+  const ids = Array.from(idsSet);
 
   if (ids.length === 0) {
     return { nodos, productos: [], saldosPorProducto };
   }
 
-  const [productosDb, coresMap, idealesMap, historial] = await Promise.all([
+  const [productosDb, coresMap, idealesMap] = await Promise.all([
     db.product.findMany({
       where: { id: { in: ids } },
       select: {
@@ -98,7 +116,6 @@ export async function cargarDatosEncargado(
     }),
     leerCores(ids),
     leerIdeales(ids),
-    leerHistorial(tipoHistorial),
   ]);
 
   const productos: EntradaProductoEncargado[] = productosDb.map((p) => {

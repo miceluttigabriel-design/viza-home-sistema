@@ -557,7 +557,16 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
                                 </td>
                                 <td className="px-3 py-2 text-right">
                                   {f.vendidoRed > 0 ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-black text-red-700">
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-black text-red-700"
+                                      title={f.detalle
+                                        .filter((d) => d.vendido > 0)
+                                        .map(
+                                          (d) =>
+                                            `${d.sucursal}: ${d.saldo + d.vendido} -> ${d.saldo} (vendió ${d.vendido})`
+                                        )
+                                        .join(" · ")}
+                                    >
                                       <TrendingDown className="h-2.5 w-2.5" />
                                       {fmtNum(f.vendidoRed)}
                                     </span>
@@ -582,7 +591,8 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
                 Regla: solo productos SELECCIONADOS (etiqueta verde de la Base) y códigos desde
                 100.000. Cada sucursal necesita al menos 1 unidad; primero se usa CENTRAL y las
                 transferencias internas. Sin Stock Ideal, el objetivo es 1 por sucursal o lo vendido
-                si fue mayor. Nada se compra solo: este plan y el PDF los decide el dueño.
+                si fue mayor. El VENDIDO sale de la baja real del stock entre análisis (aunque la
+                sucursal quede en 0). Nada se compra solo: este plan y el PDF los decide el dueño.
               </p>
             </>
           )}

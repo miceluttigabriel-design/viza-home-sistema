@@ -350,6 +350,75 @@ export function generarPdfCompra(
   }
   y += 6;
 
+  // ───────────── VENTAS DETECTADAS POR BAJA DE STOCK ─────────────
+  tituloSeccion("VENTAS DETECTADAS · BAJA DE STOCK POR SUCURSAL");
+  asegurar(26);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.8);
+  doc.setTextColor(...GREY);
+  const notaVentas = doc.splitTextToSize(
+    "Cada vez que se actualiza el stock, si la cantidad baja se cuenta como VENDIDO. ANTES es el saldo de la última foto y AHORA el saldo actual. También aparece cuando la sucursal quedó en 0 o el producto ya no figura en ninguna sucursal.",
+    contentW
+  );
+  doc.text(notaVentas, MARGEN, y);
+  y += notaVentas.length * 9 + 6;
+
+  const colsVentas: Columna[] = [
+    { label: "COD", w: 48 },
+    { label: "PRODUCTO", w: 150 },
+    { label: "COLOR", w: 60 },
+    { label: "SUCURSAL", w: 96 },
+    { label: "ANTES", w: 38, align: "right" },
+    { label: "AHORA", w: 38, align: "right" },
+    { label: "VENDIDO", w: 44, align: "right" },
+  ];
+
+  if (plan.ventas.length === 0) {
+    asegurar(24);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(MARGEN, y, contentW, 20, 4, 4, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.4);
+    doc.setTextColor(...GREY);
+    doc.text(
+      "Sin bajas de stock desde la última foto. La primera pasada guarda la foto; desde la siguiente, cada bajada aparece acá.",
+      MARGEN + 8,
+      y + 13
+    );
+    y += 28;
+  } else if (encabezadoTabla(colsVentas)) {
+    plan.ventas.forEach((v, i) => {
+      const valores = [
+        v.sku,
+        v.producto,
+        v.color || "—",
+        v.sucursal,
+        fmtNum(v.anterior),
+        fmtNum(v.actual),
+        fmtNum(v.vendido),
+      ];
+      if (!filaTabla(colsVentas, valores, { zebra: i % 2 === 1 })) {
+        nuevaPagina(true);
+        encabezadoTabla(colsVentas);
+        filaTabla(colsVentas, valores, {});
+      }
+    });
+    asegurar(18);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(...BLUE);
+    doc.text(
+      `TOTAL VENDIDO: ${fmtNum(
+        plan.ventas.reduce((acc, v) => acc + v.vendido, 0)
+      )} unidad(es) en ${plan.ventas.length} sucursal(es)/código(s)`,
+      MARGEN + contentW,
+      y + 10,
+      { align: "right" }
+    );
+    y += 18;
+  }
+  y += 6;
+
   // ───────────── DETALLE POR CÓDIGO ─────────────
   tituloSeccion("DETALLE POR CÓDIGO, COLOR Y PRIORIDAD");
   const colsDet: Columna[] = [

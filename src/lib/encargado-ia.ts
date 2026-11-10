@@ -367,6 +367,17 @@ function contextoCompra(plan: PlanCompra) {
     sucursales: plan.sucursales,
     resumen: plan.resumen,
     proveedores: plan.proveedores,
+    ventasDetectadas: plan.ventas.slice(0, 60).map((v) => ({
+      codigo: v.sku,
+      producto: v.producto,
+      tipo: v.tipo,
+      color: v.color,
+      proveedor: v.proveedor,
+      sucursal: v.sucursal,
+      antes: v.anterior,
+      ahora: v.actual,
+      vendido: v.vendido,
+    })),
     necesidades: plan.filas.slice(0, 90).map((f) => ({
       codigo: f.sku,
       producto: f.producto,
@@ -407,12 +418,14 @@ REGLAS QUE NUNCA PODÉS ROMPER:
    cantidades. Agrupá la recomendación por proveedor cuando sea posible.
 4. Las unidades que bajaron desde el último análisis son VENTAS: priorizá esos
    códigos y los que están en quiebre (0 en sucursales).
-5. No inventes números: usá EXACTAMENTE las necesidades y cantidades del JSON.
-6. Si hay códigos sin PROVEEDOR, avisá que hay que completarlo en la Base.
-7. Solo se analizan productos marcados como SELECCIONADO (etiqueta verde) en
+5. Una sucursal que quedó en 0, o un producto que ya no figura en ninguna
+   sucursal, también cuenta como VENDIDO si la última foto tenía saldo.
+6. No inventes números: usá EXACTAMENTE las necesidades y cantidades del JSON.
+7. Si hay códigos sin PROVEEDOR, avisá que hay que completarlo en la Base.
+8. Solo se analizan productos marcados como SELECCIONADO (etiqueta verde) en
    la Base y códigos desde 100.000. No propongas comprar códigos viejos ni
    productos que no estén seleccionados.
-8. Cada sucursal necesita al menos 1 unidad del producto seleccionado. Si la
+9. Cada sucursal necesita al menos 1 unidad del producto seleccionado. Si la
    red no alcanza para eso, esa diferencia es necesidad de compra.
 
 Respondé SOLO con un objeto JSON válido, sin markdown ni texto extra:
