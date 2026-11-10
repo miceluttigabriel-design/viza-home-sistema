@@ -567,7 +567,7 @@ export function EncargadoDistribucion({
                           <th className="px-1 py-2" />
                           <th className="text-left px-3 py-2 text-[8px] font-black tracking-widest text-sky-600">DESTINO</th>
                           <th className="text-right px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">CANT.</th>
-                          <th className="text-right px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">SALDOS</th>
+                          <th className="text-right px-3 py-2 text-[8px] font-black tracking-widest text-stone-500">HOY → QUEDA</th>
                         </tr>
                       </thead>
                       {grupos.map(({ grupo, filas }) => (
@@ -625,11 +625,11 @@ export function EncargadoDistribucion({
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right">
-                                <div className="text-[8px] font-bold text-stone-500 whitespace-nowrap">
-                                  {fmtNum(f.origenSaldo)} → {fmtNum(f.origenDespues)}
+                                <div className="text-[8px] font-bold text-emerald-700 whitespace-nowrap">
+                                  ORIG. {fmtNum(f.origenSaldo)} → {fmtNum(f.origenDespues)}
                                 </div>
-                                <div className="text-[8px] font-bold text-stone-500 whitespace-nowrap">
-                                  {fmtNum(f.destinoSaldo)} → {fmtNum(f.destinoDespues)}
+                                <div className="text-[8px] font-bold text-sky-700 whitespace-nowrap">
+                                  DEST. {fmtNum(f.destinoSaldo)} → {fmtNum(f.destinoDespues)}
                                 </div>
                               </td>
                             </tr>

@@ -384,14 +384,25 @@ export function generarPdfEncargado(
   // ───────────── DETALLE DE DISTRIBUCIONES ─────────────
   tituloSeccion("DISTRIBUCIONES POR CÓDIGO, COLOR Y DESTINO");
 
+  asegurar(12);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.8);
+  doc.setTextColor(...GREY);
+  doc.text(
+    "ORIGEN H->D / DESTINO H->D: stock que tiene HOY cada sucursal -> stock que le queda DESPUÉS de la transferencia.",
+    MARGEN,
+    y
+  );
+  y += 11;
+
   const colsDetalle: Columna[] = [
-    { label: "COD", w: 44 },
-    { label: "PRODUCTO", w: 140 },
-    { label: "ORIGEN", w: 70 },
-    { label: "DESTINO", w: 70 },
-    { label: "CANT.", w: 32, align: "right" },
-    { label: "SALDO ORIG.", w: 54, align: "right" },
-    { label: "SALDO DEST.", w: 54, align: "right" },
+    { label: "COD", w: 42 },
+    { label: "PRODUCTO", w: 132 },
+    { label: "ORIGEN", w: 64 },
+    { label: "DESTINO", w: 64 },
+    { label: "CANT.", w: 30, align: "right" },
+    { label: "ORIGEN H->D", w: 66, align: "right" },
+    { label: "DESTINO H->D", w: 66, align: "right" },
     { label: "MOTIVO", w: 54, align: "center" },
   ];
 
@@ -456,8 +467,8 @@ export function generarPdfEncargado(
               f.origen,
               f.destino,
               fmtNum(f.cantidad),
-              fmtNum(f.origenSaldo),
-              fmtNum(f.destinoSaldo),
+              `${fmtNum(f.origenSaldo)} -> ${fmtNum(f.origenDespues)}`,
+              `${fmtNum(f.destinoSaldo)} -> ${fmtNum(f.destinoDespues)}`,
               f.motivo === "REPOSICION" ? "REPONE" : "EQUILIBRA",
             ],
             { zebra: i % 2 === 1, negrita: false }
@@ -480,8 +491,8 @@ export function generarPdfEncargado(
                 f.origen,
                 f.destino,
                 fmtNum(f.cantidad),
-                fmtNum(f.origenSaldo),
-                fmtNum(f.destinoSaldo),
+                `${fmtNum(f.origenSaldo)} -> ${fmtNum(f.origenDespues)}`,
+                `${fmtNum(f.destinoSaldo)} -> ${fmtNum(f.destinoDespues)}`,
                 f.motivo === "REPOSICION" ? "REPONE" : "EQUILIBRA",
               ],
               { negrita: false }

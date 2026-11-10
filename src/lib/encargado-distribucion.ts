@@ -22,7 +22,9 @@
 //         (bajadas de stock detectadas entre análisis).
 //   · La cantidad a mover es el mínimo entre lo que SOBRA en el origen
 //     y lo que FALTA en el destino. Nunca se deja un origen por debajo
-//     de su objetivo y nunca se pasa un destino de su objetivo.
+//     de su objetivo y NUNCA se vacía una sucursal: si tenía stock,
+//     conserva al menos 1 unidad. Mover la única unidad de una sucursal
+//     a otra no equilibra nada, solo mueve el problema de lugar.
 //   · El COLOR sale de la columna CORES de la Base. Se conserva el
 //     detalle de colores y se agrupa por TIPO + COLOR para el informe.
 //   · Si los excedentes no alcanzan, el faltante queda informado. NO se
@@ -279,6 +281,9 @@ export function calcularPlanEncargado(entrada: EntradaPlanEncargado): PlanEncarg
 
   for (const producto of entrada.productos || []) {
     productosAnalizados += 1;
+    // Para dejar el "saldo después" coherente en todas las filas del
+    // producto (aunque el origen haga varias transferencias).
+    const filaInicio = filas.length;
 
     const saldo = clonarMapa(producto.saldos, nodos);
     const ideal = clonarMapa(producto.ideales, nodos);
@@ -330,14 +335,23 @@ export function calcularPlanEncargado(entrada: EntradaPlanEncargado): PlanEncarg
     }
 
     // ── Excedentes y déficits de las sucursales ──
+    // Task 161 (pedido del dueño): una sucursal NUNCA se vacía para
+    // "equilibrar". Si solo tiene 1 unidad, esa unidad se queda donde está:
+    // moverla no cubre a nadie más, solo deja otra sucursal en 0. El origen
+    // solo entrega lo que realmente le sobra por encima de su objetivo y,
+    // como mínimo, conserva 1 unidad si tenía stock.
     const excedentes = sucursales
-      .map((s, i) => ({
-        nodo: s,
-        indice: i,
-        sobra: (saldo.get(s) ?? 0) - objetivos[i],
-        saldo: saldo.get(s) ?? 0,
-        objetivo: objetivos[i],
-      }))
+      .map((s, i) => {
+        const saldoNodo = saldo.get(s) ?? 0;
+        const piso = Math.max(objetivos[i], saldoNodo > 0 ? 1 : 0);
+        return {
+          nodo: s,
+          indice: i,
+          sobra: saldoNodo - piso,
+          saldo: saldoNodo,
+          objetivo: objetivos[i],
+        };
+      })
       .filter((x) => x.sobra > 0)
       .sort((a, b) => b.sobra - a.sobra || a.indice - b.indice);
 
@@ -483,6 +497,15 @@ export function calcularPlanEncargado(entrada: EntradaPlanEncargado): PlanEncarg
       }
     }
 
+    // ── Saldo FINAL por sucursal para mostrar en el informe ──
+    // Si un origen hace 2 transferencias, todas sus filas deben mostrar el
+    // mismo "queda" final (ej. LA PALOMA 4 → 1), no 4 → 3 y 4 → 2.
+    for (let i = filaInicio; i < filas.length; i += 1) {
+      const f = filas[i];
+      f.origenDespues = Math.max(0, saldo.get(f.origen) ?? f.origenDespues);
+      f.destinoDespues = Math.max(0, saldo.get(f.destino) ?? f.destinoDespues);
+    }
+
     // ── Faltante final por sucursal ──
     for (const [nodo, falta] of faltaRestante) {
       if (falta > 0) faltantePorNodo.set(nodo, (faltantePorNodo.get(nodo) ?? 0) + falta);
@@ -494,7 +517,7 @@ export function calcularPlanEncargado(entrada: EntradaPlanEncargado): PlanEncarg
 
     if (saldoTotalSucursales > 0 && saldoTotalSucursales < sucursales.length) {
       alertas.add(
-        `${producto.sku} · ${producto.nombre}: las sucursales tienen ${saldoTotalSucursales} unidad(es) en total; no alcanza para dejar 1 en cada una.`
+        `${producto.sku} · ${producto.nombre}: las sucursales tienen ${saldoTotalSucursales} unidad(es) en total; no alcanza para dejar 1 en cada una. No se vacía ninguna sucursal: solo se mueve el excedente real.`
       );
     }
   }
