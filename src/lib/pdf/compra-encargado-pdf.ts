@@ -167,7 +167,8 @@ export function generarPdfCompra(
     for (const c of columnas) {
       const align = c.align || "left";
       const tx = align === "right" ? x + c.w - 4 : align === "center" ? x + c.w / 2 : x;
-      doc.text(c.label, tx, y + 10, { align });
+      // El título nunca invade la columna vecina.
+      doc.text(recortar(doc, c.label, c.w - 8), tx, y + 10, { align });
       x += c.w;
     }
     y += h;
@@ -318,7 +319,7 @@ export function generarPdfCompra(
   // ───────────── NECESIDAD POR PROVEEDOR ─────────────
   tituloSeccion("NECESIDAD AGRUPADA POR PROVEEDOR");
   const colsProv: Columna[] = [
-    { label: "PROVEEDOR", w: 250 },
+    { label: "PROVEEDOR", w: 245 },
     { label: "CÓDIGOS", w: 80, align: "right" },
     { label: "UNIDADES", w: 90, align: "right" },
     { label: "PRIORIDAD ALTA", w: 103, align: "right" },
@@ -353,14 +354,14 @@ export function generarPdfCompra(
   tituloSeccion("DETALLE POR CÓDIGO, COLOR Y PRIORIDAD");
   const colsDet: Columna[] = [
     { label: "COD", w: 48 },
-    { label: "PRODUCTO", w: 156 },
+    { label: "PRODUCTO", w: 140 },
     { label: "COLOR", w: 56 },
-    { label: "STOCK RED", w: 49, align: "right" },
-    { label: "CENTRAL", w: 44, align: "right" },
-    { label: "OBJETIVO", w: 48, align: "right" },
+    { label: "STOCK RED", w: 52, align: "right" },
+    { label: "CENTRAL", w: 46, align: "right" },
+    { label: "OBJETIVO", w: 50, align: "right" },
     { label: "COMPRAR", w: 48, align: "right" },
     { label: "VENDIDO", w: 44, align: "right" },
-    { label: "PRIOR.", w: 30, align: "center" },
+    { label: "PRIOR.", w: 34, align: "center" },
   ];
 
   if (plan.filas.length === 0) {

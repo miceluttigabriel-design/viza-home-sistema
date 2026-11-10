@@ -180,7 +180,9 @@ export function generarPdfEncargado(
     for (const c of columnas) {
       const align = c.align || "left";
       const tx = align === "right" ? x + c.w - 4 : align === "center" ? x + c.w / 2 : x;
-      doc.text(c.label, tx, y + 10, { align });
+      // Task 161 (pedido del dueño): el título NUNCA puede invadir la
+      // columna vecina; se recorta igual que los valores de las filas.
+      doc.text(recortar(doc, c.label, c.w - 8), tx, y + 10, { align });
       x += c.w;
     }
     y += h;
@@ -383,14 +385,14 @@ export function generarPdfEncargado(
   tituloSeccion("DISTRIBUCIONES POR CÓDIGO, COLOR Y DESTINO");
 
   const colsDetalle: Columna[] = [
-    { label: "COD", w: 48 },
-    { label: "PRODUCTO", w: 164 },
+    { label: "COD", w: 44 },
+    { label: "PRODUCTO", w: 140 },
     { label: "ORIGEN", w: 70 },
     { label: "DESTINO", w: 70 },
     { label: "CANT.", w: 32, align: "right" },
-    { label: "SALDO ORIGEN", w: 48, align: "right" },
-    { label: "SALDO DESTINO", w: 50, align: "right" },
-    { label: "MOTIVO", w: 41, align: "center" },
+    { label: "SALDO ORIG.", w: 54, align: "right" },
+    { label: "SALDO DEST.", w: 54, align: "right" },
+    { label: "MOTIVO", w: 54, align: "center" },
   ];
 
   if (plan.filas.length === 0) {
