@@ -282,6 +282,19 @@ export function EncargadoDistribucion({
               {vigilando ? "VIGILANDO" : "EN PAUSA"}
             </span>
             <button
+              onClick={() => void descargarPdf()}
+              disabled={!plan || pdfCargando}
+              className="h-8 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+              title="Exportar el relatorio completo en PDF (por código, color y destino)"
+            >
+              {pdfCargando ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              <span className="text-[9px] font-black tracking-widest">EXPORTAR PDF</span>
+            </button>
+            <button
               onClick={onClose}
               className="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
               title="Cerrar"
@@ -290,7 +303,6 @@ export function EncargadoDistribucion({
             </button>
           </div>
         </div>
-
         {/* ─── Tabs ─── */}
         <div className="px-4 sm:px-6 pt-3 border-b border-stone-200">
           <div className="flex items-center gap-1 w-fit rounded-xl bg-stone-100 p-1">
@@ -929,7 +941,7 @@ export function EncargadoDistribucion({
               title="Descargar el PDF completo por código, color y destino"
             >
               {pdfCargando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              PDF COMPLETO
+              EXPORTAR PDF
             </button>
 
             <button

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { puedeIrAStockGeneral } from "@/lib/acceso-stock-general";
 import { leerSucursalesStock } from "@/lib/stock-sucursal";
 import { leerIdeales, productIdsConIdeal } from "@/lib/stock-ideal";
 import { leerCores } from "@/lib/producto-cores";
@@ -52,14 +51,11 @@ async function responder(req: NextRequest) {
     }
 
     const role = (session.user as any)?.role || "";
-    const email = (session.user as any)?.email || "";
-    if (
-      role !== "admin" &&
-      role !== "supremo_admin" &&
-      !puedeIrAStockGeneral(email)
-    ) {
+    // Task 160 (pedido del dueño): el ENCARGADO es SOLO del usuario SUPREMO,
+    // igual que el botón de Stock General. Nadie más puede consultar el plan.
+    if (role !== "supremo_admin") {
       return NextResponse.json(
-        { error: "Sin permiso para el Encargado de Distribución" },
+        { error: "El Encargado de Distribución es exclusivo del usuario supremo" },
         { status: 403 }
       );
     }
