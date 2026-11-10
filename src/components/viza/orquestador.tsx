@@ -486,7 +486,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
               style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
               title="Gestión de Accesos y Contraseñas"
             >
-              GDA
+              GESTIÓN DE ACCESOS
             </button>
           )}
         </div>

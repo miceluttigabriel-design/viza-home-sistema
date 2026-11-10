@@ -674,7 +674,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
               <button
                 onClick={onGoOrquestador}
                 className="h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
-                style={{ backgroundColor: "#FFFFFF", color: AZUL }}
+                style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL }}
                 title="Volver al Orquestador"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />

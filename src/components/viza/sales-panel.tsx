@@ -1268,26 +1268,27 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {isSupremoRole && onGoGestion && (
               <button
                 onClick={onGoGestion}
-                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110 shrink-0"
+                className="h-9 px-3 rounded-xl font-bold text-[10px] sm:text-[11px] flex items-center justify-center whitespace-nowrap transition-colors shadow-sm hover:brightness-110 shrink-0"
                 style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO }}
                 title="Gestión de Accesos y Contraseñas"
                 aria-label="Gestión de Accesos y Contraseñas"
               >
-                GDA
+                GESTIÓN DE ACCESOS
               </button>
             )}
             {/* Task 91 (mudanza visual): ORQUESTADOR — solo supremo (la prop
                 solo llega al supremo desde page.tsx). Vuelve a la pantalla de
-                los 4 cuadros: La Base · Stock General · Cotizador · Distribución. */}
+                los 4 cuadros: La Base · Stock General · Cotizador · Distribución.
+                Task 148 (pedido del dueño): dorado, texto azul oscuro y SIN
+                el icono de 4 cuadritos. */}
             {onGoOrquestador && (
               <button
                 onClick={onGoOrquestador}
-                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
-                style={{ backgroundColor: "#FFFFFF", color: AZUL_OSCURO }}
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-colors hover:brightness-110 shrink-0"
+                style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO }}
                 title="Volver al Orquestador (los 4 cuadros del sistema)"
               >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">ORQUESTADOR</span>
+                ORQUESTADOR
               </button>
             )}
             {/* Task 127 (pedido del dueño): STOCK GENERAL — SOLO VILMAR

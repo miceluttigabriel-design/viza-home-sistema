@@ -12,7 +12,6 @@ import {
   Power,
   RefreshCw,
   Download,
-  LayoutGrid,
   AlertCircle,
   Loader2,
   Copy,
@@ -973,11 +972,10 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
             {onGoOrquestador && (
               <button
                 onClick={onGoOrquestador}
-                className="h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm hover:brightness-110"
-                style={{ backgroundColor: "#FFFFFF", color: "#0d3d5e" }}
+                className="h-9 px-3 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-all shadow-sm hover:brightness-110"
+                style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
                 title="Volver al Orquestador (los 4 cuadros del sistema)"
               >
-                <LayoutGrid className="h-3.5 w-3.5" />
                 ORQUESTADOR
               </button>
             )}

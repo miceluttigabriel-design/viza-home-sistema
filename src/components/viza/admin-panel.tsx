@@ -10,7 +10,6 @@ import {
   ShoppingCart,
   LogOut,
   X,
-  LayoutGrid,
   Check,
   Trash2,
   ChevronLeft,
@@ -1156,12 +1155,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
             {onGoOrquestador && (
               <button
                 onClick={onGoOrquestador}
-                className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
+                className="h-9 px-3 rounded-xl font-bold text-[10px] flex items-center justify-center whitespace-nowrap transition-colors shadow-sm hover:brightness-110"
                 style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
                 title="Ir al Orquestador (los 4 cuadros del sistema)"
                 aria-label="Ir al Orquestador"
               >
-                <LayoutGrid className="h-4 w-4" />
+                ORQUESTADOR
               </button>
             )}
 
@@ -1181,16 +1180,16 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
               CRM
             </button>
 
-            {/* 3. GDA (solo texto, sin emoji) */}
+            {/* 3. GDA (dorado, texto oscuro) */}
             {isSupremo && onGoGestion && (
               <button
                 onClick={onGoGestion}
-                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110"
+                className="h-9 px-3 rounded-xl font-bold text-[10px] flex items-center justify-center whitespace-nowrap transition-colors shadow-sm hover:brightness-110"
                 style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: "#0d3d5e" }}
                 title="Gestión de Accesos y Contraseñas"
                 aria-label="Gestión de Accesos y Contraseñas"
               >
-                GDA
+                GESTIÓN DE ACCESOS
               </button>
             )}
 
