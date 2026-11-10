@@ -56,10 +56,11 @@ interface NuevoItem {
   name: string | null;
   referencia: string | null;  // ← Codigo Fabrica del Excel
   subGrupo: string | null;
-  // Task 155: PROVEEDOR del Excel (columna "Proveedor"). SOLO se usa al crear
-  // el código nuevo → se guarda en Product.fabricante (columna PROVEDOR).
-  // En productos existentes la importación NO toca este campo.
+  // Task 155/157: PROVEEDOR y MARCA del Excel (columnas "Proveedor"/"Marca").
+  // Al crear el código nuevo → Product.fabricante (columna PROVEDOR) y
+  // Product.marca. En productos existentes solo se completan si están vacíos.
   proveedor?: string | null;
+  marca?: string | null;
   stock: number;
   costProd: number | null;
 }
@@ -74,6 +75,10 @@ interface ActualizadoItem {
   // Costo que trae el Excel (COSTO UNIT. ULTIMA COMPRA). null/0 = la fila no
   // trae costo → ese producto solo actualiza stock (nunca se borra el costo).
   costoNuevo?: number | null;
+  // Task 157: PROVEEDOR/MARCA. Se completan SOLO cuando el campo de la BD está
+  // vacío (null/"") y el Excel trae valor. Nunca pisan un dato ya cargado.
+  proveedor?: string | null;
+  marca?: string | null;
 }
 
 interface ApplyBody {
@@ -247,7 +252,7 @@ function recalculateFull(p: any, tasas: TasasCambio = TASAS_DEFAULT): void {
 // lee ese campo (SOLO LECTURA) como tasa de interés mensual y la planilla de
 // inventario no lo trae.
 function buildNuevoProduct(
-  n: { sku: string; name: string | null; referencia: string | null; subGrupo: string | null; proveedor?: string | null; stock: number; costProd: number | null },
+  n: { sku: string; name: string | null; referencia: string | null; subGrupo: string | null; proveedor?: string | null; marca?: string | null; stock: number; costProd: number | null },
   stats: MarginStats | null,
   safraStats?: SafraStats | null,
   tasas?: TasasCambio
@@ -257,9 +262,11 @@ function buildNuevoProduct(
     name: n.name || `PRODUCTO ${n.sku}`,
     referencia: n.referencia,
     subGrupo: n.subGrupo,
-    // Task 155: PROVEEDOR del Excel → campo `fabricante` (es el que la tabla
-    // del admin muestra como PROVEDOR). Si la planilla no lo trae, null.
+    // Task 155/157: PROVEEDOR y MARCA del Excel → `fabricante` (la tabla del
+    // admin lo muestra como PROVEDOR) y `marca`. Si la planilla no los trae,
+    // null (igual que antes).
     fabricante: n.proveedor?.trim() || null,
+    marca: n.marca?.trim() || null,
     stock: n.stock,
     costProd: n.costProd,
     showInCatalog: false,
@@ -353,8 +360,9 @@ export async function POST(req: NextRequest) {
         referencia: null,
         subGrupo: null,
         // El fallback de `actualizados` no trae datos del Excel (solo costo y
-        // stock), así que el proveedor queda desconocido → no se inventa.
+        // stock), así que proveedor/marca quedan desconocidos → no se inventan.
         proveedor: null,
+        marca: null,
         stock: a.stockNuevo,
         costProd: a.costoNuevo ?? null,
       }));
@@ -366,10 +374,23 @@ export async function POST(req: NextRequest) {
     // (recalcula la cadena automática) o solo cambio de stock.
     const updatesFromNuevos = body.nuevos
       .filter(n => existingSet.has(n.sku))
-      .map(n => ({ sku: n.sku, stock: n.stock, costoNuevo: n.costProd ?? null }));
+      .map(n => ({
+        sku: n.sku,
+        stock: n.stock,
+        costoNuevo: n.costProd ?? null,
+        // Task 157: proveedor/marca del Excel (se completan solo si faltan).
+        proveedor: n.proveedor ?? null,
+        marca: n.marca ?? null,
+      }));
     const updatesFromActualizados = body.actualizados
       .filter(a => existingSet.has(a.sku))
-      .map(a => ({ sku: a.sku, stock: a.stockNuevo, costoNuevo: a.costoNuevo ?? null }));
+      .map(a => ({
+        sku: a.sku,
+        stock: a.stockNuevo,
+        costoNuevo: a.costoNuevo ?? null,
+        proveedor: a.proveedor ?? null,
+        marca: a.marca ?? null,
+      }));
     const allUpdates = [...updatesFromNuevos, ...updatesFromActualizados];
 
     // ─────────────────────────────────────────────────────
@@ -384,6 +405,9 @@ export async function POST(req: NextRequest) {
             id: true,
             sku: true,
             costBR: true, costUS: true, costGs: true,
+            // Task 157: se leen para completar proveedor/marca solo si faltan.
+            fabricante: true,
+            marca: true,
             discountPct: true, addPct: true, admPct: true,
             valorDesc: true, valorAdd: true, marginContado: true,
             marginC1: true, marginC2: true, marginC3: true, marginC4: true, marginC5: true,
@@ -582,6 +606,64 @@ export async function POST(req: NextRequest) {
     }
 
     // ─────────────────────────────────────────────────────
+    // 6.c COMPLETAR PROVEEDOR / MARCA EN CÓDIGOS EXISTENTES (Task 157)
+    //     La planilla del ERP trae "Proveedor" y "Marca" (ej.: 100500 →
+    //     COEXMA S.R.L. / CAVALETTI). En códigos que YA existen se completan
+    //     SOLO si el campo de la BD está vacío (null o ""). Un dato cargado a
+    //     mano NUNCA se pisa. No cuenta como "actualizado" (solo costo/stock).
+    // ─────────────────────────────────────────────────────
+    const fillUpdates: Array<{ sku: string; proveedor: string | null; marca: string | null }> = [];
+    for (const u of allUpdates) {
+      const row = existingRowsMap.get(u.sku);
+      if (!row) continue;
+      const prov = (u.proveedor ?? "").trim();
+      const mar = (u.marca ?? "").trim();
+      const faltaProv = !String(row.fabricante ?? "").trim() && prov.length > 0;
+      const faltaMar = !String(row.marca ?? "").trim() && mar.length > 0;
+      if (faltaProv || faltaMar) {
+        fillUpdates.push({
+          sku: u.sku,
+          proveedor: faltaProv ? prov : null,
+          marca: faltaMar ? mar : null,
+        });
+      }
+    }
+    let proveedorMarcaCompletados = 0;
+    for (let i = 0; i < fillUpdates.length; i += UPDATE_BATCH_SIZE) {
+      const batch = fillUpdates.slice(i, i + UPDATE_BATCH_SIZE);
+      if (batch.length === 0) continue;
+      // CASE ... END devuelve NULL cuando el valor no aplica; COALESCE deja el
+      // valor actual del producto en ese caso (nunca borra lo que ya había).
+      const provCase = Prisma.sql`COALESCE(CASE ${Prisma.join(
+        batch.map((item) =>
+          Prisma.sql`WHEN "sku" = ${item.sku} THEN ${item.proveedor}`
+        ),
+        " "
+      )} END, "fabricante")`;
+      const marcaCase = Prisma.sql`COALESCE(CASE ${Prisma.join(
+        batch.map((item) =>
+          Prisma.sql`WHEN "sku" = ${item.sku} THEN ${item.marca}`
+        ),
+        " "
+      )} END, "marca")`;
+      const skuList = Prisma.join(batch.map((item) => item.sku), ",");
+      const sql = Prisma.sql`
+        UPDATE "Product"
+        SET "fabricante" = ${provCase}, "marca" = ${marcaCase}
+        WHERE "sku" IN (${skuList})
+      `;
+      try {
+        const result = await db.$executeRaw(sql);
+        proveedorMarcaCompletados += result;
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        errores.push(
+          `Lote proveedor/marca ${Math.floor(i / UPDATE_BATCH_SIZE) + 1}: ${msg}`
+        );
+      }
+    }
+
+    // ─────────────────────────────────────────────────────
     // 7. STOCK POR SUCURSAL (Task 98, pedido del dueño)
     //    "tenemos que dividir bien alla amigo": el saldo de la planilla se
     //    guarda POR SUCURSAL (tabla aparte StockSucursal) además del stock
@@ -647,6 +729,9 @@ export async function POST(req: NextRequest) {
       conCostoActualizado,
       margenesAutomaticas,
       conSafraAutomatica,
+      // Task 157: códigos existentes a los que se les completó proveedor/marca
+      // (solo cuando el campo estaba vacío; nunca pisa datos cargados).
+      proveedorMarcaCompletados,
       // Task 98 (nuevo, opcional):
       sucursales: sucursalesGuardadas
         ? {

@@ -232,11 +232,12 @@ export async function POST(req: NextRequest) {
         costProd: number | null;
         referencia: string | null;
         subGrupo: string | null;
-        // PROVEEDOR de la planilla del ERP (columna "Proveedor"). Se usa SOLO
-        // al crear un código NUEVO: se guarda en Product.fabricante, que es el
-        // campo que la tabla muestra como PROVEDOR. En productos existentes
-        // NO se toca (regla: al importar solo costo + stock).
+        // PROVEEDOR y MARCA de la planilla del ERP (columnas "Proveedor" y
+        // "Marca"). Se guardan en Product.fabricante (la tabla lo muestra como
+        // PROVEDOR) y Product.marca. En códigos NUEVOS se cargan siempre; en
+        // existentes SOLO si el campo está vacío (nunca pisa un dato cargado).
         proveedor: string | null;
+        marca: string | null;
         name: string | null;
         filas: number;
         // Task 98: saldo de ESTE codigo repartido por SUCURSAL tal cual
@@ -295,10 +296,11 @@ export async function POST(req: NextRequest) {
       const referencia = toString(getCell(row, "CODIGO FABRICA")) || null;
       const subGrupo = toString(getCell(row, "SUBGRUPO")) || null;
       const name = toString(getCell(row, "DESCRIPCION")) || null;
-      // Task 155: el PROVEEDOR del ERP entra en el producto NUEVO (la planilla
-      // lo trae en la columna "Proveedor", al lado de Marca). Si la fila no lo
-      // trae, queda null y el producto se crea igual que antes.
+      // Task 155/157: el PROVEEDOR y la MARCA del ERP entran al producto (la
+      // planilla los trae en las columnas "Proveedor" y "Marca"). Si la fila no
+      // los trae, quedan null y el producto se crea/actualiza igual que antes.
       const proveedor = toString(getCell(row, "PROVEEDOR")) || null;
+      const marca = toString(getCell(row, "MARCA")) || null;
 
       // ─── Task 98: sucursal de la fila (mayúsculas, sin espacios) ───
       let sucursalFila = "";
@@ -311,10 +313,13 @@ export async function POST(req: NextRequest) {
       if (grouped[codigo]) {
         grouped[codigo].stockSumado += saldo;
         grouped[codigo].filas++;
-        // Si la primera fila del grupo no traía proveedor y una posterior sí,
-        // se toma el primero no vacío (mismo proveedor para todo el código).
+        // Si la primera fila del grupo no traía proveedor/marca y una posterior
+        // sí, se toma el primero no vacío (mismo proveedor/marca para el código).
         if (!grouped[codigo].proveedor && proveedor) {
           grouped[codigo].proveedor = proveedor;
+        }
+        if (!grouped[codigo].marca && marca) {
+          grouped[codigo].marca = marca;
         }
       } else {
         grouped[codigo] = {
@@ -324,6 +329,7 @@ export async function POST(req: NextRequest) {
           referencia,
           subGrupo,
           proveedor,
+          marca,
           name,
           filas: 1,
           porSucursal: {},
@@ -360,7 +366,16 @@ export async function POST(req: NextRequest) {
     const codigosList = Object.keys(grouped);
     const existentes = await db.product.findMany({
       where: { sku: { in: codigosList } },
-      select: { id: true, sku: true, stock: true, name: true, costGs: true },
+      select: {
+        id: true,
+        sku: true,
+        stock: true,
+        name: true,
+        costGs: true,
+        // Task 157: se leen para completar PROVEEDOR/MARCA solo si están vacíos.
+        fabricante: true,
+        marca: true,
+      },
     });
     const existentesMap = new Map(existentes.map((p) => [p.sku, p]));
 
@@ -381,8 +396,9 @@ export async function POST(req: NextRequest) {
       name: string | null;
       referencia: string | null;
       subGrupo: string | null;
-      // PROVEEDOR del Excel → Product.fabricante SOLO al crear el código nuevo.
+      // PROVEEDOR/MARCA del Excel → Product.fabricante / Product.marca.
       proveedor: string | null;
+      marca: string | null;
       stock: number;
       costProd: number | null;
       // Automáticas que se le van a asignar al crearlo (informativo):
@@ -396,9 +412,16 @@ export async function POST(req: NextRequest) {
       nameActual: string | null;
       stockActual: number;
       stockNuevo: number;
-      // Garantía visual: en existentes SOLO se tocan COSTO GS y STOCK
+      // Garantía visual: en existentes se tocan COSTO GS y STOCK (y se
+      // completan PROVEEDOR/MARCA SOLO si estaban vacíos).
       costoActual: number | null; // COSTO GS actual en la BD
       costoNuevo: number | null; // COSTO UNIT. ULTIMA COMPRA del Excel (null = no toca costo)
+      // PROVEEDOR/MARCA actuales en la BD y los del Excel. El apply solo
+      // completa los que estén vacíos (nunca pisa un dato cargado a mano).
+      proveedorActual: string | null;
+      marcaActual: string | null;
+      proveedor: string | null;
+      marca: string | null;
       // true = el admin editó y guardó un costo a mano → la importación NO
       // pisa su costo (solo stock). La vista lo muestra como PROTEGIDO.
       costoProtegido: boolean;
@@ -418,6 +441,10 @@ export async function POST(req: NextRequest) {
           costoActual: existente.costGs ?? null,
           costoNuevo: data.costProd,
           costoProtegido: protegidosIds.has(existente.id),
+          proveedorActual: existente.fabricante ?? null,
+          marcaActual: existente.marca ?? null,
+          proveedor: data.proveedor,
+          marca: data.marca,
         });
       } else {
         // SKU nuevo → crear producto con márgenes + SAFRA automáticas
@@ -429,6 +456,7 @@ export async function POST(req: NextRequest) {
           referencia: data.referencia,
           subGrupo: data.subGrupo,
           proveedor: data.proveedor,
+          marca: data.marca,
           stock: data.stockSumado,
           costProd: data.costProd,
           margenAuto: pick ? pick.avg.m : null,

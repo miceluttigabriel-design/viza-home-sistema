@@ -49,7 +49,7 @@ export function PlanCheque({ sucursalMia }: { sucursalMia?: string | null }) {
     productos, addProducto, removeProducto, setProductoQuantity,
     clienteNombre, clienteTelefono, clienteDocumento, clienteObservaciones, fechaEmision, setClienteField,
     cantidadCheques, setCantidadCheques, fechasCheques, setFechaCheque, generarCampos,
-    resultados, totalPagar, totalContadoBruto, descuentoCasco, baseCalculo,
+    resultados, totalPagar, totalContadoBruto, descuentoCasco,
     calcular, clear,
   } = useChequeStore();
 
@@ -243,7 +243,6 @@ export function PlanCheque({ sucursalMia }: { sucursalMia?: string | null }) {
               esProductoRegalo(p.sku) ||
               p.name.toUpperCase().includes("CASCO"),
           }))}
-          baseTotal={baseCalculo}
         />
       </Section>
 

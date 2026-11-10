@@ -548,7 +548,6 @@ export function PlanMayorista({ sucursalMia }: { sucursalMia?: string | null }) 
               esProductoRegalo(p.sku) ||
               p.name.toUpperCase().includes("CASCO"),
           }))}
-          baseTotal={totalMayoristaNeto}
         />
       </Section>
 
