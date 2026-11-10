@@ -349,9 +349,9 @@ function SucursalCard({ nombre }: { nombre: string }) {
   );
 }
 
-// ─── DIAGRAMA: lienzo fijo de 1152 × 820 que se escala solo al ancho de la pantalla ───
+// ─── DIAGRAMA: lienzo fijo de 1152 × 730 que se escala solo al ancho de la pantalla ───
 const W = 1152;
-const H = 820;
+const H = 730;
 
 // Cuadros: x, y, ancho, alto (en px del lienzo)
 // Task 151 (pedido del dueño): STOCK GENERAL · LA BASE · COTIZADOR van en UNA
@@ -363,7 +363,6 @@ const POS = {
   // Task 159: dos cuadritos menores en lugar del antiguo Distribuidor.
   distribucion: { x: 690, y: 140, w: 270, h: 180 },
   compra: { x: 690, y: 370, w: 270, h: 180 },
-  leyenda: { x: 580, y: 640, w: 572, h: 170 },
 };
 const SUC_X = 1010;
 const SUC_W = 142;
@@ -436,37 +435,6 @@ function Etiqueta({ x, y, texto }: { x: number; y: number; texto: string }) {
     >
       {texto}
     </span>
-  );
-}
-
-function Leyenda() {
-  const fila = (color: string, dash: boolean, texto: string) => (
-    <div className="flex items-center gap-3 text-[11px] text-slate-300">
-      <svg width="46" height="10" aria-hidden="true">
-        <line x1="2" y1="5" x2="40" y2="5" stroke={color} strokeWidth="2" strokeDasharray={dash ? "5 4" : undefined} strokeLinecap="round" />
-        <path d="M 36 1 L 44 5 L 36 9 z" fill={color} />
-      </svg>
-      {texto}
-    </div>
-  );
-  return (
-    <div
-      className="h-full w-full rounded-2xl p-5 flex flex-col"
-      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
-    >
-      <p className="text-[10px] font-black tracking-[0.2em] mb-3" style={{ color: DORADO }}>
-        FLUJOS DEL SISTEMA
-      </p>
-      <div className="flex flex-col gap-2">
-        {fila(DORADO, false, "La Base alimenta con datos al Stock y al Cotizador")}
-        {fila(C_STOCK, false, "El Stock se liga al Encargado de Distribución")}
-        {fila(C_COMPRA, true, "El Agente de Compra está ligado al Encargado de Distribución")}
-        {fila(C_DISTRI, false, "El Encargado de Distribución activo reparte entre las 4 sucursales")}
-      </div>
-      <p className="mt-auto text-[11px] font-bold italic" style={{ color: DORADO }}>
-        Todo para tu hogar, en un solo lugar.
-      </p>
-    </div>
   );
 }
 
@@ -620,7 +588,6 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
               <SucursalCard nombre={nombre} />
             </div>
           ))}
-          <div style={place(POS.leyenda)}><Leyenda /></div>
         </Escenario>
 
         {/* ═══ VISTA CELULAR / TABLET: los mismos cuadros, uno debajo del otro ═══ */}
