@@ -602,17 +602,24 @@ export async function POST(req: NextRequest) {
       // SET "col" = CASE WHEN "sku" = ? THEN ? ... END,  para cada columna
       // Los nombres de columna salen de COST_UPDATE_COLS (constante propia,
       // nunca del usuario) → Prisma.raw es seguro acá.
-      const setFragments = COST_UPDATE_COLS.map((col) =>
-        Prisma.sql`${Prisma.raw(`"${col}"`)} = CASE ${Prisma.join(
+      //
+      // CAST EXPLÍCITO (bug 42804): aunque los valores ya van como número,
+      // Postgres puede inferir el CASE como TEXT cuando hay NULLs en el lote
+      // y entonces rechaza la asignación a una columna double precision
+      // ("rsToGs is of type double precision but expression is of type text").
+      // Con (CASE ... END)::tipo la columna recibe SIEMPRE el tipo correcto,
+      // sin importar cómo se resolvió el CASE. stock es entero; el resto son
+      // columnas double precision del modelo Product.
+      const setFragments = COST_UPDATE_COLS.map((col) => {
+        const tipo = col === "stock" ? "integer" : "double precision";
+        return Prisma.sql`${Prisma.raw(`"${col}"`)} = (CASE ${Prisma.join(
           batch.map((item) =>
-            // valorNumericoSql: NULL literal y números reales (nunca texto),
-            // si no Postgres rechaza el CASE contra columnas double precision
-            // (bug 42804, ver el comentario de la función).
+            // valorNumericoSql: NULL literal y números reales (nunca texto).
             Prisma.sql`WHEN "sku" = ${item.sku} THEN ${valorNumericoSql(item.data[col])}`
           ),
           ' '
-        )} END`
-      );
+        )} END)::${Prisma.raw(tipo)}`;
+      });
       const skuList = Prisma.join(batch.map(item => item.sku), ',');
 
       const sql = Prisma.sql`
@@ -627,7 +634,22 @@ export async function POST(req: NextRequest) {
         conCostoActualizado += result;
       } catch (err: any) {
         const msg = err?.message || String(err);
-        errores.push(`Lote de update costo ${Math.floor(i / COST_UPDATE_BATCH_SIZE) + 1}: ${msg}`);
+        // Diagnóstico: si algún valor no es número, lo mostramos (máx. 5).
+        // Así, si Postgres vuelve a rechazar el lote, el log dice exactamente
+        // qué dato viene mal en lugar de dejarnos a ciegas.
+        const raros: string[] = [];
+        for (const item of batch) {
+          for (const c of COST_UPDATE_COLS) {
+            const v = item.data[c];
+            if (v !== null && v !== undefined && typeof v !== "number" && raros.length < 5) {
+              raros.push(`${item.sku}.${c}=${JSON.stringify(v)}`);
+            }
+          }
+        }
+        errores.push(
+          `Lote de update costo ${Math.floor(i / COST_UPDATE_BATCH_SIZE) + 1}: ${msg}` +
+            (raros.length ? ` | valores no numéricos: ${raros.join(", ")}` : "")
+        );
       }
     }
 
