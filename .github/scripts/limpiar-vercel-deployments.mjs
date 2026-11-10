@@ -10,9 +10,12 @@
 //   - Si nada funciona, escribe en el log un diagnostico claro
 //     con la causa mas probable (para corregir de una vez).
 //
-// QUE HACE: conserva los ultimos 4 deployments (red de rollback)
-//   y no borra nada con menos de 3 dias. Borra el resto (copias
-//   viejas de codigo que solo ocupan espacio).
+// QUE HACE: conserva SIEMPRE los ultimos 5 deployments (red de
+//   rollback) y no borra nada con menos de 1 dia. Borra el resto
+//   (copias viejas de codigo que solo ocupan espacio).
+//   Corre TODOS LOS DIAS (ver limpiar-deployments-vercel.yml).
+// REGLA FIJA: nunca se borran los 5 mas recientes, pase lo que pase.
+//   Tampoco se borra el deployment de PRODUCCION que esta sirviendo.
 // QUE NO HACE: no toca la base de datos (registros, productos,
 //   stock), ni el sistema en produccion, ni archivos del repo.
 // ============================================================
@@ -22,8 +25,8 @@ const PROJECT_ID = (process.env.VERCEL_PROJECT_ID || "").trim();
 const TEAM_ID = (process.env.VERCEL_TEAM_ID || "").trim();
 const NOMBRE_PROYECTO = "viza-home-sistema";
 
-const MANTENER_ULTIMOS = 4; // siempre conserva los 4 deployments mas recientes
-const EDAD_MINIMA_DIAS = 3; // candado: nunca borra nada con menos de 3 dias
+const MANTENER_ULTIMOS = 5; // REGLA FIJA: siempre conserva los 5 deployments mas recientes
+const EDAD_MINIMA_DIAS = 1; // candado: nunca borra nada con menos de 1 dia
 const PAGINAS_MAX = 4;      // revisa hasta 400 deployments por corrida
 
 const base = process.env.VERCEL_API_BASE || "https://api.vercel.com";
@@ -62,7 +65,7 @@ async function probarListado(query) {
 }
 
 async function main() {
-  console.log("== Viza Home - limpieza de deployments viejos de Vercel (v2) ==");
+  console.log("== Viza Home - limpieza de deployments viejos de Vercel (v3 - diaria) ==");
   console.log(`Config: conserva los ultimos ${MANTENER_ULTIMOS} | no toca nada con menos de ${EDAD_MINIMA_DIAS} dias`);
 
   // ---- FASE 1: validar el token ----
@@ -160,6 +163,13 @@ async function main() {
   todos.sort((a, b) => b.createdAt - a.createdAt);
   console.log(`Deployments encontrados: ${todos.length}`);
 
+  // Red de seguridad extra: el deployment de PRODUCCION que esta sirviendo
+  // el dominio nunca se borra, aunque quede fuera de los 5 mas recientes.
+  const produccion = todos.find((d) => d.target === "production");
+  if (produccion) {
+    console.log(`Produccion protegida: ${produccion.uid} | ${new Date(produccion.createdAt).toISOString().slice(0, 10)}`);
+  }
+
   let borrados = 0;
   let conservados = 0;
   let errores = 0;
@@ -172,6 +182,11 @@ async function main() {
 
     if (i < MANTENER_ULTIMOS) {
       console.log(`CONSERVAR (ultimo ${i + 1}) ${info}`);
+      conservados++;
+      continue;
+    }
+    if (produccion && d.uid === produccion.uid) {
+      console.log(`CONSERVAR (produccion en vivo) ${info}`);
       conservados++;
       continue;
     }

@@ -2,13 +2,18 @@ name: Limpieza automatica de deployments (Vercel)
 
 on:
   schedule:
-    # Lunes 14:00 UTC = 11:00 hora Uruguay. Corre una vez por semana.
-    - cron: '0 14 * * 1'
+    # TODOS LOS DIAS a las 14:00 UTC = 11:00 hora Paraguay/Uruguay.
+    # Antes corria solo los lunes ('0 14 * * 1'). Ahora es diario.
+    - cron: '0 14 * * *'
   # Permite correrlo a mano: GitHub -> Actions -> Run workflow
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: limpieza-vercel
+  cancel-in-progress: false
 
 jobs:
   limpiar:
@@ -18,6 +23,8 @@ jobs:
       - name: Bajar el repo (para leer el script)
         uses: actions/checkout@v4
 
+      # Los 5 deployments mas recientes NUNCA se borran (red de rollback).
+      # El resto se borra si tiene mas de 1 dia de vida.
       - name: Borrar deployments viejos de Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
