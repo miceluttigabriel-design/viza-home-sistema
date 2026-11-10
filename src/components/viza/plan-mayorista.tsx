@@ -545,6 +545,7 @@ export function PlanMayorista({ sucursalMia }: { sucursalMia?: string | null }) 
             quantity: p.quantity,
             cost: p.cost,
           }))}
+          baseTotal={totalMayoristaNeto}
         />
       </Section>
 

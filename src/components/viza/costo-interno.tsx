@@ -105,7 +105,61 @@ export function extractCostoMayorista(product: unknown): number {
 // Cuadrito compacto que se muestra al final de la sección PRODUCTOS de cada
 // opción de cotización (CUOTA / SAFRA / CHEQUE / MAYORISTA).
 // Devuelve null si no hay productos, para no ocupar espacio.
-export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
+//
+// Task 153 (pedido del dueño): además del COSTO, el vendedor ve el VALOR BASE
+// de cada producto. Sale de la misma cuenta de la planilla CRED CALCULO:
+// el valor base total del plan se reparte entre los productos en proporción a
+// su costo (costo unitario × cantidad), cada línea se redondea al millar y la
+// primera línea absorbe la diferencia para que la suma cierre exacta.
+// Es SOLO de pantalla, igual que el costo: nunca viaja al PDF ni a la BD.
+
+// Reparte el valor base total entre las líneas CON costo, igual que la
+// planilla: ROUND(costo_linea / costo_total × valor_base_total, -3) y la
+// primera línea absorbe el resto para que la suma sea exacta.
+function repartirValorBase(
+  items: CostoInternoItem[],
+  baseTotal: number
+): Map<string, number> {
+  const repartido = new Map<string, number>();
+  const conCosto = items.filter((it) => (it.cost ?? 0) > 0 && it.quantity > 0);
+  if (conCosto.length === 0 || baseTotal <= 0) return repartido;
+
+  const totalCosto = conCosto.reduce(
+    (sum, it) => sum + (it.cost ?? 0) * it.quantity,
+    0
+  );
+  if (totalCosto <= 0) return repartido;
+
+  // Desde la segunda línea: redondeo al millar (Math.round, igual que la
+  // planilla para valores positivos).
+  let sumaResto = 0;
+  for (let i = 1; i < conCosto.length; i++) {
+    const it = conCosto[i];
+    const valor =
+      Math.round(
+        (((it.cost ?? 0) * it.quantity) / totalCosto) * baseTotal / 1000
+      ) * 1000;
+    const seguro = Math.max(0, valor);
+    repartido.set(it.key, seguro);
+    sumaResto += seguro;
+  }
+
+  // La PRIMERA línea con costo cierra la cuenta (absorbe el redondeo).
+  const primera = conCosto[0];
+  repartido.set(primera.key, Math.max(0, Math.round(baseTotal) - sumaResto));
+
+  return repartido;
+}
+
+export function CostoInterno({
+  items,
+  baseTotal,
+}: {
+  items: CostoInternoItem[];
+  // Valor base total del plan (precio de contado / base a financiar). Si no
+  // llega o vale 0, el cuadrito se muestra EXACTAMENTE como antes (solo costo).
+  baseTotal?: number;
+}) {
   // Task 114: ojito funcional — estado compartido por los 4 cuadros.
   const oculto = useCostoOcultoStore((s) => s.oculto);
   const toggleOculto = useCostoOcultoStore((s) => s.toggleOculto);
@@ -117,6 +171,17 @@ export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
     0
   );
   const haySinCosto = items.some((it) => (it.cost ?? 0) <= 0);
+  const mostrarBase =
+    (baseTotal ?? 0) > 0 && items.some((it) => (it.cost ?? 0) > 0);
+  const basePorItem = mostrarBase
+    ? repartirValorBase(items, baseTotal ?? 0)
+    : new Map<string, number>();
+  const totalBase = mostrarBase
+    ? items.reduce((sum, it) => sum + (basePorItem.get(it.key) ?? 0), 0)
+    : 0;
+  const grid = mostrarBase
+    ? "grid-cols-[minmax(0,1fr)_auto_auto]"
+    : "grid-cols-[minmax(0,1fr)_auto]";
 
   return (
     <div
@@ -152,7 +217,11 @@ export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
             className="text-[10px] font-bold uppercase tracking-wide truncate"
             style={{ color: COSTO_VALOR }}
           >
-            {oculto ? "Costo oculto · clic para ver" : "Costo de productos · solo vendedor"}
+            {oculto
+              ? "Costo y valor base ocultos · clic para ver"
+              : mostrarBase
+                ? "Costo y valor base · solo vendedor"
+                : "Costo de productos · solo vendedor"}
           </span>
         </button>
         <span
@@ -163,48 +232,81 @@ export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
         </span>
       </div>
 
-      {/* Una fila por producto: nombre ×cantidad → costo (unitario × cantidad) */}
-      <div className="space-y-1">
-        {items.map((it) => (
-          <div
-            key={it.key}
-            className="flex items-center justify-between gap-3 text-xs"
-          >
-            <span className="truncate" style={{ color: COSTO_TXT }}>
-              {it.name}
-              <span className="opacity-60"> ×{it.quantity}</span>
-            </span>
-            <span
-              className="font-semibold tabular-nums whitespace-nowrap"
-              style={{ color: COSTO_VALOR }}
-            >
-              {oculto
-                ? COSTO_OCULTO_TXT
-                : (it.cost ?? 0) > 0
-                  ? formatPYG((it.cost ?? 0) * it.quantity)
-                  : "—"}
-            </span>
-          </div>
-        ))}
+      {/* Encabezado de columnas: Producto · Costo · Valor base */}
+      <div
+        className={`grid ${grid} items-center gap-x-2 sm:gap-x-3 pb-1 text-[9px] font-bold uppercase tracking-wide`}
+        style={{ color: COSTO_NOTA }}
+      >
+        <span className="truncate">Producto</span>
+        <span className="text-right">Costo</span>
+        {mostrarBase && <span className="text-right">Valor base</span>}
       </div>
 
-      {/* Total del costo (lo que el vendedor necesita para armar el crédito) */}
+      {/* Una fila por producto: nombre ×cantidad → costo y valor base */}
+      <div className="space-y-1">
+        {items.map((it) => {
+          const base = basePorItem.get(it.key) ?? 0;
+          return (
+            <div
+              key={it.key}
+              className={`grid ${grid} items-center gap-x-2 sm:gap-x-3 text-xs`}
+            >
+              <span className="truncate" style={{ color: COSTO_TXT }}>
+                {it.name}
+                <span className="opacity-60"> ×{it.quantity}</span>
+              </span>
+              <span
+                className="text-right font-semibold tabular-nums whitespace-nowrap"
+                style={{ color: COSTO_TXT }}
+              >
+                {oculto
+                  ? COSTO_OCULTO_TXT
+                  : (it.cost ?? 0) > 0
+                    ? formatPYG((it.cost ?? 0) * it.quantity)
+                    : "—"}
+              </span>
+              {mostrarBase && (
+                <span
+                  className="text-right font-semibold tabular-nums whitespace-nowrap"
+                  style={{ color: COSTO_VALOR }}
+                >
+                  {oculto
+                    ? COSTO_OCULTO_TXT
+                    : base > 0
+                      ? formatPYG(base)
+                      : "—"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Totales: costo y valor base (lo que el vendedor usa para el crédito) */}
       <div
-        className="flex items-center justify-between gap-3 mt-2 pt-2 border-t"
+        className={`grid ${grid} items-center gap-x-2 sm:gap-x-3 mt-2 pt-2 border-t`}
         style={{ borderColor: "rgba(255,255,255,0.3)" }}
       >
         <span
           className="text-[10px] font-bold uppercase tracking-wide"
           style={{ color: COSTO_TXT }}
         >
-          Costo total
+          Totales
         </span>
         <span
-          className="font-extrabold text-sm tabular-nums"
+          className="text-right font-extrabold text-sm tabular-nums whitespace-nowrap"
           style={{ color: COSTO_TOTAL }}
         >
           {oculto ? COSTO_OCULTO_TXT : formatPYG(totalCosto)}
         </span>
+        {mostrarBase && (
+          <span
+            className="text-right font-extrabold text-sm tabular-nums whitespace-nowrap"
+            style={{ color: COSTO_VALOR }}
+          >
+            {oculto ? COSTO_OCULTO_TXT : formatPYG(totalBase)}
+          </span>
+        )}
       </div>
 
       {haySinCosto && (
@@ -212,6 +314,12 @@ export function CostoInterno({ items }: { items: CostoInternoItem[] }) {
           — = producto sin costo cargado en la BASE (se carga en el Panel
           Admin). Los productos viejos guardados antes de esta versión también
           muestran — hasta que se vuelvan a agregar.
+        </p>
+      )}
+      {mostrarBase && (
+        <p className="text-[9px] mt-1" style={{ color: COSTO_NOTA }}>
+          Valor base = precio de contado del plan repartido por costo (como la
+          planilla CRED CALCULO).
         </p>
       )}
     </div>

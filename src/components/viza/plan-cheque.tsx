@@ -240,6 +240,7 @@ export function PlanCheque({ sucursalMia }: { sucursalMia?: string | null }) {
             quantity: p.quantity,
             cost: p.cost,
           }))}
+          baseTotal={baseCalculo}
         />
       </Section>
 

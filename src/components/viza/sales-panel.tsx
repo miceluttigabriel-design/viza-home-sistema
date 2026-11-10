@@ -2090,6 +2090,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               quantity: it.quantity,
               cost: it.cost,
             }))}
+            baseTotal={contadoAjustado}
           />
         </Section>
 

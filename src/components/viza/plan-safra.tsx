@@ -644,6 +644,7 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
             quantity: p.quantity,
             cost: p.cost,
           }))}
+          baseTotal={totalContado}
         />
       </Section>
 
