@@ -26,7 +26,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Database, Boxes, Calculator, Network, ShoppingCart, MapPin, Link2, ArrowRight } from "lucide-react";
+import { Database, Boxes, Calculator, Network, ShoppingCart, MapPin, ArrowRight } from "lucide-react";
 import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
 
 // Sucursales oficiales de VIZA (misma lista que SUCURSALES_VIZA en
@@ -70,22 +70,18 @@ interface ModuloCardProps {
   c: string;
   icon: ReactNode;
   titulo: string;
-  subtitulo: string;
   badge: ReactNode;
-  puntos: string[];
-  extra?: ReactNode;
   onClick?: () => void;
   className?: string;
-  apilado?: boolean;
 }
 
-function ModuloCard({ c, icon, titulo, subtitulo, badge, puntos, extra, onClick, className = "", apilado = false }: ModuloCardProps) {
+function ModuloCard({ c, icon, titulo, badge, onClick, className = "" }: ModuloCardProps) {
   const estilo: CSSProperties = {
     background: `linear-gradient(155deg, ${c}1f 0%, rgba(9,12,17,0.94) 48%)`,
     border: `1px solid ${c}40`,
     boxShadow: `0 1px 0 rgba(255,255,255,0.04) inset, 0 14px 44px -16px ${c}66`,
   };
-  const base = `relative overflow-hidden h-full w-full text-left rounded-2xl p-5 flex flex-col ${className}`;
+  const base = `relative overflow-hidden h-full w-full text-left rounded-2xl p-4 flex flex-col ${className}`;
 
   const contenido = (
     <>
@@ -102,57 +98,23 @@ function ModuloCard({ c, icon, titulo, subtitulo, badge, puntos, extra, onClick,
         />
       )}
 
-      {(() => {
-        const tile = (
+      <div className="relative flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div
-            className="h-12 w-12 shrink-0 rounded-xl flex items-center justify-center"
+            className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center"
             style={{ background: `${c}22`, border: `1px solid ${c}55`, boxShadow: `0 0 18px ${c}40` }}
           >
             {icon}
           </div>
-        );
-        const textos = (
-          <div className="min-w-0">
-            <h2 className="text-[17px] font-black text-white leading-tight tracking-tight">{titulo}</h2>
-            <p className="text-[10px] font-bold uppercase tracking-wide lg:whitespace-nowrap mt-1.5" style={{ color: c }}>
-              {subtitulo}
-            </p>
-          </div>
-        );
-        return apilado ? (
-          <div className="relative mb-4">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              {tile}
-              {badge}
-            </div>
-            {textos}
-          </div>
-        ) : (
-          <div className="relative flex items-center justify-between gap-2 mb-4">
-            <div className="flex items-center gap-3 min-w-0">
-              {tile}
-              {textos}
-            </div>
-            {badge}
-          </div>
-        );
-      })()}
+          <h2 className="text-[15px] font-black text-white leading-tight tracking-tight">{titulo}</h2>
+        </div>
+        {badge}
+      </div>
 
-      <ul className="relative flex flex-col gap-1.5 text-xs text-slate-300">
-        {puntos.map((p) => (
-          <li key={p} className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: c, boxShadow: `0 0 8px ${c}` }} />
-            {p}
-          </li>
-        ))}
-      </ul>
-
-      {extra}
-
-      <p className="relative mt-auto pt-3 text-[11px] font-black tracking-widest flex items-center gap-1.5">
+      <p className="relative mt-auto pt-2 text-[10px] font-black tracking-widest flex items-center gap-1.5">
         {onClick ? (
           <span className="flex items-center gap-1.5" style={{ color: c }}>
-            ABRIR <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+            ABRIR <ArrowRight className="h-3 w-3 transition-transform duration-200 group-hover:translate-x-1" />
           </span>
         ) : (
           <span className="text-slate-600">EN DESARROLLO</span>
@@ -197,14 +159,12 @@ function StockCard({ onClick }: { onClick: () => void }) {
       c={C_STOCK}
       icon={<Boxes className="h-6 w-6" style={{ color: C_STOCK }} />}
       titulo="STOCK GENERAL"
-      subtitulo="Inventario · Tiempo real"
       badge={
         <Pill c="#4ade80">
           <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
           SYSTEM ONLINE
         </Pill>
       }
-      puntos={["Sincronización de inventario", "Base de datos centralizada", "Disponibilidad por producto"]}
       onClick={onClick}
     />
   );
@@ -216,9 +176,7 @@ function BaseCard({ onClick }: { onClick: () => void }) {
       c={C_BASE}
       icon={<Database className="h-6 w-6" style={{ color: C_BASE }} />}
       titulo="LA BASE"
-      subtitulo="Reglas · Costos · Márgenes"
       badge={<Pill c={C_BASE}>NÚCLEO</Pill>}
-      puntos={["Productos, costos y márgenes", "Importación de planilla ERP", "Etiquetas · #HASHTAG · CRM"]}
       onClick={onClick}
     />
   );
@@ -230,9 +188,7 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
       c={C_COTIZ}
       icon={<Calculator className="h-6 w-6" style={{ color: C_COTIZ }} />}
       titulo="COTIZADOR"
-      subtitulo="Presupuestos · Precios"
       badge={<Pill c={C_COTIZ}>4 PLANES</Pill>}
-      puntos={["Generación dinámica de precios", "CUOTA · SAFRA · CHEQUE · MAYORISTA", "Descuentos y reglas de venta"]}
       onClick={onClick}
     />
   );
@@ -248,16 +204,12 @@ function AgenteCard({
   c,
   icon,
   titulo,
-  subtitulo,
-  ligado,
   estado = "PRÓXIMAMENTE",
   onClick,
 }: {
   c: string;
   icon: ReactNode;
   titulo: string;
-  subtitulo: string;
-  ligado: string;
   estado?: string;
   onClick?: () => void;
 }) {
@@ -266,7 +218,7 @@ function AgenteCard({
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className="relative overflow-hidden h-full w-full rounded-2xl p-3.5 flex flex-col select-none text-left transition-transform hover:scale-[1.02] disabled:hover:scale-100 disabled:cursor-default"
+      className="relative overflow-hidden h-full w-full rounded-2xl p-3 flex flex-col select-none text-left transition-transform hover:scale-[1.02] disabled:hover:scale-100 disabled:cursor-default"
       style={{
         background: `linear-gradient(155deg, ${c}1f 0%, rgba(9,12,17,0.94) 55%)`,
         border: `1px dashed ${c}55`,
@@ -280,24 +232,14 @@ function AgenteCard({
       />
       <div className="flex items-start justify-between gap-2">
         <div
-          className="h-9 w-9 shrink-0 rounded-lg flex items-center justify-center"
+          className="h-8 w-8 shrink-0 rounded-lg flex items-center justify-center"
           style={{ background: `${c}22`, border: `1px solid ${c}55`, boxShadow: `0 0 14px ${c}33` }}
         >
           {icon}
         </div>
         <Pill c={c}>{estado}</Pill>
       </div>
-      <h3 className="text-[13px] font-black text-white leading-tight tracking-tight mt-2.5">{titulo}</h3>
-      <p className="text-[9px] font-bold uppercase tracking-wide mt-1" style={{ color: c }}>
-        {subtitulo}
-      </p>
-      <div
-        className="mt-auto pt-2 flex items-center gap-1.5 text-[8.5px] font-black tracking-widest"
-        style={{ color: c }}
-      >
-        <Link2 className="h-3 w-3 shrink-0" />
-        {ligado}
-      </div>
+      <h3 className="mt-auto pt-2 text-[12px] font-black text-white leading-tight tracking-tight">{titulo}</h3>
     </button>
   );
 }
@@ -306,10 +248,8 @@ function AgenteDistribucionCard({ onClick }: { onClick?: () => void }) {
   return (
     <AgenteCard
       c={C_DISTRI}
-      icon={<Network className="h-5 w-5" style={{ color: C_DISTRI }} />}
+      icon={<Network className="h-4 w-4" style={{ color: C_DISTRI }} />}
       titulo="ENCARGADO DE DISTRIBUCIÓN"
-      subtitulo="IA · Tipo · Color · Stock"
-      ligado="LIGADO A LAS 4 SUCURSALES"
       estado="ACTIVO"
       onClick={onClick}
     />
@@ -320,10 +260,8 @@ function AgenteCompraCard({ onClick }: { onClick?: () => void }) {
   return (
     <AgenteCard
       c={C_COMPRA}
-      icon={<ShoppingCart className="h-5 w-5" style={{ color: C_COMPRA }} />}
+      icon={<ShoppingCart className="h-4 w-4" style={{ color: C_COMPRA }} />}
       titulo="ENCARGADO DE COMPRA"
-      subtitulo="IA · Necesidad de compra · Proveedor"
-      ligado="LIGADO AL ENCARGADO DE DISTRIBUCIÓN"
       estado="ACTIVO"
       onClick={onClick}
     />
@@ -333,41 +271,41 @@ function AgenteCompraCard({ onClick }: { onClick?: () => void }) {
 function SucursalCard({ nombre }: { nombre: string }) {
   return (
     <div
-      className="h-full w-full rounded-xl p-3 flex flex-col justify-center select-none"
+      className="h-full w-full rounded-xl p-2.5 flex flex-col justify-center select-none"
       style={{
         background: `linear-gradient(155deg, ${C_DISTRI}1a, rgba(9,12,17,0.94) 70%)`,
         border: `1px dashed ${C_DISTRI}55`,
       }}
       title={`${nombre} — stock controlado por el Encargado de Distribución`}
     >
-      <MapPin className="h-4 w-4 mb-1.5" style={{ color: C_DISTRI }} />
-      <p className="text-[11px] font-black text-white leading-tight">{nombre}</p>
-      <p className="text-[9px] font-bold tracking-widest mt-1" style={{ color: C_DISTRI }}>
+      <MapPin className="h-3.5 w-3.5 mb-1" style={{ color: C_DISTRI }} />
+      <p className="text-[10.5px] font-black text-white leading-tight">{nombre}</p>
+      <p className="text-[8px] font-bold tracking-widest mt-0.5" style={{ color: C_DISTRI }}>
         PRÓXIMAMENTE
       </p>
     </div>
   );
 }
 
-// ─── DIAGRAMA: lienzo fijo de 1152 × 730 que se escala solo al ancho de la pantalla ───
+// ─── DIAGRAMA: lienzo fijo de 1152 × 500 que se escala solo al ancho de la pantalla ───
 const W = 1152;
-const H = 730;
+const H = 500;
 
 // Cuadros: x, y, ancho, alto (en px del lienzo)
 // Task 151 (pedido del dueño): STOCK GENERAL · LA BASE · COTIZADOR van en UNA
 // sola columna pegada al borde izquierdo, uno debajo del otro y alineados.
 const POS = {
-  stock: { x: 0, y: 0, w: 380, h: 210 },
-  base: { x: 0, y: 250, w: 380, h: 210 },
-  cotizador: { x: 0, y: 500, w: 380, h: 210 },
+  stock: { x: 0, y: 0, w: 380, h: 130 },
+  base: { x: 0, y: 160, w: 380, h: 130 },
+  cotizador: { x: 0, y: 320, w: 380, h: 130 },
   // Task 159: dos cuadritos menores en lugar del antiguo Distribuidor.
-  distribucion: { x: 690, y: 140, w: 270, h: 180 },
-  compra: { x: 690, y: 370, w: 270, h: 180 },
+  distribucion: { x: 720, y: 125, w: 270, h: 110 },
+  compra: { x: 720, y: 315, w: 270, h: 110 },
 };
 const SUC_X = 1010;
 const SUC_W = 142;
-const SUC_H = 100;
-const SUC_Y = [80, 210, 340, 470];
+const SUC_H = 76;
+const SUC_Y = [40, 150, 260, 370];
 
 type Rect = { x: number; y: number; w: number; h: number };
 const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h });
@@ -376,23 +314,23 @@ const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, to
 // La columna comparte eje vertical (x=180): La Base alimenta hacia ARRIBA al
 // Stock y hacia ABAJO al Cotizador.
 const FLUJOS_PRINCIPALES = [
-  { id: "base-stock", d: "M 180 250 C 180 236, 180 224, 180 210", label: "ALIMENTA", lx: 228, ly: 230 },
-  { id: "base-cotiz", d: "M 180 460 C 180 474, 180 486, 180 500", label: "ALIMENTA", lx: 228, ly: 480 },
-  { id: "stock-distri", d: "M 380 105 C 530 105, 530 230, 690 230", label: "LIGADO", lx: 540, ly: 150 },
+  { id: "base-stock", d: "M 180 160 C 180 150, 180 140, 180 130", label: "ALIMENTA", lx: 228, ly: 145 },
+  { id: "base-cotiz", d: "M 180 290 C 180 300, 180 310, 180 320", label: "ALIMENTA", lx: 228, ly: 305 },
+  { id: "stock-distri", d: "M 380 65 C 540 65, 560 180, 720 180", label: "LIGADO", lx: 585, ly: 95 },
 ];
 // Task 159: el AGENTE DE COMPRA va LIGADO al AGENTE DE DISTRIBUCIÓN
 // (línea corta vertical entre los dos cuadritos).
 const FLUJO_COMPRA = {
-  d: "M 825 370 C 825 355, 825 340, 825 320",
+  d: "M 855 315 C 855 295, 855 255, 855 235",
   label: "LIGADO",
-  lx: 884,
-  ly: 345,
+  lx: 915,
+  ly: 275,
 };
 // Del Agente de Distribución salen las 4 líneas hacia los cuadritos de
 // sucursales (todas desde el mismo punto de salida).
 const FLUJOS_SUCURSALES = SUC_Y.map((y, i) => {
   const yd = y + SUC_H / 2; // centro del cuadrito
-  return { id: `distri-suc-${i}`, d: `M 960 230 C 985 230, 992 ${yd}, ${SUC_X} ${yd}` };
+  return { id: `distri-suc-${i}`, d: `M 990 180 C 1000 180, 1001 ${yd}, ${SUC_X} ${yd}` };
 });
 
 function Flecha({ id, color }: { id: string; color: string }) {
@@ -592,19 +530,19 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
 
         {/* ═══ VISTA CELULAR / TABLET: los mismos cuadros, uno debajo del otro ═══ */}
         <div className="lg:hidden w-full max-w-md px-4 sm:px-6">
-          <div className="min-h-[200px]"><StockCard onClick={onGoStock} /></div>
+          <div className="min-h-[120px]"><StockCard onClick={onGoStock} /></div>
           <Conector />
-          <div className="min-h-[200px]"><BaseCard onClick={onGoBase} /></div>
+          <div className="min-h-[120px]"><BaseCard onClick={onGoBase} /></div>
           <Conector />
-          <div className="min-h-[200px]"><CotizadorCard onClick={onGoSales} /></div>
+          <div className="min-h-[120px]"><CotizadorCard onClick={onGoSales} /></div>
           <Conector color={C_STOCK} />
-          <div className="min-h-[180px]"><AgenteDistribucionCard onClick={onGoStock} /></div>
+          <div className="min-h-[110px]"><AgenteDistribucionCard onClick={onGoStock} /></div>
           <Conector color={C_COMPRA} />
-          <div className="min-h-[180px]"><AgenteCompraCard onClick={onGoStock} /></div>
+          <div className="min-h-[110px]"><AgenteCompraCard onClick={onGoStock} /></div>
           <Conector color={C_DISTRI} />
           <div className="grid grid-cols-2 gap-2.5">
             {SUCURSALES_CUADROS.map((nombre) => (
-              <div key={nombre} className="min-h-[96px]"><SucursalCard nombre={nombre} /></div>
+              <div key={nombre} className="min-h-[76px]"><SucursalCard nombre={nombre} /></div>
             ))}
           </div>
         </div>
