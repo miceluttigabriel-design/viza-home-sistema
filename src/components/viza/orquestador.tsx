@@ -14,9 +14,10 @@
 //       STOCK GENERAL → vista inventario
 //       LA BASE → AdminPanel
 //       COTIZADOR → SalesPanel
-//   · DERECHA (ligado al Stock): DISTRIBUIDOR INTELIGENTE (PRÓXIMAMENTE)
-//     + los 4 cuadritos de sucursales: NUEVA ESPERANZA · KATUETE ·
-//       LA PALOMA · SALTOS DEL GUAIRA
+//   · DERECHA (ligado al Stock): AGENTE DE DISTRIBUCIÓN (PRÓXIMAMENTE)
+//     —ligado a los 4 cuadritos de sucursales: NUEVA ESPERANZA · KATUETE ·
+//       LA PALOMA · SALTOS DEL GUAIRA— y debajo AGENTE DE COMPRA
+//     (ligado al Agente de Distribución).
 //
 // Marca: azul #155789 · dorado #D9B86B · logo /viza-home-logo-nuevo.png
 // SOLO ES VISUALIZACIÓN: no toca datos, no toca APIs, no toca la base.
@@ -25,7 +26,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Database, Boxes, Calculator, Network, MapPin, Link2, ArrowRight } from "lucide-react";
+import { Database, Boxes, Calculator, Network, ShoppingCart, MapPin, Link2, ArrowRight } from "lucide-react";
 import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
 
 // Sucursales oficiales de VIZA (misma lista que SUCURSALES_VIZA en
@@ -45,6 +46,7 @@ const C_STOCK = "#3b9be0"; // azul VIZA (versión clara para fondo negro)
 const C_BASE = DORADO; // dorado VIZA
 const C_COTIZ = "#34d399";
 const C_DISTRI = "#a78bfa";
+const C_COMPRA = "#22d3ee";
 const FONT = "'Montserrat', sans-serif";
 
 interface AppUser {
@@ -236,25 +238,82 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
   );
 }
 
-function DistribuidorCard() {
+// ─── Agents cards (Task 159, pedido del dueño) ───
+// Dos cuadritos MENORES en el lugar del antiguo "Distribuidor Inteligente":
+//   · AGENTE DE DISTRIBUCIÓN → ligado a los 4 cuadritos de sucursales.
+//   · AGENTE DE COMPRA       → ligado al Agente de Distribución.
+// Es SOLO visual (por ahora): no toca datos ni APIs.
+function AgenteCard({
+  c,
+  icon,
+  titulo,
+  subtitulo,
+  ligado,
+}: {
+  c: string;
+  icon: ReactNode;
+  titulo: string;
+  subtitulo: string;
+  ligado: string;
+}) {
   return (
-    <ModuloCard
-      c={C_DISTRI}
-      icon={<Network className="h-6 w-6" style={{ color: C_DISTRI }} />}
-      apilado
-      titulo="DISTRIBUIDOR INTELIGENTE"
-      subtitulo="Leads · Sucursales · Canales"
-      badge={<Pill c={C_DISTRI}>PRÓXIMAMENTE</Pill>}
-      puntos={["CRM · Ranking de presupuestos", "Asignación por sucursal", "Optimización de canales"]}
-      extra={
+    <div
+      className="relative overflow-hidden h-full w-full rounded-2xl p-3.5 flex flex-col select-none"
+      style={{
+        background: `linear-gradient(155deg, ${c}1f 0%, rgba(9,12,17,0.94) 55%)`,
+        border: `1px dashed ${c}55`,
+        boxShadow: `0 10px 30px -16px ${c}66`,
+      }}
+      title={`${titulo} — próximo paso del sistema`}
+    >
+      <span
+        className="absolute inset-x-0 top-0 h-[2px]"
+        style={{ background: `linear-gradient(90deg, transparent, ${c}, transparent)` }}
+      />
+      <div className="flex items-start justify-between gap-2">
         <div
-          className="relative mt-4 flex items-center gap-2 rounded-xl px-3 py-2 text-[10px] font-black tracking-widest"
-          style={{ background: `${C_STOCK}1a`, color: C_STOCK, border: `1px solid ${C_STOCK}33` }}
+          className="h-9 w-9 shrink-0 rounded-lg flex items-center justify-center"
+          style={{ background: `${c}22`, border: `1px solid ${c}55`, boxShadow: `0 0 14px ${c}33` }}
         >
-          <Link2 className="h-3.5 w-3.5 shrink-0" />
-          LIGADO AL STOCK GENERAL
+          {icon}
         </div>
-      }
+        <Pill c={c}>PRÓXIMAMENTE</Pill>
+      </div>
+      <h3 className="text-[13px] font-black text-white leading-tight tracking-tight mt-2.5">{titulo}</h3>
+      <p className="text-[9px] font-bold uppercase tracking-wide mt-1" style={{ color: c }}>
+        {subtitulo}
+      </p>
+      <div
+        className="mt-auto pt-2 flex items-center gap-1.5 text-[8.5px] font-black tracking-widest"
+        style={{ color: c }}
+      >
+        <Link2 className="h-3 w-3 shrink-0" />
+        {ligado}
+      </div>
+    </div>
+  );
+}
+
+function AgenteDistribucionCard() {
+  return (
+    <AgenteCard
+      c={C_DISTRI}
+      icon={<Network className="h-5 w-5" style={{ color: C_DISTRI }} />}
+      titulo="AGENTE DE DISTRIBUCIÓN"
+      subtitulo="Sucursales · Canales"
+      ligado="LIGADO A LAS 4 SUCURSALES"
+    />
+  );
+}
+
+function AgenteCompraCard() {
+  return (
+    <AgenteCard
+      c={C_COMPRA}
+      icon={<ShoppingCart className="h-5 w-5" style={{ color: C_COMPRA }} />}
+      titulo="AGENTE DE COMPRA"
+      subtitulo="Compras · Abastecimiento"
+      ligado="LIGADO AL AGENTE DE DISTRIBUCIÓN"
     />
   );
 }
@@ -267,7 +326,7 @@ function SucursalCard({ nombre }: { nombre: string }) {
         background: `linear-gradient(155deg, ${C_DISTRI}1a, rgba(9,12,17,0.94) 70%)`,
         border: `1px dashed ${C_DISTRI}55`,
       }}
-      title={`${nombre} — se activará con el Distribuidor Inteligente`}
+      title={`${nombre} — se activará con el Agente de Distribución`}
     >
       <MapPin className="h-4 w-4 mb-1.5" style={{ color: C_DISTRI }} />
       <p className="text-[11px] font-black text-white leading-tight">{nombre}</p>
@@ -289,7 +348,9 @@ const POS = {
   stock: { x: 0, y: 0, w: 380, h: 210 },
   base: { x: 0, y: 250, w: 380, h: 210 },
   cotizador: { x: 0, y: 500, w: 380, h: 210 },
-  distribuidor: { x: 690, y: 150, w: 280, h: 400 },
+  // Task 159: dos cuadritos menores en lugar del antiguo Distribuidor.
+  distribucion: { x: 690, y: 140, w: 270, h: 180 },
+  compra: { x: 690, y: 370, w: 270, h: 180 },
   leyenda: { x: 580, y: 640, w: 572, h: 170 },
 };
 const SUC_X = 1010;
@@ -306,12 +367,21 @@ const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, to
 const FLUJOS_PRINCIPALES = [
   { id: "base-stock", d: "M 180 250 C 180 236, 180 224, 180 210", label: "ALIMENTA", lx: 228, ly: 230 },
   { id: "base-cotiz", d: "M 180 460 C 180 474, 180 486, 180 500", label: "ALIMENTA", lx: 228, ly: 480 },
-  { id: "stock-distri", d: "M 380 105 C 530 105, 530 260, 690 260", label: "LIGADO", lx: 540, ly: 170 },
+  { id: "stock-distri", d: "M 380 105 C 530 105, 530 230, 690 230", label: "LIGADO", lx: 540, ly: 150 },
 ];
+// Task 159: el AGENTE DE COMPRA va LIGADO al AGENTE DE DISTRIBUCIÓN
+// (línea corta vertical entre los dos cuadritos).
+const FLUJO_COMPRA = {
+  d: "M 825 370 C 825 355, 825 340, 825 320",
+  label: "LIGADO",
+  lx: 884,
+  ly: 345,
+};
+// Del Agente de Distribución salen las 4 líneas hacia los cuadritos de
+// sucursales (todas desde el mismo punto de salida).
 const FLUJOS_SUCURSALES = SUC_Y.map((y, i) => {
-  const yo = 220 + i * 80; // punto de salida en el Distribuidor
   const yd = y + SUC_H / 2; // centro del cuadrito
-  return { id: `distri-suc-${i}`, d: `M 970 ${yo} C 990 ${yo}, 995 ${yd}, ${SUC_X} ${yd}` };
+  return { id: `distri-suc-${i}`, d: `M 960 230 C 985 230, 992 ${yd}, ${SUC_X} ${yd}` };
 });
 
 function Flecha({ id, color }: { id: string; color: string }) {
@@ -377,8 +447,9 @@ function Leyenda() {
       </p>
       <div className="flex flex-col gap-2">
         {fila(DORADO, false, "La Base alimenta con datos al Stock y al Cotizador")}
-        {fila(C_STOCK, false, "El Stock se liga al Distribuidor Inteligente")}
-        {fila(C_DISTRI, true, "El Distribuidor reparte a las 4 sucursales (próximamente)")}
+        {fila(C_STOCK, false, "El Stock se liga al Agente de Distribución")}
+        {fila(C_COMPRA, true, "El Agente de Compra está ligado al Agente de Distribución")}
+        {fila(C_DISTRI, true, "El Agente de Distribución reparte a las 4 sucursales (próximamente)")}
       </div>
       <p className="mt-auto text-[11px] font-bold italic" style={{ color: DORADO }}>
         Todo para tu hogar, en un solo lugar.
@@ -511,10 +582,12 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
               <Flecha id="flecha-dorada" color={DORADO} />
               <Flecha id="flecha-azul" color={C_STOCK} />
               <Flecha id="flecha-violeta" color={C_DISTRI} />
+              <Flecha id="flecha-compra" color={C_COMPRA} />
             </defs>
             <Flujo d={FLUJOS_PRINCIPALES[0].d} color={DORADO} flecha="flecha-dorada" />
             <Flujo d={FLUJOS_PRINCIPALES[1].d} color={DORADO} flecha="flecha-dorada" />
             <Flujo d={FLUJOS_PRINCIPALES[2].d} color={C_STOCK} flecha="flecha-azul" />
+            <Flujo d={FLUJO_COMPRA.d} color={C_COMPRA} punteado flecha="flecha-compra" />
             {FLUJOS_SUCURSALES.map((f) => (
               <Flujo key={f.id} d={f.d} color={C_DISTRI} punteado flecha="flecha-violeta" />
             ))}
@@ -523,11 +596,13 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           {FLUJOS_PRINCIPALES.map((f) => (
             <Etiqueta key={f.id} x={f.lx} y={f.ly} texto={f.label} />
           ))}
+          <Etiqueta x={FLUJO_COMPRA.lx} y={FLUJO_COMPRA.ly} texto={FLUJO_COMPRA.label} />
 
           <div style={place(POS.stock)}><StockCard onClick={onGoStock} /></div>
           <div style={place(POS.base)}><BaseCard onClick={onGoBase} /></div>
           <div style={place(POS.cotizador)}><CotizadorCard onClick={onGoSales} /></div>
-          <div style={place(POS.distribuidor)}><DistribuidorCard /></div>
+          <div style={place(POS.distribucion)}><AgenteDistribucionCard /></div>
+          <div style={place(POS.compra)}><AgenteCompraCard /></div>
           {SUCURSALES_CUADROS.map((nombre, i) => (
             <div key={nombre} style={place({ x: SUC_X, y: SUC_Y[i], w: SUC_W, h: SUC_H })}>
               <SucursalCard nombre={nombre} />
@@ -544,7 +619,9 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           <Conector />
           <div className="min-h-[200px]"><CotizadorCard onClick={onGoSales} /></div>
           <Conector color={C_STOCK} />
-          <div className="min-h-[300px]"><DistribuidorCard /></div>
+          <div className="min-h-[180px]"><AgenteDistribucionCard /></div>
+          <Conector color={C_COMPRA} />
+          <div className="min-h-[180px]"><AgenteCompraCard /></div>
           <Conector color={C_DISTRI} />
           <div className="grid grid-cols-2 gap-2.5">
             {SUCURSALES_CUADROS.map((nombre) => (
