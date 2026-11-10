@@ -9,9 +9,11 @@
 // DISTRIBUCIÓN INTELIGENTE) siguen siendo SOLO del supremo.
 //
 // Distribución del dibujo del dueño (se mantiene EXACTA):
-//   · ARRIBA: STOCK GENERAL → vista inventario
-//   · IZQUIERDA (ligado al Stock): LA BASE → AdminPanel
-//   · ABAJO (ligado a La Base): COTIZADOR → SalesPanel
+//   · COLUMNA IZQUIERDA, pegada al borde final de la pantalla, uno debajo
+//     del otro y bien alineados:
+//       STOCK GENERAL → vista inventario
+//       LA BASE → AdminPanel
+//       COTIZADOR → SalesPanel
 //   · DERECHA (ligado al Stock): DISTRIBUIDOR INTELIGENTE (PRÓXIMAMENTE)
 //     + los 4 cuadritos de sucursales: NUEVA ESPERANZA · KATUETE ·
 //       LA PALOMA · SALTOS DEL GUAIRA
@@ -281,11 +283,13 @@ const W = 1152;
 const H = 820;
 
 // Cuadros: x, y, ancho, alto (en px del lienzo)
+// Task 151 (pedido del dueño): STOCK GENERAL · LA BASE · COTIZADOR van en UNA
+// sola columna pegada al borde izquierdo, uno debajo del otro y alineados.
 const POS = {
-  stock: { x: 190, y: 0, w: 380, h: 210 },
-  base: { x: 0, y: 300, w: 340, h: 210 },
-  cotizador: { x: 90, y: 600, w: 420, h: 210 },
-  distribuidor: { x: 670, y: 150, w: 280, h: 400 },
+  stock: { x: 0, y: 0, w: 380, h: 210 },
+  base: { x: 0, y: 250, w: 380, h: 210 },
+  cotizador: { x: 0, y: 500, w: 380, h: 210 },
+  distribuidor: { x: 690, y: 150, w: 280, h: 400 },
   leyenda: { x: 580, y: 640, w: 572, h: 170 },
 };
 const SUC_X = 1010;
@@ -297,15 +301,17 @@ type Rect = { x: number; y: number; w: number; h: number };
 const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h });
 
 // Líneas de flujo (curvas). "alimenta" = dorado continuo · "distribuye" = violeta punteado
+// La columna comparte eje vertical (x=180): La Base alimenta hacia ARRIBA al
+// Stock y hacia ABAJO al Cotizador.
 const FLUJOS_PRINCIPALES = [
-  { id: "base-stock", d: "M 230 300 C 230 250, 300 260, 300 210", label: "ALIMENTA", lx: 265, ly: 255 },
-  { id: "base-cotiz", d: "M 230 510 C 230 560, 280 550, 280 600", label: "ALIMENTA", lx: 255, ly: 555 },
-  { id: "stock-distri", d: "M 570 105 C 625 105, 615 250, 670 250", label: "LIGADO", lx: 620, ly: 178 },
+  { id: "base-stock", d: "M 180 250 C 180 236, 180 224, 180 210", label: "ALIMENTA", lx: 228, ly: 230 },
+  { id: "base-cotiz", d: "M 180 460 C 180 474, 180 486, 180 500", label: "ALIMENTA", lx: 228, ly: 480 },
+  { id: "stock-distri", d: "M 380 105 C 530 105, 530 260, 690 260", label: "LIGADO", lx: 540, ly: 170 },
 ];
 const FLUJOS_SUCURSALES = SUC_Y.map((y, i) => {
-  const yo = 230 + i * 80; // punto de salida en el Distribuidor
+  const yo = 220 + i * 80; // punto de salida en el Distribuidor
   const yd = y + SUC_H / 2; // centro del cuadrito
-  return { id: `distri-suc-${i}`, d: `M 950 ${yo} C 985 ${yo}, 975 ${yd}, ${SUC_X} ${yd}` };
+  return { id: `distri-suc-${i}`, d: `M 970 ${yo} C 990 ${yo}, 995 ${yd}, ${SUC_X} ${yd}` };
 });
 
 function Flecha({ id, color }: { id: string; color: string }) {
@@ -399,7 +405,9 @@ function Escenario({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div ref={ref} className="hidden lg:block w-full mx-auto" style={{ maxWidth: W, height: H * escala }}>
+    // Task 151: el lienzo queda pegado al borde IZQUIERDO de la pantalla (sin
+    // mx-auto) para que STOCK GENERAL toque el cantito final de la pantalla.
+    <div ref={ref} className="hidden lg:block w-full" style={{ height: H * escala }}>
       <div style={{ position: "relative", width: W, height: H, transform: `scale(${escala})`, transformOrigin: "top left" }}>
         {children}
       </div>
@@ -492,7 +500,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
         </div>
       </header>
 
-      <main className="relative z-10 flex-1 flex flex-col items-center px-4 sm:px-6 pt-6 pb-10">
+      <main className="relative z-10 flex-1 flex flex-col items-center pt-6 pb-10">
         {/* ═══ DIAGRAMA (pantallas grandes): cuadros unidos por líneas de flujo ═══ */}
         <Escenario>
           <svg width={W} height={H} className="absolute inset-0 pointer-events-none" aria-hidden="true">
@@ -529,7 +537,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
         </Escenario>
 
         {/* ═══ VISTA CELULAR / TABLET: los mismos cuadros, uno debajo del otro ═══ */}
-        <div className="lg:hidden w-full max-w-md">
+        <div className="lg:hidden w-full max-w-md px-4 sm:px-6">
           <div className="min-h-[200px]"><StockCard onClick={onGoStock} /></div>
           <Conector />
           <div className="min-h-[200px]"><BaseCard onClick={onGoBase} /></div>
