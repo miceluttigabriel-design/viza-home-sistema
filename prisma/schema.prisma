@@ -694,3 +694,27 @@ model PedidoEspecialTipo {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ============================================================
+// STOCK AUTOMATICO (pedido del duenio): el robot que exporta el
+// inventario del CtrCredito e importa la planilla en STOCK GENERAL.
+// UNA sola fila, id "ACTIVA". Tabla AUTO-GESTIONADA (mismo patron
+// que ConfigBackup / TasaCambio): se crea sola en el primer uso
+// (ver src/lib/config-stock-auto.ts), asi que no hace falta correr
+// prisma db push. Guarda el interruptor ON/OFF, el pedido del boton
+// ACTUALIZAR AHORA, la senal de vida de la PC y el resultado de la
+// ultima corrida que ve el panel.
+// ============================================================
+model ConfigStockAuto {
+  id                  String    @id // "ACTIVA" (fila unica de configuracion)
+  habilitado          Boolean   @default(true) // ON = la PC actualiza sola
+  ultimaCorrida       DateTime? // cuando termino la ultima corrida
+  ultimaOk            Boolean? // true = salio bien
+  ultimoMensaje       String? // detalle / error de la ultima corrida
+  ultimosNuevos       Int       @default(0)
+  ultimosActualizados Int       @default(0)
+  pedidoManual        DateTime? // boton ACTUALIZAR AHORA (vence a los 30 min)
+  heartbeat           DateTime? // ultima senal de la PC del robot
+  updatedAt           DateTime  @updatedAt
+  actualizadoPor      String    @default("SISTEMA")
+}

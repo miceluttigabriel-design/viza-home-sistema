@@ -52,6 +52,11 @@ import { StockImportInfoCard } from "./stock-import-info-card";
 // SEGURIDAD automáticas de la Base (solo Supremo) + botón ENVIAR COPIA
 // AHORA. El Switch es el de siempre del proyecto (ui/switch.tsx).
 import { Switch } from "@/components/ui/switch";
+// STOCK AUTOMATICO (pedido del duenio): interruptor ON/OFF + boton
+// ACTUALIZAR AHORA del robot que exporta el CtrCredito e importa la planilla
+// en STOCK GENERAL. El estado vive en ConfigStockAuto (tabla auto-gestionada)
+// y lo consulta la PC cada minuto.
+import { StockAutoControl } from "./stock-auto-control";
 
 // Formatea una fracción decimal de porcentaje (0.25 = 25%) igual que la tabla
 // (valor × 100), pero compacto: 25%, 28%, 35.3%, 108.8% (sin ceros colgantes)
@@ -1433,6 +1438,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     ENVIAR COPIA AHORA
                   </button>
                 )}
+
+                {/* STOCK AUTOMATICO (pedido del duenio): interruptor ON/OFF +
+                    boton ACTUALIZAR AHORA. Es el robot que exporta el
+                    inventario del CtrCredito y lo importa en STOCK GENERAL
+                    (lo mismo que IMPORTAR PLANILLA, pero solo). Todo admin
+                    lo ve; los usuarios de consulta (solo lectura) no. */}
+                {!esLectura && <StockAutoControl />}
 
                 {/* Boton CREAR ETIQUETA (Task 84, pedido del dueño) — solo
                     supremo_admin: abre el modal para crear etiquetas nuevas
