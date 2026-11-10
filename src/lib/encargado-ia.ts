@@ -357,8 +357,13 @@ function contextoCompra(plan: PlanCompra) {
       plan.modo === "IDEAL"
         ? "Stock Ideal configurado"
         : plan.modo === "VENTAS"
-          ? "Reposición de ventas detectadas"
+          ? "Sin ideal: mínimo 1 por sucursal (o lo vendido, si fue mayor)"
           : "Ideal + ventas detectadas",
+    reglas: [
+      "Solo productos SELECCIONADOS (etiqueta verde) en la Base",
+      "Solo códigos desde 100.000",
+      "Cada sucursal necesita al menos 1 unidad",
+    ],
     sucursales: plan.sucursales,
     resumen: plan.resumen,
     proveedores: plan.proveedores,
@@ -404,6 +409,11 @@ REGLAS QUE NUNCA PODÉS ROMPER:
    códigos y los que están en quiebre (0 en sucursales).
 5. No inventes números: usá EXACTAMENTE las necesidades y cantidades del JSON.
 6. Si hay códigos sin PROVEEDOR, avisá que hay que completarlo en la Base.
+7. Solo se analizan productos marcados como SELECCIONADO (etiqueta verde) en
+   la Base y códigos desde 100.000. No propongas comprar códigos viejos ni
+   productos que no estén seleccionados.
+8. Cada sucursal necesita al menos 1 unidad del producto seleccionado. Si la
+   red no alcanza para eso, esa diferencia es necesidad de compra.
 
 Respondé SOLO con un objeto JSON válido, sin markdown ni texto extra:
 {

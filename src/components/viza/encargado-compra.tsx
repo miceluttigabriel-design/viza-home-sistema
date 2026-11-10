@@ -250,7 +250,7 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
                 ENCARGADO DE COMPRA
               </h2>
               <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-cyan-200/90">
-                IA · Necesidad de compra de la red · solo recomendación
+                IA · Solo SELECCIONADOS · desde COD 100.000
               </p>
             </div>
           </div>
@@ -574,10 +574,10 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
               )}
 
               <p className="text-[9px] text-stone-400 font-medium leading-relaxed">
-                Regla: primero se usa CENTRAL y las transferencias internas. Solo se recomienda
-                comprar lo que falta a la red después de eso. El objetivo sale del Stock Ideal si
-                existe; si no, se repone lo vendido detectado entre análisis. Nada se compra solo:
-                este plan y el PDF los decide el dueño.
+                Regla: solo productos SELECCIONADOS (etiqueta verde de la Base) y códigos desde
+                100.000. Cada sucursal necesita al menos 1 unidad; primero se usa CENTRAL y las
+                transferencias internas. Sin Stock Ideal, el objetivo es 1 por sucursal o lo vendido
+                si fue mayor. Nada se compra solo: este plan y el PDF los decide el dueño.
               </p>
             </>
           )}

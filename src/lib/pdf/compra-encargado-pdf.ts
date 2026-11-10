@@ -237,11 +237,11 @@ export function generarPdfCompra(
     align: "right",
   });
   doc.text(
-    `Base de cálculo: ${
+    `Base: SELECCIONADOS (verde) · COD 100.000+ · ${
       plan.modo === "IDEAL"
         ? "Stock Ideal"
         : plan.modo === "VENTAS"
-          ? "Ventas detectadas"
+          ? "mínimo 1 por sucursal"
           : "Ideal + ventas detectadas"
     }`,
     pageW - MARGEN,
@@ -458,7 +458,7 @@ export function generarPdfCompra(
   doc.setFontSize(6.8);
   doc.setTextColor(...GREY);
   const nota = doc.splitTextToSize(
-    "Documento interno generado por el ENCARGADO DE COMPRA de VIZA HOME. Es una RECOMENDACIÓN: no es una orden de compra y no genera compras a proveedores. Antes de comprar, usar CENTRAL y las transferencias internas del ENCARGADO DE DISTRIBUCIÓN. La decisión final es del dueño.",
+    "Documento interno generado por el ENCARGADO DE COMPRA de VIZA HOME. Solo analiza productos marcados como SELECCIONADO (etiqueta verde) en la Base y códigos desde 100.000. Es una RECOMENDACIÓN: no es una orden de compra y no genera compras a proveedores. Antes de comprar, usar CENTRAL y las transferencias internas del ENCARGADO DE DISTRIBUCIÓN. La decisión final es del dueño.",
     contentW
   );
   doc.text(nota, MARGEN, y + 10);

@@ -49,6 +49,8 @@ export interface EntradaProductoEncargado {
   marca: string | null;
   /** fabricante de la Base = PROVEEDOR del producto */
   proveedor?: string | null;
+  /** true = etiqueta verde SELECCIONADO en la Base */
+  seleccionado?: boolean;
   modelo: string | null;
   colores: string[];
   /** CORES tal cual viene de la Base (respaldo si no se parseó antes) */

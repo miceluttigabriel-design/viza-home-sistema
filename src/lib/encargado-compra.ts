@@ -23,10 +23,21 @@
 
 import {
   DEPOSITO_CENTRAL,
+  codigoNumero,
   ordenarSucursales,
   type EntradaPlanEncargado,
   type EntradaProductoEncargado,
 } from "@/lib/encargado-distribucion";
+
+// Task 161 (pedido del dueño): el Encargado de Compra trabaja SOLO con:
+//   · productos marcados con la etiqueta verde SELECCIONADO en la Base;
+//   · códigos desde 100.000 en adelante (los códigos viejos se descartan).
+export const CODIGO_MINIMO_COMPRA = 100_000;
+
+export function codigoCompraValido(sku: unknown): boolean {
+  const n = codigoNumero(sku);
+  return n !== null && n >= CODIGO_MINIMO_COMPRA;
+}
 
 export type PrioridadCompra = "ALTA" | "MEDIA" | "BAJA";
 
@@ -84,6 +95,10 @@ export interface ResumenCompra {
   productosConVenta: number;
   unidadesVendidas: number;
   unidadesEnCentral: number;
+  /** productos descartados por no estar SELECCIONADOS en la Base */
+  noSeleccionados: number;
+  /** productos descartados por código menor a 100.000 */
+  codigosIgnorados: number;
 }
 
 export interface PlanCompra {
@@ -128,14 +143,13 @@ function compararCodigo(a: string, b: string): number {
 function prioridadDe(
   stockSucursales: number,
   objetivoRed: number,
-  vendidoRed: number
+  vendidoRed: number,
+  detalle: DetalleSucursalCompra[]
 ): PrioridadCompra {
-  if (stockSucursales <= 0) return "ALTA";
-  if (vendidoRed > 0) {
-    const cobertura = objetivoRed > 0 ? stockSucursales / objetivoRed : 1;
-    if (cobertura < 0.5) return "ALTA";
-    return "MEDIA";
-  }
+  const quiebres = detalle.filter((d) => d.saldo <= 0 && d.objetivo > 0).length;
+  const cobertura = objetivoRed > 0 ? stockSucursales / objetivoRed : 1;
+  if (stockSucursales <= 0 || quiebres >= 2 || cobertura < 0.5) return "ALTA";
+  if (quiebres === 1 || vendidoRed > 0) return "MEDIA";
   return "BAJA";
 }
 
@@ -157,10 +171,13 @@ function objetivoSucursales(
     };
   }
 
-  // Sin ideal: reponer lo vendido (el stock actual ya está en la red).
+  // Sin ideal: cada sucursal necesita AL MENOS 1 unidad. Si además vendió,
+  // se repone lo vendido. Así un producto seleccionado con 1 sola unidad en
+  // la red genera necesidad de compra para cubrir las otras sucursales
+  // (aunque no haya ventas ni Stock Ideal configurado).
   return {
-    objetivos: sucursales.map(
-      (s) => entero(producto.saldos[s]) + entero(producto.vendido[s])
+    objetivos: sucursales.map((s) =>
+      Math.max(1, entero(producto.saldos[s]) + entero(producto.vendido[s]))
     ),
     conIdeal: false,
   };
@@ -183,8 +200,21 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   let conIdeal = 0;
   let sinIdeal = 0;
   let sinProveedor = 0;
+  let noSeleccionados = 0;
+  let codigosIgnorados = 0;
 
   for (const producto of entrada.productos || []) {
+    // Regla del dueño: SOLO productos SELECCIONADOS (etiqueta verde).
+    if (!producto.seleccionado) {
+      noSeleccionados += 1;
+      continue;
+    }
+    // Regla del dueño: descartar códigos menores a 100.000.
+    if (!codigoCompraValido(producto.sku)) {
+      codigosIgnorados += 1;
+      continue;
+    }
+
     productosAnalizados += 1;
 
     const { objetivos, conIdeal: tieneIdeal } = objetivoSucursales(producto, sucursales);
@@ -226,7 +256,7 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
 
     const colores = Array.isArray(producto.colores) ? producto.colores : [];
     const colorTexto = colores.length > 0 ? colores.join(" / ") : null;
-    const prioridad = prioridadDe(stockSucursales, objetivoRed, vendidoRed);
+    const prioridad = prioridadDe(stockSucursales, objetivoRed, vendidoRed, detalle);
 
     const saldos: Record<string, number> = {};
     for (const s of sucursales) saldos[s] = entero(producto.saldos[s]);
@@ -291,6 +321,16 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
       `${sinProveedor} código(s) con necesidad de compra no tienen PROVEEDOR (columna FABRICANTE) en la Base. Completalo para poder agrupar el pedido.`
     );
   }
+  if (noSeleccionados > 0) {
+    alertas.add(
+      `${noSeleccionados} producto(s) no están marcados como SELECCIONADO (etiqueta verde) en la Base y quedaron fuera del análisis de compra.`
+    );
+  }
+  if (codigosIgnorados > 0) {
+    alertas.add(
+      `${codigosIgnorados} código(s) menores a ${CODIGO_MINIMO_COMPRA.toLocaleString("es-PY")} fueron descartados: el Encargado de Compra solo trabaja desde ese código en adelante.`
+    );
+  }
   if (prioridadAlta > 0) {
     alertas.add(
       `${prioridadAlta} código(s) están en QUIEBRE (0 en las sucursales) o con menos de la mitad de su objetivo. Son los primeros a comprar.`
@@ -331,6 +371,8 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
       productosConVenta,
       unidadesVendidas,
       unidadesEnCentral,
+      noSeleccionados,
+      codigosIgnorados,
     },
     alertas: Array.from(alertas),
   };

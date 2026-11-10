@@ -92,6 +92,7 @@ export async function cargarDatosEncargado(
         categoria: true,
         marca: true,
         fabricante: true,
+        etiquetaColor: true,
         modelo: true,
       },
     }),
@@ -134,6 +135,8 @@ export async function cargarDatosEncargado(
       categoria: p.categoria,
       marca: p.marca,
       proveedor: p.fabricante,
+      // La etiqueta VERDE de la Base es la que el dueño llama SELECCIONADO.
+      seleccionado: String(p.etiquetaColor || "").toLowerCase() === "verde",
       modelo: p.modelo,
       colores: parsearColores(cores),
       colorLegacy: cores,
