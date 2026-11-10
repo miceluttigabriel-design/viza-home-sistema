@@ -142,6 +142,19 @@ export interface CentralEncargado {
   salidas: number;
 }
 
+// Motivo que ve el dueño en el informe:
+//   · FALTA       → la sucursal destino estaba en 0 antes de recibir.
+//   · EQUILIBRAR  → la sucursal destino ya tenía 1 o más y se pareja.
+export type MotivoVisibleTransferencia = "FALTA" | "EQUILIBRAR";
+
+export function motivoVisibleTransferencia(
+  fila: Pick<FilaEncargado, "destinoSaldo">
+): MotivoVisibleTransferencia {
+  return Math.max(0, Math.round(Number(fila.destinoSaldo) || 0)) <= 0
+    ? "FALTA"
+    : "EQUILIBRAR";
+}
+
 export interface PlanEncargado {
   generadoEn: string;
   modo: "IDEAL" | "PROPORCIONAL" | "MIXTO";

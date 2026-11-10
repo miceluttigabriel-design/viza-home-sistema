@@ -20,6 +20,14 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+// Task 161: import ESTÁTICO del PDF. Antes era `import()` dinámico y en
+// producción fallaba con "Failed to load chunk": el navegador pedía un
+// chunk que ya no existía después de un deploy. Así viaja en el mismo
+// bundle y el PDF siempre se puede generar.
+import {
+  generarPdfCompra,
+  nombreArchivoPdfCompra,
+} from "@/lib/pdf/compra-encargado-pdf";
 import type {
   AnalisisCompraIA,
   FilaCompra,
@@ -209,9 +217,6 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
     if (!plan) return;
     setPdfCargando(true);
     try {
-      const { generarPdfCompra, nombreArchivoPdfCompra } = await import(
-        "@/lib/pdf/compra-encargado-pdf"
-      );
       const doc = generarPdfCompra(plan, ia);
       doc.save(nombreArchivoPdfCompra(plan));
       toast.success("PDF del Encargado de Compra generado");

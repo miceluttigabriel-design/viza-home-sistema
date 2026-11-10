@@ -19,6 +19,7 @@ import type {
   FilaEncargado,
   PlanEncargado,
 } from "@/lib/encargado-distribucion";
+import { motivoVisibleTransferencia } from "@/lib/encargado-distribucion";
 
 // ═══════════════════════════════════════════════════════════════════
 // ENCARGADO DE DISTRIBUCIÓN — PDF (Task 160)
@@ -42,6 +43,8 @@ interface Columna {
   label: string;
   w: number;
   align?: Alineacion;
+  /** tamaño de letra propio de la columna (por defecto 7.2 en filas y 6.6 en cabecera) */
+  size?: number;
 }
 
 const MARGEN = 36;
@@ -182,6 +185,7 @@ export function generarPdfEncargado(
       const tx = align === "right" ? x + c.w - 4 : align === "center" ? x + c.w / 2 : x;
       // Task 161 (pedido del dueño): el título NUNCA puede invadir la
       // columna vecina; se recorta igual que los valores de las filas.
+      doc.setFontSize(c.size ?? 6.6);
       doc.text(recortar(doc, c.label, c.w - 8), tx, y + 10, { align });
       x += c.w;
     }
@@ -217,6 +221,7 @@ export function generarPdfEncargado(
       const c = columnas[i];
       const align = c.align || "left";
       const tx = align === "right" ? x + c.w - 4 : align === "center" ? x + c.w / 2 : x;
+      doc.setFontSize(c.size ?? 7.2);
       const texto = recortar(doc, valores[i] ?? "", c.w - 8);
       doc.text(texto, tx, y + h - 4.5, { align });
       x += c.w;
@@ -384,7 +389,7 @@ export function generarPdfEncargado(
   // ───────────── DETALLE DE DISTRIBUCIONES ─────────────
   tituloSeccion("DISTRIBUCIONES POR CÓDIGO, COLOR Y DESTINO");
 
-  asegurar(12);
+  asegurar(22);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.8);
   doc.setTextColor(...GREY);
@@ -393,17 +398,24 @@ export function generarPdfEncargado(
     MARGEN,
     y
   );
-  y += 11;
+  doc.text(
+    "MOTIVO FALTA: el destino estaba en 0. MOTIVO EQUILIBRAR: el destino ya tenía 1 o más. Salen en bloques separados.",
+    MARGEN,
+    y + 9
+  );
+  y += 19;
 
   const colsDetalle: Columna[] = [
-    { label: "COD", w: 42 },
-    { label: "PRODUCTO", w: 132 },
-    { label: "ORIGEN", w: 64 },
-    { label: "DESTINO", w: 64 },
-    { label: "CANT.", w: 30, align: "right" },
-    { label: "ORIGEN H->D", w: 66, align: "right" },
-    { label: "DESTINO H->D", w: 66, align: "right" },
-    { label: "MOTIVO", w: 54, align: "center" },
+    { label: "COD", w: 32 },
+    { label: "PRODUCTO", w: 145 },
+    // Los nombres de sucursal son largos (SALTOS DEL GUAIRA): letra algo
+    // menor para que entren completos y no se recorten.
+    { label: "ORIGEN", w: 72, size: 6.3 },
+    { label: "DESTINO", w: 72, size: 6.3 },
+    { label: "CANT.", w: 29, align: "right" },
+    { label: "ORIGEN H->D", w: 54, align: "right", size: 6.5 },
+    { label: "DESTINO H->D", w: 58, align: "right", size: 6.5 },
+    { label: "MOTIVO", w: 52, align: "center", size: 6.8 },
   ];
 
   if (plan.filas.length === 0) {
@@ -420,48 +432,100 @@ export function generarPdfEncargado(
     );
     y += 40;
   } else {
-    // Agrupar por TIPO > COLOR (las filas ya vienen ordenadas así).
-    const grupos = new Map<string, Map<string, FilaEncargado[]>>();
-    for (const f of plan.filas) {
-      const tipo = String(f.tipo || "SIN TIPO").toUpperCase();
-      const color = String(f.color || "SIN COLOR").toUpperCase();
-      if (!grupos.has(tipo)) grupos.set(tipo, new Map());
-      const porColor = grupos.get(tipo)!;
-      if (!porColor.has(color)) porColor.set(color, []);
-      porColor.get(color)!.push(f);
-    }
+    // Task 161 (pedido del dueño): separar por MOTIVO.
+    //   · FALTA      → el destino tenía 0 antes de recibir.
+    //   · EQUILIBRAR → el destino ya tenía 1 o más y se pareja.
+    const bloques: Array<{
+      motivo: "FALTA" | "EQUILIBRAR";
+      titulo: string;
+      fondo: [number, number, number];
+      color: [number, number, number];
+    }> = [
+      {
+        motivo: "FALTA",
+        titulo: "MOTIVO: FALTA · el destino estaba en 0",
+        fondo: [255, 247, 237],
+        color: [180, 83, 9],
+      },
+      {
+        motivo: "EQUILIBRAR",
+        titulo: "MOTIVO: EQUILIBRAR · el destino ya tenía stock",
+        fondo: [239, 246, 255],
+        color: [21, 87, 137],
+      },
+    ];
 
-    for (const [tipo, porColor] of grupos) {
-      for (const [color, filas] of porColor) {
-        const necesitaEncabezado = y + 34 > pageH - ALTO_FOOTER;
-        if (necesitaEncabezado) {
-          nuevaPagina(true);
-        }
-        const tituloGrupo = color === "SIN COLOR" ? `TIPO: ${tipo}` : `TIPO: ${tipo} · COLOR: ${color}`;
-        doc.setFillColor(...GOLD_LIGHT);
-        doc.roundedRect(MARGEN, y, contentW, 16, 3, 3, "F");
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(7.4);
-        doc.setTextColor(...BLUE);
-        doc.text(tituloGrupo, MARGEN + 7, y + 11);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.6);
-        doc.setTextColor(...GREY);
-        doc.text(
-          `${filas.length} transferencia(s) · ${fmtNum(
-            filas.reduce((acc, f) => acc + f.cantidad, 0)
-          )} unidad(es)`,
-          MARGEN + contentW - 7,
-          y + 11,
-          { align: "right" }
-        );
-        y += 18;
+    for (const bloque of bloques) {
+      const filasBloque = plan.filas.filter(
+        (f) => motivoVisibleTransferencia(f) === bloque.motivo
+      );
+      if (filasBloque.length === 0) continue;
 
-        encabezadoTabla(colsDetalle);
-        filas.forEach((f, i) => {
-          const ok = filaTabla(
-            colsDetalle,
-            [
+      asegurar(28);
+      doc.setFillColor(...bloque.fondo);
+      doc.roundedRect(MARGEN, y, contentW, 20, 4, 4, "F");
+      doc.setFillColor(...bloque.color);
+      doc.rect(MARGEN, y + 4, 3, 12, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.4);
+      doc.setTextColor(...bloque.color);
+      doc.text(bloque.titulo, MARGEN + 9, y + 13);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.6);
+      doc.setTextColor(...GREY);
+      doc.text(
+        `${filasBloque.length} transferencia(s) · ${fmtNum(
+          filasBloque.reduce((acc, f) => acc + f.cantidad, 0)
+        )} unidad(es)`,
+        MARGEN + contentW - 7,
+        y + 13,
+        { align: "right" }
+      );
+      y += 25;
+
+      // Dentro del motivo, agrupar por TIPO > COLOR.
+      const grupos = new Map<string, Map<string, FilaEncargado[]>>();
+      for (const f of filasBloque) {
+        const tipo = String(f.tipo || "SIN TIPO").toUpperCase();
+        const color = String(f.color || "SIN COLOR").toUpperCase();
+        if (!grupos.has(tipo)) grupos.set(tipo, new Map());
+        const porColor = grupos.get(tipo)!;
+        if (!porColor.has(color)) porColor.set(color, []);
+        porColor.get(color)!.push(f);
+      }
+
+      for (const [tipo, porColor] of grupos) {
+        for (const [color, filas] of porColor) {
+          if (y + 34 > pageH - ALTO_FOOTER) {
+            nuevaPagina(true);
+          }
+          const tituloGrupo = `${bloque.motivo} · ${
+            color === "SIN COLOR"
+              ? `TIPO: ${tipo}`
+              : `TIPO: ${tipo} · COLOR: ${color}`
+          }`;
+          doc.setFillColor(...GOLD_LIGHT);
+          doc.roundedRect(MARGEN, y, contentW, 16, 3, 3, "F");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7.4);
+          doc.setTextColor(...BLUE);
+          doc.text(tituloGrupo, MARGEN + 7, y + 11);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6.6);
+          doc.setTextColor(...GREY);
+          doc.text(
+            `${filas.length} transferencia(s) · ${fmtNum(
+              filas.reduce((acc, f) => acc + f.cantidad, 0)
+            )} unidad(es)`,
+            MARGEN + contentW - 7,
+            y + 11,
+            { align: "right" }
+          );
+          y += 18;
+
+          encabezadoTabla(colsDetalle);
+          filas.forEach((f, i) => {
+            const valores = [
               f.sku,
               f.producto,
               f.origen,
@@ -469,38 +533,33 @@ export function generarPdfEncargado(
               fmtNum(f.cantidad),
               `${fmtNum(f.origenSaldo)} -> ${fmtNum(f.origenDespues)}`,
               `${fmtNum(f.destinoSaldo)} -> ${fmtNum(f.destinoDespues)}`,
-              f.motivo === "REPOSICION" ? "REPONE" : "EQUILIBRA",
-            ],
-            { zebra: i % 2 === 1, negrita: false }
-          );
-          if (!ok) {
-            nuevaPagina(true);
-            doc.setFillColor(...GOLD_LIGHT);
-            doc.roundedRect(MARGEN, y, contentW, 16, 3, 3, "F");
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(7.4);
-            doc.setTextColor(...BLUE);
-            doc.text(tituloGrupo, MARGEN + 7, y + 11);
-            y += 18;
-            encabezadoTabla(colsDetalle);
-            filaTabla(
-              colsDetalle,
-              [
-                f.sku,
-                f.producto,
-                f.origen,
-                f.destino,
-                fmtNum(f.cantidad),
-                `${fmtNum(f.origenSaldo)} -> ${fmtNum(f.origenDespues)}`,
-                `${fmtNum(f.destinoSaldo)} -> ${fmtNum(f.destinoDespues)}`,
-                f.motivo === "REPOSICION" ? "REPONE" : "EQUILIBRA",
-              ],
-              { negrita: false }
-            );
-          }
-        });
-        y += 6;
+              motivoVisibleTransferencia(f),
+            ];
+            const ok = filaTabla(colsDetalle, valores, {
+              zebra: i % 2 === 1,
+              negrita: false,
+              color: bloque.color,
+            });
+            if (!ok) {
+              nuevaPagina(true);
+              doc.setFillColor(...GOLD_LIGHT);
+              doc.roundedRect(MARGEN, y, contentW, 16, 3, 3, "F");
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(7.4);
+              doc.setTextColor(...BLUE);
+              doc.text(`${tituloGrupo} (continuación)`, MARGEN + 7, y + 11);
+              y += 18;
+              encabezadoTabla(colsDetalle);
+              filaTabla(colsDetalle, valores, {
+                negrita: false,
+                color: bloque.color,
+              });
+            }
+          });
+          y += 6;
+        }
       }
+      y += 2;
     }
   }
 

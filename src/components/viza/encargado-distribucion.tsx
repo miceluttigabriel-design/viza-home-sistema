@@ -20,6 +20,12 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+// Import ESTÁTICO del PDF: evita el error "Failed to load chunk" en
+// producción después de un deploy.
+import {
+  generarPdfEncargado,
+  nombreArchivoPdfEncargado,
+} from "@/lib/pdf/distribucion-encargado-pdf";
 import type {
   AnalisisEncargadoIA,
   FilaEncargado,
@@ -201,9 +207,6 @@ export function EncargadoDistribucion({
     if (!plan) return;
     setPdfCargando(true);
     try {
-      const { generarPdfEncargado, nombreArchivoPdfEncargado } = await import(
-        "@/lib/pdf/distribucion-encargado-pdf"
-      );
       const doc = generarPdfEncargado(plan, ia);
       doc.save(nombreArchivoPdfEncargado(plan));
       toast.success("PDF del Encargado generado");
