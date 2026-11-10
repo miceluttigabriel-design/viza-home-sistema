@@ -114,10 +114,10 @@ export function extractCostoMayorista(product: unknown): number {
 // CALCULO (entrada + crédito sin interés) y depende de la CANTIDAD DE CUOTAS.
 // Task 156: se calcula PRODUCTO POR PRODUCTO con su costo + margen del plan,
 // así NINGUNA línea queda por debajo de su costo. En CUOTA, sales-panel manda
-// el mapa ya calculado (`porItem`). En SAFRA / CHEQUE / MAYORISTA se sigue
-// repartiendo la base total por costo (como la planilla), porque ahí la base
-// es el total sin interés del plan. Es SOLO de pantalla, igual que el costo:
-// nunca viaja al PDF ni a la BD.
+// el mapa ya calculado (`porItem`). En SAFRA se sigue repartiendo la base total
+// por costo (como la planilla), porque ahí la base es el total sin interés del
+// plan. CHEQUE y MAYORISTA NO muestran valor base (solo costo). Es SOLO de
+// pantalla, igual que el costo: nunca viaja al PDF ni a la BD.
 //
 // Si el vendedor tiene varios planes, elige arriba el plan (A, B…) y el valor
 // base se recalcula para ESE plan.
@@ -202,8 +202,8 @@ export function CostoInterno({
   const planesValidos = (basePlanes ?? []).filter((p) => p.valorBase > 0);
   // Si el plan manda `basePlanes` (CUOTA), NO se cae al contado cuando ningún
   // plan tiene base válida: se muestra sin base antes que un número debajo del
-  // costo. SAFRA/CHEQUE/MAYORISTA no mandan `basePlanes` y siguen usando
-  // `baseTotal` como siempre.
+  // costo. SAFRA manda `baseTotal` (contado). CHEQUE y MAYORISTA ya NO muestran
+  // valor base (pedido del dueño): solo el costo de los productos.
   const usaPlanes = basePlanes !== undefined;
   const planActivo =
     planesValidos.find((p) => p.key === planElegido) ?? planesValidos[0] ?? null;
@@ -418,14 +418,6 @@ export function CostoInterno({
           — = producto sin costo cargado en la BASE (se carga en el Panel
           Admin). Los productos viejos guardados antes de esta versión también
           muestran — hasta que se vuelvan a agregar.
-        </p>
-      )}
-      {mostrarBase && (
-        <p className="text-[9px] mt-1" style={{ color: COSTO_NOTA }}>
-          Valor base = base del plan según la cantidad de cuotas (como la
-          planilla CRED CALCULO: entrada + crédito sin interés), calculada
-          PRODUCTO POR PRODUCTO con su costo + margen del plan (nunca queda por
-          debajo del costo).
         </p>
       )}
       {mostrarBase &&
