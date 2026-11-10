@@ -356,7 +356,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [calcDone, setCalcDone] = useState(false); // si ya se calculó al menos una vez
   const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [viewMode, setViewMode] = useState<"cotizador" | "safra" | "cheque" | "mayorista" | "especial">("cotizador");
+  // Task 149 (pedido del dueño): al entrar NO hay plan seleccionado. Los
+  // cuadros azules de completar (y todo el flujo de cada plan) aparecen SOLO
+  // cuando el usuario marca un tipo de plan en PRESUPUESTAR. null = ninguno.
+  type ViewModePlan = "cotizador" | "safra" | "cheque" | "mayorista" | "especial";
+  const [viewMode, setViewMode] = useState<ViewModePlan | null>(null);
   // Task 142 (pedido del dueño): un solo botón dorado PRESUPUESTAR que abre
   // el menú con los 5 tipos de plan (SAFRA / CUOTA / CHEQUE / PEDIDO ESPECIAL
   // / MAYORISTA). Antes eran 5 botones sueltos en el header; ahora el panel
@@ -1268,7 +1272,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {isSupremoRole && onGoGestion && (
               <button
                 onClick={onGoGestion}
-                className="h-9 px-3 rounded-xl font-bold text-[10px] sm:text-[11px] flex items-center justify-center whitespace-nowrap transition-colors shadow-sm hover:brightness-110 shrink-0"
+                className="h-9 px-3 rounded-xl font-bold text-[10px] sm:text-[11px] flex items-center justify-center whitespace-nowrap transition-colors shadow-sm hover:brightness-110 shrink-0 order-4"
                 style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO }}
                 title="Gestión de Accesos y Contraseñas"
                 aria-label="Gestión de Accesos y Contraseñas"
@@ -1284,7 +1288,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {onGoOrquestador && (
               <button
                 onClick={onGoOrquestador}
-                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-colors hover:brightness-110 shrink-0"
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center justify-center whitespace-nowrap transition-colors hover:brightness-110 shrink-0 order-4"
                 style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO }}
                 title="Volver al Orquestador (los 4 cuadros del sistema)"
               >
@@ -1298,7 +1302,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {onGoStock && (
               <button
                 onClick={onGoStock}
-                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0 order-4"
                 style={{ backgroundColor: "#FFFFFF", color: AZUL_OSCURO }}
                 title="IR A STOCK GENERAL (inventario por sucursal + distribución inteligente)"
               >
@@ -1309,7 +1313,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {isAdmin && onGoAdmin && (
               <button
                 onClick={onGoAdmin}
-                className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border border-transparent hover:brightness-95 shrink-0"
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border border-transparent hover:brightness-95 shrink-0 order-4"
                 style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
                 title="Volver al Panel Admin"
               >
@@ -1323,7 +1327,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {esEncargadoCrm && (
               <button
                 onClick={abrirCrmSucursal}
-                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110 shrink-0"
+                className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110 shrink-0 order-4"
                 style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO }}
                 title={`CRM · Presupuestos de mi sucursal${sucursalDelEncargado ? ` (${sucursalDelEncargado})` : ""}`}
                 aria-label="CRM de mi sucursal"
@@ -1339,7 +1343,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {onGoBase && (
               <button
                 onClick={onGoBase}
-                className="h-10 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border border-transparent hover:brightness-95 shrink-0"
+                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-colors border border-transparent hover:brightness-95 shrink-0 order-4"
                 style={{ backgroundColor: DORADO, color: AZUL_OSCURO }}
                 title="Ver la BASE de productos (solo lectura, no se puede editar nada)"
               >
@@ -1352,7 +1356,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 sueltos; ahora el panel queda más limpio. La lógica es la
                 MISMA de siempre: cada opción hace exactamente el mismo
                 setViewMode que hacía su botón anterior. === */}
-            <div ref={presupuestarRef} className="relative shrink-0">
+            <div ref={presupuestarRef} className="relative shrink-0 order-1">
               <button
                 onClick={() => setPresupuestarOpen((v) => !v)}
                 aria-haspopup="menu"
@@ -1407,7 +1411,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                         key={plan.id}
                         role="menuitem"
                         onClick={() => {
-                          setViewMode(plan.id);
+                          // Tocar el plan ya activo lo deselecciona: el
+                          // usuario puede quedar SIN plan (Task 149).
+                          setViewMode(viewMode === plan.id ? null : plan.id);
                           setPresupuestarOpen(false);
                         }}
                         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-xs sm:text-sm font-bold uppercase tracking-wide transition-colors ${
@@ -1424,6 +1430,31 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                       </button>
                     );
                   })}
+                  {/* Task 149: opción explícita para quedar SIN plan.
+                      Así no aparece ningún cuadro de completar hasta marcar
+                      un tipo de plan. */}
+                  <div
+                    className="h-px"
+                    style={{ backgroundColor: "rgba(217,184,107,0.25)" }}
+                  />
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setViewMode(null);
+                      setPresupuestarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-xs sm:text-sm font-bold uppercase tracking-wide transition-colors ${
+                      viewMode === null ? "" : "hover:bg-white/10"
+                    }`}
+                    style={
+                      viewMode === null
+                        ? { backgroundColor: DORADO, color: AZUL_OSCURO }
+                        : { color: DORADO_CLARO }
+                    }
+                  >
+                    <span>NINGÚN PLAN</span>
+                    {viewMode === null && <Check className="h-4 w-4" />}
+                  </button>
                 </div>
               )}
             </div>
@@ -1433,7 +1464,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 y deja la cotización más limpia. Sin cambios de lógica. === */}
             <button
               onClick={abrirListaClasificados}
-              className="h-9 px-3 sm:px-4 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all border shadow-md hover:brightness-110 shrink-0"
+              className="h-9 px-3 sm:px-4 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all border shadow-md hover:brightness-110 shrink-0 order-2"
               style={{
                 background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 55%, ${DORADO_CLARO} 100%)`,
                 color: AZUL_OSCURO,
@@ -1445,6 +1476,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               <span className="hidden sm:inline">LISTA DE CLASIFICADOS</span>
               <span className="sm:hidden">CLASIFICADOS</span>
             </button>
+            {/* Task 149 (pedido del dueño): separa el header en 2 filas.
+                FILA 1 → reloj + PRESUPUESTAR + LISTA DE CLASIFICADOS.
+                FILA 2 → GESTIÓN DE ACCESOS / ORQUESTADOR / BASE y demás
+                navegación (order en los botones de arriba). */}
+            <span aria-hidden="true" className="order-3 basis-full w-full h-0" />
           </div>
 
           {/* LADO DERECHO: Avatar + Cambiar contraseña (ENTRE MEDIO) + Cerrar sesión.
@@ -1469,7 +1505,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 translúcidos y se perdían). Mismos iconos y acciones. */}
             <button
               onClick={() => setCambiarContrasenaOpen(true)}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-all border shadow-md hover:brightness-110 shrink-0"
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-all border shadow-md hover:brightness-110 shrink-0"
               style={{
                 background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 55%, ${DORADO_CLARO} 100%)`,
                 color: AZUL_OSCURO,
@@ -1483,7 +1519,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             {/* Cerrar sesión - AL LADO DEL USUARIO, LADO DERECHO (justo después del avatar) */}
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
-              className="h-10 w-10 rounded-xl flex items-center justify-center transition-all border shadow-md hover:brightness-110 shrink-0"
+              className="h-9 w-9 rounded-xl flex items-center justify-center transition-all border shadow-md hover:brightness-110 shrink-0"
               style={{
                 background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 55%, ${DORADO_CLARO} 100%)`,
                 color: AZUL_OSCURO,
@@ -1885,6 +1921,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       })()}
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+        {/* Task 149 (pedido del dueño): sin plan seleccionado NO se muestra
+            ningún cuadro azul de completar. Solo este aviso neutro hasta que
+            el usuario marque un tipo de plan en PRESUPUESTAR. */}
+        {viewMode === null && (
+          <div className="py-16 text-center">
+            <FileText className="h-10 w-10 mx-auto text-stone-300" />
+            <p className="mt-3 text-base font-bold text-stone-600">
+              Elegí un tipo de plan para comenzar
+            </p>
+            <p className="mt-1 text-sm text-stone-400">
+              Tocá PRESUPUESTAR y seleccioná el plan que vas a usar.
+            </p>
+          </div>
+        )}
         {viewMode === "safra" && <PlanSafra sucursalMia={sucursalMia} />}
         {viewMode === "cheque" && <PlanCheque sucursalMia={sucursalMia} />}
         {viewMode === "mayorista" && <PlanMayorista sucursalMia={sucursalMia} />}
