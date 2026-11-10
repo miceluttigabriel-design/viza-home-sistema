@@ -22,6 +22,7 @@
 // aparecer en ningún presupuesto "de ningún modo". El ojito es SOLO VISUAL:
 // no toca cálculos, ni stores de cotización, ni PDFs.
 
+import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { formatPYG } from "@/lib/format";
 import {
@@ -46,6 +47,8 @@ export interface CostoInternoItem {
   // Costo UNITARIO del producto (campo cost/costProd de la BASE).
   // undefined/0 = producto sin costo cargado → se muestra "—".
   cost?: number;
+  // Regalo (CASCO / CHAPA): no se financia, así que no recibe valor base.
+  esRegalo?: boolean;
 }
 
 // Lee el costo del producto que devuelve /api/products.
@@ -106,12 +109,24 @@ export function extractCostoMayorista(product: unknown): number {
 // opción de cotización (CUOTA / SAFRA / CHEQUE / MAYORISTA).
 // Devuelve null si no hay productos, para no ocupar espacio.
 //
-// Task 153 (pedido del dueño): además del COSTO, el vendedor ve el VALOR BASE
-// de cada producto. Sale de la misma cuenta de la planilla CRED CALCULO:
-// el valor base total del plan se reparte entre los productos en proporción a
-// su costo (costo unitario × cantidad), cada línea se redondea al millar y la
-// primera línea absorbe la diferencia para que la suma cierre exacta.
-// Es SOLO de pantalla, igual que el costo: nunca viaja al PDF ni a la BD.
+// Task 153/154 (pedido del dueño): además del COSTO, el vendedor ve el VALOR
+// BASE de cada producto. Sale de la misma cuenta de la planilla CRED CALCULO:
+// el valor base TOTAL del plan (que depende de la CANTIDAD DE CUOTAS, ver
+// valorBaseSegunCuotas en sales-panel) se reparte entre los productos en
+// proporción a su costo (costo unitario × cantidad), cada línea se redondea al
+// millar y la primera línea absorbe la diferencia para que la suma cierre
+// exacta. Es SOLO de pantalla, igual que el costo: nunca viaja al PDF ni a la
+// BD.
+//
+// Si el vendedor tiene varios planes calculados, elige arriba el plan (A, B…)
+// y el valor base se recalcula para ESE plan. Si no hay planes calculados, se
+// usa el valor de contado (baseTotal) como hasta ahora.
+
+export interface CostoBasePlan {
+  key: string;
+  label: string;
+  valorBase: number;
+}
 
 // Reparte el valor base total entre las líneas CON costo, igual que la
 // planilla: ROUND(costo_linea / costo_total × valor_base_total, -3) y la
@@ -121,7 +136,9 @@ function repartirValorBase(
   baseTotal: number
 ): Map<string, number> {
   const repartido = new Map<string, number>();
-  const conCosto = items.filter((it) => (it.cost ?? 0) > 0 && it.quantity > 0);
+  const conCosto = items.filter(
+    (it) => (it.cost ?? 0) > 0 && it.quantity > 0 && !it.esRegalo
+  );
   if (conCosto.length === 0 || baseTotal <= 0) return repartido;
 
   const totalCosto = conCosto.reduce(
@@ -154,15 +171,21 @@ function repartirValorBase(
 export function CostoInterno({
   items,
   baseTotal,
+  basePlanes,
 }: {
   items: CostoInternoItem[];
   // Valor base total del plan (precio de contado / base a financiar). Si no
   // llega o vale 0, el cuadrito se muestra EXACTAMENTE como antes (solo costo).
   baseTotal?: number;
+  // Valor base de cada plan calculado (depende de la cantidad de cuotas).
+  // Si llega, se muestra un selector compacto y manda el plan elegido.
+  basePlanes?: CostoBasePlan[];
 }) {
   // Task 114: ojito funcional — estado compartido por los 4 cuadros.
   const oculto = useCostoOcultoStore((s) => s.oculto);
   const toggleOculto = useCostoOcultoStore((s) => s.toggleOculto);
+  // Task 154: plan elegido para ver el valor base (A, B, …).
+  const [planElegido, setPlanElegido] = useState<string | null>(null);
 
   if (items.length === 0) return null;
 
@@ -171,10 +194,15 @@ export function CostoInterno({
     0
   );
   const haySinCosto = items.some((it) => (it.cost ?? 0) <= 0);
+  const planesValidos = (basePlanes ?? []).filter((p) => p.valorBase > 0);
+  const planActivo =
+    planesValidos.find((p) => p.key === planElegido) ?? planesValidos[0] ?? null;
+  const baseTotalEfectivo = planActivo ? planActivo.valorBase : (baseTotal ?? 0);
   const mostrarBase =
-    (baseTotal ?? 0) > 0 && items.some((it) => (it.cost ?? 0) > 0);
+    baseTotalEfectivo > 0 &&
+    items.some((it) => (it.cost ?? 0) > 0 && !it.esRegalo);
   const basePorItem = mostrarBase
-    ? repartirValorBase(items, baseTotal ?? 0)
+    ? repartirValorBase(items, baseTotalEfectivo)
     : new Map<string, number>();
   const totalBase = mostrarBase
     ? items.reduce((sum, it) => sum + (basePorItem.get(it.key) ?? 0), 0)
@@ -231,6 +259,51 @@ export function CostoInterno({
           No sale en el PDF
         </span>
       </div>
+
+      {/* Selector compacto del plan (solo si hay más de un plan calculado):
+          el valor base CAMBIA con la cantidad de cuotas. */}
+      {planesValidos.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1 mb-1.5">
+          <span
+            className="text-[9px] font-bold uppercase tracking-wide"
+            style={{ color: COSTO_NOTA }}
+          >
+            Valor base del plan:
+          </span>
+          {planesValidos.map((p) => {
+            const activo = planActivo?.key === p.key;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setPlanElegido(p.key)}
+                aria-pressed={activo}
+                className="px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors"
+                style={
+                  activo
+                    ? {
+                        backgroundColor: COSTO_VALOR,
+                        color: COSTO_BG,
+                        borderColor: COSTO_VALOR,
+                      }
+                    : {
+                        color: COSTO_TXT,
+                        borderColor: "rgba(255,255,255,0.35)",
+                      }
+                }
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {planesValidos.length === 1 && (
+        <p className="text-[9px] font-semibold mb-1" style={{ color: COSTO_NOTA }}>
+          Valor base del plan {planActivo?.label} · se calcula con la cantidad de
+          cuotas
+        </p>
+      )}
 
       {/* Encabezado de columnas: Producto · Costo · Valor base */}
       <div
@@ -318,8 +391,9 @@ export function CostoInterno({
       )}
       {mostrarBase && (
         <p className="text-[9px] mt-1" style={{ color: COSTO_NOTA }}>
-          Valor base = precio de contado del plan repartido por costo (como la
-          planilla CRED CALCULO).
+          Valor base = base del plan según la cantidad de cuotas (como la
+          planilla CRED CALCULO: entrada + crédito sin interés), repartida por
+          costo.
         </p>
       )}
     </div>

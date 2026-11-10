@@ -149,6 +149,46 @@ function calcularCuotaSinEntrega(valorBase: number, margen: number): number {
   return Math.round(valorBase * (1 + margen));
 }
 
+// TASK 154 (pedido del dueño): el VALOR BASE de cada plan sale de la MISMA
+// cuenta de la planilla CRED CALCULO y por eso DEPENDE DE LA CANTIDAD DE
+// CUOTAS (no es el contado pelado):
+//   · CON ENTREGA (N pagos, el 1º es la entrada):
+//       entrada    = entrega personalizada (o el valor de la 1ª cuota)
+//       financiado = total del plan − entrada
+//       cuotas financiadas = N − 1
+//       valor base = entrada + ROUND(financiado / (1 + (N−1)×1,5%), -3)
+//   · SIN ENTREGA: valor base = ROUND(total / (1 + N×1,5%), -3)
+//   · 1 SOLO PAGO: valor base = ROUND(total / 1,015, -3)
+// El 1,5% por cuota es la MISMA tasa de la planilla (P26 = CUOTAS × 1,5).
+// La entrada queda incluida (como J24 + J26 en la planilla) para que la suma
+// del valor base sea el precio real de los productos.
+function valorBaseSegunCuotas(args: {
+  total: number;
+  cuotas: number;
+  valorPorCuota: number;
+  conEntrega: boolean;
+  entregaPersonalizada?: number;
+}): number {
+  const total = Number(args.total) || 0;
+  if (total <= 0) return 0;
+  const n = Math.max(1, Math.floor(Number(args.cuotas) || 1));
+  const alMillar = (v: number) => Math.round(v / 1000) * 1000;
+  if (n <= 1) return Math.max(0, alMillar(total / 1.015));
+  if (!args.conEntrega) {
+    return Math.max(0, alMillar(total / (1 + n * 0.015)));
+  }
+  const entregaPersonalizada = Math.round(args.entregaPersonalizada || 0);
+  const entrada =
+    entregaPersonalizada > 0
+      ? entregaPersonalizada
+      : Math.max(0, Number(args.valorPorCuota) || 0);
+  const financiado = Math.max(0, total - entrada);
+  return Math.max(
+    0,
+    entrada + alMillar(financiado / (1 + (n - 1) * 0.015))
+  );
+}
+
 // REDONDEO COMERCIAL HACIA ARRIBA
 // Redondea SIEMPRE al millar superior más cercano.
 // Ej: 1.594.440 → 1.595.000 | 1.548.000 → 1.548.000 (no cambia si ya es exacto)
@@ -785,6 +825,68 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   const contadoAjustado = Math.round(
     contadoOriginalTotal * (1 + (contadoMarginPct || 0) / 100)
   );
+
+  // TASK 154 — VALOR BASE por plan para el cuadrito del vendedor.
+  // El valor base NO es el contado pelado: sale de la cuenta de la planilla
+  // CRED CALCULO y depende de la CANTIDAD DE CUOTAS de cada plan.
+  // Si ya se calcularon los planes se usan esos totales exactos (incluyen la
+  // entrega personalizada); si no, se calculan en vivo con la misma fórmula.
+  const itemsFinanciablesBase = items.filter(
+    (i) =>
+      !i.name.toUpperCase().includes("CASCO") && !esProductoRegalo(i.sku)
+  );
+  const planesConBase =
+    calculatedPlanes.length > 0
+      ? calculatedPlanes.map((p) => ({
+          id: p.id,
+          cuotas: p.cuotas,
+          valorPorCuota: p.valorPorCuota,
+          total: p.total,
+        }))
+      : planes.map((p) => {
+          const valorPorCuota = itemsFinanciablesBase.reduce(
+            (sum, i) => sum + getItemPriceN(i, p.cuotas) * i.quantity,
+            0
+          );
+          return {
+            id: p.id,
+            cuotas: p.cuotas,
+            valorPorCuota,
+            total: valorPorCuota * p.cuotas,
+          };
+        });
+  const letraBasePlan = (idx: number) =>
+    String.fromCharCode(65 + idx + (incluirContadoEnPresupuesto ? 1 : 0));
+  const planesBaseCosto = [
+    ...(mostrarConEntrega || !mostrarSinEntrega
+      ? planesConBase.map((p, idx) => ({
+          key: `con:${p.id}`,
+          label: `${letraBasePlan(idx)} · ${p.cuotas} ${
+            p.cuotas === 1 ? "pago" : "cuotas"
+          }`,
+          valorBase: valorBaseSegunCuotas({
+            total: p.total,
+            cuotas: p.cuotas,
+            valorPorCuota: p.valorPorCuota,
+            conEntrega: mostrarConEntrega,
+            entregaPersonalizada,
+          }),
+        }))
+      : []),
+    ...(mostrarSinEntrega
+      ? calculatedPlanesSinEntrega.map((p, idx) => ({
+          key: `sin:${p.id}`,
+          label: `${letraBasePlan(idx)} · ${p.cuotas}c s/ent`,
+          valorBase: valorBaseSegunCuotas({
+            total: p.total,
+            cuotas: p.cuotas,
+            valorPorCuota: p.valorPorCuota,
+            conEntrega: false,
+            entregaPersonalizada: 0,
+          }),
+        }))
+      : []),
+  ].filter((p) => p.valorBase > 0);
 
   // Verificar si hay planes duplicados
   const duplicatePlanes = planes.filter((p, i, arr) =>
@@ -2089,8 +2191,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               name: it.name,
               quantity: it.quantity,
               cost: it.cost,
+              esRegalo:
+                esProductoRegalo(it.sku) ||
+                it.name.toUpperCase().includes("CASCO"),
             }))}
             baseTotal={contadoAjustado}
+            basePlanes={planesBaseCosto}
           />
         </Section>
 
@@ -2267,11 +2373,21 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               {planes.map((plan, idx) => {
                 const calculated = calculatedPlanes.find((p) => p.id === plan.id);
                 const isDuplicate = duplicatePlanes.some((d) => d.id === plan.id);
+                const valorBasePlan = calculated?.calculado
+                  ? valorBaseSegunCuotas({
+                      total: calculated.total,
+                      cuotas: calculated.cuotas,
+                      valorPorCuota: calculated.valorPorCuota,
+                      conEntrega: mostrarConEntrega,
+                      entregaPersonalizada,
+                    })
+                  : 0;
                 return (
                   <PlanRow
                     key={plan.id}
                     plan={plan}
                     calculated={calculated}
+                    valorBase={valorBasePlan}
                     index={idx + 1}
                     isDuplicate={isDuplicate}
                     includeContadoAsPlan={incluirContadoEnPresupuesto}
@@ -3046,6 +3162,7 @@ function ProductItemRow({
 function PlanRow({
   plan,
   calculated,
+  valorBase,
   index,
   isDuplicate,
   includeContadoAsPlan,
@@ -3054,6 +3171,7 @@ function PlanRow({
 }: {
   plan: PlanCuotas;
   calculated: PlanCuotas | undefined;
+  valorBase?: number;
   index: number;
   isDuplicate: boolean;
   includeContadoAsPlan?: boolean;
@@ -3103,6 +3221,11 @@ function PlanRow({
             <p className="font-bold text-stone-900 text-sm tabular-nums whitespace-nowrap">
               {formatPYG(calculated.total)}
             </p>
+            {(valorBase ?? 0) > 0 && (
+              <p className="text-[9px] text-stone-500 font-semibold tabular-nums whitespace-nowrap">
+                Base {formatPYG(valorBase ?? 0)}
+              </p>
+            )}
           </div>
         </div>
       ) : (
