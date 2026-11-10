@@ -51,7 +51,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { suscribirseAEdicionesProductos } from "@/lib/replicacion-productos";
 import {
   ArrowLeft,
-  Sparkles,
   Boxes,
   Layers,
   Tags,
@@ -509,27 +508,40 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
             {esSupremo && (
               <button
                 onClick={() => setEncargadoOpen(true)}
-                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-110 shrink-0"
-                style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL }}
+                className="h-9 px-3 sm:px-4 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all hover:brightness-105 hover:-translate-y-px shrink-0"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #FFE9A8 0%, #E9C86E 42%, #C9A23F 100%)",
+                  color: AZUL,
+                  border: "1px solid rgba(255,255,255,0.65)",
+                  boxShadow:
+                    "0 0 14px rgba(233,200,110,0.55), inset 0 1px 0 rgba(255,255,255,0.7)",
+                }}
                 title="ENCARGADO DE DISTRIBUCIÓN con IA: analiza tipo, color y stock de las 4 sucursales y genera el plan + PDF (solo transferencias internas)"
               >
-                <Sparkles className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">ENCARGADO DE DISTRIBUCIÓN</span>
                 <span className="sm:hidden">ENCARGADO</span>
               </button>
             )}
-            {/* Task 161 (pedido del dueño): COMPRA INTELIGENTE abre el
-                ENCARGADO DE COMPRA (necesidades + proveedores + IA + PDF).
+            {/* Task 161 (pedido del dueño): el botón se llama ENCARGADO DE
+                COMPRA y abre el modal (necesidades + proveedores + IA + PDF).
                 Igual que el de distribución, SOLO lo ve el usuario supremo. */}
             {esSupremo && (
               <button
                 onClick={() => setCompraOpen(true)}
-                className="h-9 px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-110 shrink-0"
-                style={{ background: "linear-gradient(135deg, #0e7490 0%, #155e75 100%)", color: "#ffffff" }}
-                title="COMPRA INTELIGENTE: el Encargado de Compra analiza la necesidad de compra de la red por proveedor y genera el PDF (solo recomendación)"
+                className="h-9 px-3 sm:px-4 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all hover:brightness-105 hover:-translate-y-px shrink-0"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #FFE9A8 0%, #E9C86E 42%, #C9A23F 100%)",
+                  color: AZUL,
+                  border: "1px solid rgba(255,255,255,0.65)",
+                  boxShadow:
+                    "0 0 14px rgba(233,200,110,0.55), inset 0 1px 0 rgba(255,255,255,0.7)",
+                }}
+                title="ENCARGADO DE COMPRA: analiza la necesidad de compra de la red por proveedor y genera el PDF (solo recomendación)"
               >
                 <ShoppingCart className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">COMPRA INTELIGENTE</span>
+                <span className="hidden sm:inline">ENCARGADO DE COMPRA</span>
                 <span className="sm:hidden">COMPRA</span>
               </button>
             )}
