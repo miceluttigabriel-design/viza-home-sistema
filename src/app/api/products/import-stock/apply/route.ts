@@ -56,6 +56,10 @@ interface NuevoItem {
   name: string | null;
   referencia: string | null;  // ← Codigo Fabrica del Excel
   subGrupo: string | null;
+  // Task 155: PROVEEDOR del Excel (columna "Proveedor"). SOLO se usa al crear
+  // el código nuevo → se guarda en Product.fabricante (columna PROVEDOR).
+  // En productos existentes la importación NO toca este campo.
+  proveedor?: string | null;
   stock: number;
   costProd: number | null;
 }
@@ -243,7 +247,7 @@ function recalculateFull(p: any, tasas: TasasCambio = TASAS_DEFAULT): void {
 // lee ese campo (SOLO LECTURA) como tasa de interés mensual y la planilla de
 // inventario no lo trae.
 function buildNuevoProduct(
-  n: { sku: string; name: string | null; referencia: string | null; subGrupo: string | null; stock: number; costProd: number | null },
+  n: { sku: string; name: string | null; referencia: string | null; subGrupo: string | null; proveedor?: string | null; stock: number; costProd: number | null },
   stats: MarginStats | null,
   safraStats?: SafraStats | null,
   tasas?: TasasCambio
@@ -253,6 +257,9 @@ function buildNuevoProduct(
     name: n.name || `PRODUCTO ${n.sku}`,
     referencia: n.referencia,
     subGrupo: n.subGrupo,
+    // Task 155: PROVEEDOR del Excel → campo `fabricante` (es el que la tabla
+    // del admin muestra como PROVEDOR). Si la planilla no lo trae, null.
+    fabricante: n.proveedor?.trim() || null,
     stock: n.stock,
     costProd: n.costProd,
     showInCatalog: false,
@@ -345,6 +352,9 @@ export async function POST(req: NextRequest) {
         name: a.nameActual,
         referencia: null,
         subGrupo: null,
+        // El fallback de `actualizados` no trae datos del Excel (solo costo y
+        // stock), así que el proveedor queda desconocido → no se inventa.
+        proveedor: null,
         stock: a.stockNuevo,
         costProd: a.costoNuevo ?? null,
       }));

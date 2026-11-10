@@ -232,6 +232,11 @@ export async function POST(req: NextRequest) {
         costProd: number | null;
         referencia: string | null;
         subGrupo: string | null;
+        // PROVEEDOR de la planilla del ERP (columna "Proveedor"). Se usa SOLO
+        // al crear un código NUEVO: se guarda en Product.fabricante, que es el
+        // campo que la tabla muestra como PROVEDOR. En productos existentes
+        // NO se toca (regla: al importar solo costo + stock).
+        proveedor: string | null;
         name: string | null;
         filas: number;
         // Task 98: saldo de ESTE codigo repartido por SUCURSAL tal cual
@@ -290,6 +295,10 @@ export async function POST(req: NextRequest) {
       const referencia = toString(getCell(row, "CODIGO FABRICA")) || null;
       const subGrupo = toString(getCell(row, "SUBGRUPO")) || null;
       const name = toString(getCell(row, "DESCRIPCION")) || null;
+      // Task 155: el PROVEEDOR del ERP entra en el producto NUEVO (la planilla
+      // lo trae en la columna "Proveedor", al lado de Marca). Si la fila no lo
+      // trae, queda null y el producto se crea igual que antes.
+      const proveedor = toString(getCell(row, "PROVEEDOR")) || null;
 
       // ─── Task 98: sucursal de la fila (mayúsculas, sin espacios) ───
       let sucursalFila = "";
@@ -302,6 +311,11 @@ export async function POST(req: NextRequest) {
       if (grouped[codigo]) {
         grouped[codigo].stockSumado += saldo;
         grouped[codigo].filas++;
+        // Si la primera fila del grupo no traía proveedor y una posterior sí,
+        // se toma el primero no vacío (mismo proveedor para todo el código).
+        if (!grouped[codigo].proveedor && proveedor) {
+          grouped[codigo].proveedor = proveedor;
+        }
       } else {
         grouped[codigo] = {
           codigo,
@@ -309,6 +323,7 @@ export async function POST(req: NextRequest) {
           costProd,
           referencia,
           subGrupo,
+          proveedor,
           name,
           filas: 1,
           porSucursal: {},
@@ -366,6 +381,8 @@ export async function POST(req: NextRequest) {
       name: string | null;
       referencia: string | null;
       subGrupo: string | null;
+      // PROVEEDOR del Excel → Product.fabricante SOLO al crear el código nuevo.
+      proveedor: string | null;
       stock: number;
       costProd: number | null;
       // Automáticas que se le van a asignar al crearlo (informativo):
@@ -411,6 +428,7 @@ export async function POST(req: NextRequest) {
           name: data.name,
           referencia: data.referencia,
           subGrupo: data.subGrupo,
+          proveedor: data.proveedor,
           stock: data.stockSumado,
           costProd: data.costProd,
           margenAuto: pick ? pick.avg.m : null,
