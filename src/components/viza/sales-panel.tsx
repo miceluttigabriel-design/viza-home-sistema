@@ -1430,31 +1430,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                       </button>
                     );
                   })}
-                  {/* Task 149: opción explícita para quedar SIN plan.
-                      Así no aparece ningún cuadro de completar hasta marcar
-                      un tipo de plan. */}
-                  <div
-                    className="h-px"
-                    style={{ backgroundColor: "rgba(217,184,107,0.25)" }}
-                  />
-                  <button
-                    role="menuitem"
-                    onClick={() => {
-                      setViewMode(null);
-                      setPresupuestarOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-xs sm:text-sm font-bold uppercase tracking-wide transition-colors ${
-                      viewMode === null ? "" : "hover:bg-white/10"
-                    }`}
-                    style={
-                      viewMode === null
-                        ? { backgroundColor: DORADO, color: AZUL_OSCURO }
-                        : { color: DORADO_CLARO }
-                    }
-                  >
-                    <span>NINGÚN PLAN</span>
-                    {viewMode === null && <Check className="h-4 w-4" />}
-                  </button>
                 </div>
               )}
             </div>
@@ -1921,20 +1896,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       })()}
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {/* Task 149 (pedido del dueño): sin plan seleccionado NO se muestra
-            ningún cuadro azul de completar. Solo este aviso neutro hasta que
-            el usuario marque un tipo de plan en PRESUPUESTAR. */}
-        {viewMode === null && (
-          <div className="py-16 text-center">
-            <FileText className="h-10 w-10 mx-auto text-stone-300" />
-            <p className="mt-3 text-base font-bold text-stone-600">
-              Elegí un tipo de plan para comenzar
-            </p>
-            <p className="mt-1 text-sm text-stone-400">
-              Tocá PRESUPUESTAR y seleccioná el plan que vas a usar.
-            </p>
-          </div>
-        )}
+        {/* Task 149 (pedido del dueño): sin plan marcado con ✓ NO se muestra
+            ningún cuadro de completar: queda solo el fondo azul de pantalla. */}
         {viewMode === "safra" && <PlanSafra sucursalMia={sucursalMia} />}
         {viewMode === "cheque" && <PlanCheque sucursalMia={sucursalMia} />}
         {viewMode === "mayorista" && <PlanMayorista sucursalMia={sucursalMia} />}
