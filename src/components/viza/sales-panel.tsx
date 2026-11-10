@@ -826,65 +826,126 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
     contadoOriginalTotal * (1 + (contadoMarginPct || 0) / 100)
   );
 
-  // TASK 154 — VALOR BASE por plan para el cuadrito del vendedor.
-  // El valor base NO es el contado pelado: sale de la cuenta de la planilla
-  // CRED CALCULO y depende de la CANTIDAD DE CUOTAS de cada plan.
-  // Si ya se calcularon los planes se usan esos totales exactos (incluyen la
-  // entrega personalizada); si no, se calculan en vivo con la misma fórmula.
+  // TASK 155 — VALOR BASE POR ÍTEM (pedido del dueño).
+  //
+  // Antes se repartía un TOTAL de plan entre los productos según su costo. Si
+  // ese total venía viejo o incompleto (por ejemplo, un producto sin precio de
+  // cuota), el reparto le daba a ese producto una base MENOR que su costo.
+  //
+  // Ahora se calcula PRODUCTO POR PRODUCTO: cada ítem aporta su propio precio
+  // de lista = COSTO × (1 + margen de esa cantidad de cuotas) y se le aplica
+  // la MISMA estructura de la planilla CRED CALCULO (entrada + crédito sin
+  // interés). Como el margen del plan es positivo, el valor base de cada línea
+  // queda SIEMPRE por encima de su costo.
+  //
+  // Si el precio de cuota guardado (priceN) es MAYOR que costo + margen, se
+  // respeta el precio guardado (lista más cara). Nunca se usa un precio menor
+  // al costo + margen, para no mostrar una base debajo del costo.
   const itemsFinanciablesBase = items.filter(
     (i) =>
       !i.name.toUpperCase().includes("CASCO") && !esProductoRegalo(i.sku)
   );
-  const planesConBase =
-    calculatedPlanes.length > 0
-      ? calculatedPlanes.map((p) => ({
-          id: p.id,
-          cuotas: p.cuotas,
-          valorPorCuota: p.valorPorCuota,
-          total: p.total,
-        }))
-      : planes.map((p) => {
-          const valorPorCuota = itemsFinanciablesBase.reduce(
-            (sum, i) => sum + getItemPriceN(i, p.cuotas) * i.quantity,
-            0
-          );
-          return {
-            id: p.id,
-            cuotas: p.cuotas,
-            valorPorCuota,
-            total: valorPorCuota * p.cuotas,
-          };
-        });
+
+  // Recargo vivo de SIN ENTREGA (0-30 días = 0%, 31-60 días = 3%), el mismo
+  // que aplica el cálculo del plan.
+  const margenSinEntregaBase = (() => {
+    const dias = calcularDiasDiferidos(fechaInicioPago);
+    if (dias === null || dias < 0) return 0;
+    return calcularMargenPorcentaje(dias) ?? 0;
+  })();
+
+  const entregaExtraBase = mostrarConEntrega
+    ? Math.max(0, Math.round(entregaPersonalizada || 0))
+    : 0;
+
+  // Devuelve { porItem, valorBase } de un plan: base de CADA producto y su
+  // suma. `cuotas` es la cantidad de pagos del plan (la 1ª es la entrada).
+  const construirBasePorItem = (cuotas: number, conEntrega: boolean) => {
+    const n = Math.max(1, Math.floor(Number(cuotas) || 1));
+    const recargoSinEntrega = conEntrega ? 0 : margenSinEntregaBase;
+    const filas = itemsFinanciablesBase.map((it) => {
+      const qty = it.quantity;
+      const precioCuota = getItemPriceN(it, n) * qty; // cuota N del ítem
+      const margenCN = Number((it as any)[`marginC${n}`]) || 0;
+      const costoTotal = (it.cost ?? 0) * qty;
+      const totalPrecio = precioCuota * n;
+      // Margen efectivo: el del plan (marginCN) o, si no hay, el que surge del
+      // precio guardado. Si el precio guardado ni siquiera cubre el costo, no
+      // se usa (evita mostrar una base por debajo del costo).
+      const margenEfectivo =
+        margenCN > 0
+          ? margenCN
+          : costoTotal > 0 && totalPrecio > costoTotal
+            ? totalPrecio / costoTotal - 1
+            : 0;
+      const totalMargen =
+        costoTotal > 0 && margenEfectivo > 0
+          ? costoTotal * (1 + margenEfectivo)
+          : 0;
+      const totalItem = Math.max(totalMargen, totalPrecio);
+      return {
+        key: it.productId,
+        costo: costoTotal,
+        totalItem: totalItem > 0 ? totalItem * (1 + recargoSinEntrega) : 0,
+      };
+    });
+    const sumaTotal = filas.reduce((sum, f) => sum + f.totalItem, 0);
+    const porItem: Record<string, number> = {};
+    for (const f of filas) {
+      if (f.totalItem <= 0 || f.costo <= 0) {
+        porItem[f.key] = 0;
+        continue;
+      }
+      const cuotaItem = f.totalItem / n;
+      // Entrada del ítem: si hay entrega personalizada, se reparte en
+      // proporción a su precio; si no, la entrada es su 1ª cuota.
+      const entregaItem = conEntrega
+        ? entregaExtraBase > 0 && sumaTotal > 0
+          ? entregaExtraBase * (f.totalItem / sumaTotal)
+          : cuotaItem
+        : 0;
+      const base = valorBaseSegunCuotas({
+        total: f.totalItem,
+        cuotas: n,
+        valorPorCuota: cuotaItem,
+        conEntrega,
+        entregaPersonalizada: entregaItem,
+      });
+      // REGLA DEL DUEÑO: el valor base SIEMPRE es mayor que el costo. Si con
+      // el margen/precio disponible no se cumple, la línea muestra "—" en vez
+      // de un número incorrecto por debajo del costo.
+      porItem[f.key] = base > f.costo ? base : 0;
+    }
+    const valorBase = Object.values(porItem).reduce((s, v) => s + v, 0);
+    return { porItem, valorBase };
+  };
+
   const letraBasePlan = (idx: number) =>
     String.fromCharCode(65 + idx + (incluirContadoEnPresupuesto ? 1 : 0));
   const planesBaseCosto = [
     ...(mostrarConEntrega || !mostrarSinEntrega
-      ? planesConBase.map((p, idx) => ({
-          key: `con:${p.id}`,
-          label: `${letraBasePlan(idx)} · ${p.cuotas} ${
-            p.cuotas === 1 ? "pago" : "cuotas"
-          }`,
-          valorBase: valorBaseSegunCuotas({
-            total: p.total,
-            cuotas: p.cuotas,
-            valorPorCuota: p.valorPorCuota,
-            conEntrega: mostrarConEntrega,
-            entregaPersonalizada,
-          }),
-        }))
+      ? planes.map((p, idx) => {
+          const { porItem, valorBase } = construirBasePorItem(p.cuotas, true);
+          return {
+            key: `con:${p.id}`,
+            label: `${letraBasePlan(idx)} · ${p.cuotas} ${
+              p.cuotas === 1 ? "pago" : "cuotas"
+            }`,
+            valorBase,
+            porItem,
+          };
+        })
       : []),
-    ...(mostrarSinEntrega
-      ? calculatedPlanesSinEntrega.map((p, idx) => ({
-          key: `sin:${p.id}`,
-          label: `${letraBasePlan(idx)} · ${p.cuotas}c s/ent`,
-          valorBase: valorBaseSegunCuotas({
-            total: p.total,
-            cuotas: p.cuotas,
-            valorPorCuota: p.valorPorCuota,
-            conEntrega: false,
-            entregaPersonalizada: 0,
-          }),
-        }))
+    ...(mostrarSinEntrega && (calcDone || !mostrarConEntrega)
+      ? planes.map((p, idx) => {
+          const { porItem, valorBase } = construirBasePorItem(p.cuotas, false);
+          return {
+            key: `sin:${p.id}`,
+            label: `${letraBasePlan(idx)} · ${p.cuotas}c s/ent`,
+            valorBase,
+            porItem,
+          };
+        })
       : []),
   ].filter((p) => p.valorBase > 0);
 
@@ -2373,15 +2434,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               {planes.map((plan, idx) => {
                 const calculated = calculatedPlanes.find((p) => p.id === plan.id);
                 const isDuplicate = duplicatePlanes.some((d) => d.id === plan.id);
-                const valorBasePlan = calculated?.calculado
-                  ? valorBaseSegunCuotas({
-                      total: calculated.total,
-                      cuotas: calculated.cuotas,
-                      valorPorCuota: calculated.valorPorCuota,
-                      conEntrega: mostrarConEntrega,
-                      entregaPersonalizada,
-                    })
-                  : 0;
+                const valorBasePlan =
+                  planesBaseCosto.find((b) => b.key === `con:${plan.id}`)
+                    ?.valorBase ?? 0;
                 return (
                   <PlanRow
                     key={plan.id}

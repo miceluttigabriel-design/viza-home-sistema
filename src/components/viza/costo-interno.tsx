@@ -109,23 +109,28 @@ export function extractCostoMayorista(product: unknown): number {
 // opción de cotización (CUOTA / SAFRA / CHEQUE / MAYORISTA).
 // Devuelve null si no hay productos, para no ocupar espacio.
 //
-// Task 153/154 (pedido del dueño): además del COSTO, el vendedor ve el VALOR
-// BASE de cada producto. Sale de la misma cuenta de la planilla CRED CALCULO:
-// el valor base TOTAL del plan (que depende de la CANTIDAD DE CUOTAS, ver
-// valorBaseSegunCuotas en sales-panel) se reparte entre los productos en
-// proporción a su costo (costo unitario × cantidad), cada línea se redondea al
-// millar y la primera línea absorbe la diferencia para que la suma cierre
-// exacta. Es SOLO de pantalla, igual que el costo: nunca viaja al PDF ni a la
-// BD.
+// Task 153/154/156 (pedido del dueño): además del COSTO, el vendedor ve el
+// VALOR BASE de cada producto. Sale de la misma cuenta de la planilla CRED
+// CALCULO (entrada + crédito sin interés) y depende de la CANTIDAD DE CUOTAS.
+// Task 156: se calcula PRODUCTO POR PRODUCTO con su costo + margen del plan,
+// así NINGUNA línea queda por debajo de su costo. En CUOTA, sales-panel manda
+// el mapa ya calculado (`porItem`). En SAFRA / CHEQUE / MAYORISTA se sigue
+// repartiendo la base total por costo (como la planilla), porque ahí la base
+// es el total sin interés del plan. Es SOLO de pantalla, igual que el costo:
+// nunca viaja al PDF ni a la BD.
 //
-// Si el vendedor tiene varios planes calculados, elige arriba el plan (A, B…)
-// y el valor base se recalcula para ESE plan. Si no hay planes calculados, se
-// usa el valor de contado (baseTotal) como hasta ahora.
+// Si el vendedor tiene varios planes, elige arriba el plan (A, B…) y el valor
+// base se recalcula para ESE plan.
 
 export interface CostoBasePlan {
   key: string;
   label: string;
   valorBase: number;
+  // Task 155: valor base YA CALCULADO POR ÍTEM (key = key del producto).
+  // Si viene, se usa tal cual (el total es la suma de estos valores). Si no
+  // viene (SAFRA / CHEQUE / MAYORISTA), se reparte valorBase por costo como
+  // siempre.
+  porItem?: Record<string, number> | null;
 }
 
 // Reparte el valor base total entre las líneas CON costo, igual que la
@@ -195,15 +200,41 @@ export function CostoInterno({
   );
   const haySinCosto = items.some((it) => (it.cost ?? 0) <= 0);
   const planesValidos = (basePlanes ?? []).filter((p) => p.valorBase > 0);
+  // Si el plan manda `basePlanes` (CUOTA), NO se cae al contado cuando ningún
+  // plan tiene base válida: se muestra sin base antes que un número debajo del
+  // costo. SAFRA/CHEQUE/MAYORISTA no mandan `basePlanes` y siguen usando
+  // `baseTotal` como siempre.
+  const usaPlanes = basePlanes !== undefined;
   const planActivo =
     planesValidos.find((p) => p.key === planElegido) ?? planesValidos[0] ?? null;
-  const baseTotalEfectivo = planActivo ? planActivo.valorBase : (baseTotal ?? 0);
+  const baseTotalEfectivo = planActivo
+    ? planActivo.valorBase
+    : usaPlanes
+      ? 0
+      : (baseTotal ?? 0);
+  // Task 155: si el plan trae el valor base POR ÍTEM ya calculado, se usa esa
+  // mapa (cada producto tiene su propia base: costo + margen del plan) y NO se
+  // reparte un total global. Así ningún ítem queda por debajo de su costo por
+  // culpa de un total viejo/incompleto.
+  const porItemPlan = planActivo?.porItem ?? null;
+  const tienePorItem =
+    !!porItemPlan &&
+    Object.values(porItemPlan).some((v) => Number(v) > 0);
   const mostrarBase =
-    baseTotalEfectivo > 0 &&
+    (baseTotalEfectivo > 0 || tienePorItem) &&
     items.some((it) => (it.cost ?? 0) > 0 && !it.esRegalo);
-  const basePorItem = mostrarBase
-    ? repartirValorBase(items, baseTotalEfectivo)
-    : new Map<string, number>();
+  const basePorItem = (() => {
+    if (!mostrarBase) return new Map<string, number>();
+    if (porItemPlan) {
+      const m = new Map<string, number>();
+      for (const [k, v] of Object.entries(porItemPlan)) {
+        const n = Math.max(0, Math.round(Number(v) || 0));
+        if (n > 0) m.set(k, n);
+      }
+      return m;
+    }
+    return repartirValorBase(items, baseTotalEfectivo);
+  })();
   const totalBase = mostrarBase
     ? items.reduce((sum, it) => sum + (basePorItem.get(it.key) ?? 0), 0)
     : 0;
@@ -300,8 +331,8 @@ export function CostoInterno({
       )}
       {planesValidos.length === 1 && (
         <p className="text-[9px] font-semibold mb-1" style={{ color: COSTO_NOTA }}>
-          Valor base del plan {planActivo?.label} · se calcula con la cantidad de
-          cuotas
+          Valor base del plan {planActivo?.label} · calculado por producto
+          (costo + margen del plan)
         </p>
       )}
 
@@ -392,10 +423,23 @@ export function CostoInterno({
       {mostrarBase && (
         <p className="text-[9px] mt-1" style={{ color: COSTO_NOTA }}>
           Valor base = base del plan según la cantidad de cuotas (como la
-          planilla CRED CALCULO: entrada + crédito sin interés), repartida por
-          costo.
+          planilla CRED CALCULO: entrada + crédito sin interés), calculada
+          PRODUCTO POR PRODUCTO con su costo + margen del plan (nunca queda por
+          debajo del costo).
         </p>
       )}
+      {mostrarBase &&
+        items.some(
+          (it) =>
+            (it.cost ?? 0) > 0 &&
+            !it.esRegalo &&
+            (basePorItem.get(it.key) ?? 0) <= 0
+        ) && (
+          <p className="text-[9px] mt-0.5" style={{ color: COSTO_NOTA }}>
+            — en valor base = producto sin margen/precio suficiente para esa
+            cantidad de cuotas (se carga en el Panel Admin).
+          </p>
+        )}
     </div>
   );
 }
