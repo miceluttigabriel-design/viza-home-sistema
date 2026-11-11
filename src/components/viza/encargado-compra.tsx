@@ -324,7 +324,7 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
               [
                 ["necesidades", "NECESIDADES", plan?.filas.length ?? 0],
                 ["proveedores", "PROVEEDORES", plan?.proveedores.length ?? 0],
-                ["analisis", "ANÁLISIS IA", 0],
+                ["analisis", "ANÁLISIS", 0],
               ] as const
             ).map(([id, label, count]) => (
               <button
@@ -674,11 +674,11 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
                         <p className="text-[11px] font-black text-stone-800">
                           {ia.activa ? "ANÁLISIS CON IA" : "ANÁLISIS DETERMINÍSTICO"}
                         </p>
-                        <p className="text-[9px] font-bold text-stone-400">
-                          {ia.activa
-                            ? `${ia.modelo || "NVIDIA NIM"} · las cantidades las calcula el motor del sistema`
-                            : "Sin NVIDIA_API_KEY: mismas cifras, redactadas por el motor local"}
-                        </p>
+                        {ia.activa && (
+                          <p className="text-[9px] font-bold text-stone-400">
+                            {`${ia.modelo || "NVIDIA NIM"} · las cantidades las calcula el motor del sistema`}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <button
@@ -692,7 +692,7 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
                       ) : (
                         <BrainCircuit className="h-3.5 w-3.5" />
                       )}
-                      VOLVER A ANALIZAR CON IA
+                      VOLVER A ANALIZAR
                     </button>
                   </div>
 
@@ -789,7 +789,7 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
                       className="mt-3 h-9 px-4 rounded-xl text-xs font-black"
                       style={{ background: DORADO, color: AZUL }}
                     >
-                      ANALIZAR CON IA
+                      ANALIZAR
                     </button>
                   </div>
                 )
@@ -835,14 +835,14 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
               disabled={iaCargando}
               className="h-8 px-2.5 rounded-lg text-[9px] font-black disabled:opacity-40 flex items-center gap-1.5"
               style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO}, ${DORADO})`, color: AZUL }}
-              title="Interpretar la necesidad con NVIDIA NIM"
+              title="Analizar la necesidad de compra"
             >
               {iaCargando ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <BrainCircuit className="h-3.5 w-3.5" />
               )}
-              ANALIZAR CON IA
+              ANALIZAR
             </button>
 
             <button

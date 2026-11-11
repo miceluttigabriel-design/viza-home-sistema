@@ -210,10 +210,9 @@ export async function analizarPlanConIA(
 ): Promise<AnalisisEncargadoIA> {
   const key = apiKey();
   if (!key) {
-    return analisisRespaldo(
-      plan,
-      "NVIDIA_API_KEY no está configurada. Se muestra el análisis determinístico del Encargado."
-    );
+    // Sin la clave mostramos el mismo análisis determinístico, SIN la nota
+    // técnica (pedido del dueño): el dueño no quiere ver NVIDIA_API_KEY.
+    return analisisRespaldo(plan);
   }
 
   const controlador = new AbortController();
@@ -442,10 +441,9 @@ export async function analizarCompraConIA(
 ): Promise<AnalisisCompraIA> {
   const key = apiKey();
   if (!key) {
-    return analisisCompraRespaldo(
-      plan,
-      "NVIDIA_API_KEY no está configurada. Se muestra el análisis determinístico del Encargado de Compra."
-    );
+    // Sin la clave mostramos el mismo análisis determinístico, SIN la nota
+    // técnica (pedido del dueño): el dueño no quiere ver NVIDIA_API_KEY.
+    return analisisCompraRespaldo(plan);
   }
 
   const controlador = new AbortController();
