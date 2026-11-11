@@ -1272,12 +1272,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
           {/* (Buscador movido al header) */}
           <div className="flex flex-col gap-3 shrink-0">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {/* (Título "Gestión de productos" eliminado — pedido del dueño:
                     más espacio para los botones, que ahora arrancan a la
                     izquierda). */}
                 {search.trim() ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200 text-[11px] font-semibold">
                     {loadingProducts ? (
                       <>Buscando "{search}"...</>
                     ) : (
@@ -1285,7 +1285,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     )}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 text-stone-600 ring-1 ring-stone-200 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-stone-100 text-stone-600 ring-1 ring-stone-200 text-[11px] font-semibold">
                     TOTAL: {total} productos
                   </span>
                 )}
@@ -1295,12 +1295,15 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     costos. Editable solo por el Supremo y viza@viza.com.py
                     (botón de al lado, Task 87B). */}
                 <span
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200 text-xs font-semibold"
+                  className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200 text-[11px] font-semibold"
                   title="Tasa de cambio activa: el sistema la usa para convertir costos cargados en Real y en Dólar a Guaraníes"
                 >
-                  <Coins className="h-3.5 w-3.5" />
+                  <Coins className="h-3 w-3" />
                   CAMBIO: R$ {tasasCambio.cambioRS.toLocaleString("es-PY")} · US$ {tasasCambio.cambioUS.toLocaleString("es-PY")}
                 </span>
+
+                {/* Separador visual: datos (izquierda) | acciones (derecha) */}
+                <span className="hidden sm:block h-5 w-px bg-stone-200 mx-0.5" />
                 {/* Botón TASA DE CAMBIO (Task 87, pedido del dueño) — Task
                     87B: SOLO supremo_admin y el email viza@viza.com.py (lista
                     única en src/lib/permisos-cambio.ts, la misma que valida el
@@ -1312,11 +1315,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   <button
                     id="btn-tasa-cambio"
                     onClick={() => setModalTasaOpen(true)}
-                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    className="h-7 px-2.5 rounded-lg text-white font-bold text-[11px] flex items-center gap-1 hover:brightness-110 transition-colors"
                     style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
                     title="Editar la tasa de cambio (R$→Gs y US$→Gs) y aplicarla a la base general"
                   >
-                    <Coins className="h-3.5 w-3.5" />
+                    <Coins className="h-3 w-3" />
                     TASA DE CAMBIO
                   </button>
                 )}
@@ -1342,11 +1345,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     Vercel (diagnóstico sin secretos de T133). */}
                 {isSupremo && !esLectura && (
                   <span
-                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 text-xs font-semibold"
+                    className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 text-[11px] font-semibold"
                     title="Copias de seguridad automáticas: con el interruptor ACTIVADO el sistema manda la copia de la base a viza@viza.com.py a las 08:00, 14:00 y 23:00 (hora de Paraguay). Desactívalo y los envíos automáticos quedan pausados."
                   >
-                    <DatabaseBackup className="h-3.5 w-3.5" />
-                    COPIAS DE SEGURIDAD:
+                    <DatabaseBackup className="h-3 w-3" />
+                    COPIAS:
                     <Switch
                       checked={backupActivado === true}
                       disabled={backupActivado === null || backupSaving}
@@ -1365,14 +1368,17 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   <button
                     id="btn-backup-ahora"
                     onClick={enviarCopiaAhora}
-                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    className="h-7 px-2.5 rounded-lg text-white font-bold text-[11px] flex items-center gap-1 hover:brightness-110 transition-colors"
                     style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
                     title="Generar la copia de la base y enviarla YA por correo a viza@viza.com.py (sin esperar al cron)"
                   >
-                    <Send className="h-3.5 w-3.5" />
-                    ENVIAR COPIA AHORA
+                    <Send className="h-3 w-3" />
+                    ENVIAR COPIA
                   </button>
                 )}
+
+                {/* Separador visual: acciones de configuracion | stock */}
+                <span className="hidden sm:block h-5 w-px bg-stone-200 mx-0.5" />
 
                 {/* STOCK AUTOMATICO (pedido del duenio): interruptor ON/OFF +
                     boton ACTUALIZAR AHORA. Es el robot que exporta el
@@ -1389,11 +1395,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   <button
                     id="btn-crear-etiqueta"
                     onClick={() => setModalEtiquetaOpen(true)}
-                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    className="h-7 px-2.5 rounded-lg text-white font-bold text-[11px] flex items-center gap-1 hover:brightness-110 transition-colors"
                     style={{ background: "linear-gradient(135deg, #8a6d2f 0%, #b08a3e 100%)" }}
                     title="Crear etiquetas nuevas de color (solo Supremo Usuario)"
                   >
-                    <Tag className="h-3.5 w-3.5" />
+                    <Tag className="h-3 w-3" />
                     CREAR ETIQUETA
                   </button>
                 )}
@@ -1431,11 +1437,11 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                         setDeleteAllLoading(false);
                       }
                     }}
-                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
+                    className="h-7 px-2.5 rounded-lg text-white font-bold text-[11px] flex items-center gap-1 hover:brightness-110 transition-colors"
                     style={{ background: "linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)" }}
                     title="ELIMINAR TODOS los productos de la base (irreversible, solo supremo)"
                   >
-                    <AlertTriangle className="h-3.5 w-3.5" />
+                    <AlertTriangle className="h-3 w-3" />
                     ELIMINAR TODO
                   </button>
                 )}

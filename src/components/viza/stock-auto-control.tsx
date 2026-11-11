@@ -209,10 +209,10 @@ export function StockAutoControl() {
   const ocupado = guardando || pidiendo || Boolean(esperandoDesde);
 
   return (
-    <span className="inline-flex items-center gap-2 flex-wrap">
+    <span className="inline-flex items-center gap-1.5 flex-wrap">
       {/* Interruptor ON/OFF */}
       <span
-        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ring-1 text-xs font-semibold ${
+        className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full ring-1 text-[11px] font-semibold ${
           activo
             ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
             : "bg-stone-100 text-stone-700 ring-stone-300"
@@ -221,8 +221,8 @@ export function StockAutoControl() {
           "Stock automatico: con el interruptor ACTIVADO la PC exporta el inventario del CtrCredito e importa la planilla en STOCK GENERAL todos los dias de 07:00 a 21:00, cada 1 hora. Apagado, no importa nada."
         }
       >
-        <RefreshCw className={`h-3.5 w-3.5 ${Boolean(esperandoDesde) ? "animate-spin" : ""}`} />
-        STOCK AUTOMATICO:
+        <RefreshCw className={`h-3 w-3 ${Boolean(esperandoDesde) ? "animate-spin" : ""}`} />
+        STOCK AUTO:
         <Switch
           checked={activo}
           disabled={guardando}
@@ -238,19 +238,19 @@ export function StockAutoControl() {
         type="button"
         onClick={() => void pedirAhora()}
         disabled={ocupado}
-        className={`h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 transition-all ${
+        className={`h-7 px-2.5 rounded-lg text-white font-bold text-[11px] flex items-center gap-1 transition-all ${
           ocupado ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"
         }`}
         style={{ background: "linear-gradient(135deg, #8a6d2f 0%, #b08a3e 100%)" }}
         title="Pedirle a la PC que exporte el CtrCredito e importe la planilla AHORA (sin esperar a la proxima hora)"
       >
-        <RefreshCw className={`h-3.5 w-3.5 ${Boolean(esperandoDesde) ? "animate-spin" : ""}`} />
-        {esperandoDesde ? "ACTUALIZANDO..." : "ACTUALIZAR AHORA"}
+        <RefreshCw className={`h-3 w-3 ${Boolean(esperandoDesde) ? "animate-spin" : ""}`} />
+        {esperandoDesde ? "ACTUALIZANDO..." : "ACTUALIZAR"}
       </button>
 
       {/* Estado de la PC */}
       <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 text-xs font-semibold ${
+        className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full ring-1 text-[11px] font-semibold ${
           enLinea
             ? "bg-sky-50 text-sky-800 ring-sky-200"
             : "bg-rose-50 text-rose-700 ring-rose-200"
@@ -261,7 +261,7 @@ export function StockAutoControl() {
             : "La PC del robot no da senal: esta apagada, sin internet o el robot no esta corriendo. La actualizacion automatica NO va a pasar hasta que vuelva."
         }
       >
-        {enLinea ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+        {enLinea ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
         PC: {enLinea ? `en linea ${textoHace(estado.heartbeat)}` : "sin senal"}
       </span>
 
