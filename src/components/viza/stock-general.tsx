@@ -65,11 +65,9 @@ import {
   Check,
   Warehouse,
   X,
-  ShoppingCart,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EncargadoDistribucion } from "./encargado-distribucion";
-import { EncargadoCompra } from "./encargado-compra";
 
 const AZUL = "#0d3d5e";
 const DORADO = "#D9B86B";
@@ -465,12 +463,6 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
   // plan + PDF. NO escribe stock: solo recomienda transferencias internas.
   const [encargadoOpen, setEncargadoOpen] = useState(false);
 
-  // ═══ ENCARGADO DE COMPRA (Task 161, pedido del dueño) ═══
-  // Analiza la NECESIDAD DE COMPRA de la red: stock de las 4 sucursales +
-  // CENTRAL + ventas detectadas, agrupada por PROVEEDOR (FABRICANTE).
-  // Solo recomienda: no genera órdenes de compra. Exclusivo del supremo.
-  const [compraOpen, setCompraOpen] = useState(false);
-
   return (
     <div className="min-h-screen bg-stone-100">
       {/* ─── Header (mismo lenguaje visual que los demás paneles) ─── */}
@@ -523,28 +515,9 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
                 <span className="sm:hidden">ENCARGADO</span>
               </button>
             )}
-            {/* Task 161 (pedido del dueño): el botón se llama ENCARGADO DE
-                COMPRA y abre el modal (necesidades + proveedores + IA + PDF).
-                Igual que el de distribución, SOLO lo ve el usuario supremo. */}
-            {esSupremo && (
-              <button
-                onClick={() => setCompraOpen(true)}
-                className="h-9 px-3 sm:px-4 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all hover:brightness-105 hover:-translate-y-px shrink-0"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #FFE9A8 0%, #E9C86E 42%, #C9A23F 100%)",
-                  color: AZUL,
-                  border: "1px solid rgba(255,255,255,0.65)",
-                  boxShadow:
-                    "0 0 14px rgba(233,200,110,0.55), inset 0 1px 0 rgba(255,255,255,0.7)",
-                }}
-                title="ENCARGADO DE COMPRA: analiza la necesidad de compra de la red por proveedor y genera el PDF (solo recomendación)"
-              >
-                <ShoppingCart className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">ENCARGADO DE COMPRA</span>
-                <span className="sm:hidden">COMPRA</span>
-              </button>
-            )}
+            {/* Pedido del dueño: el botón ENCARGADO DE COMPRA se sacó de
+                STOCK GENERAL — ahora se abre desde su propio cuadro del
+                ORQUESTADOR y se trabaja ahí mismo. */}
             {esSupremo && (
               <>
                 <input
@@ -1030,9 +1003,6 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
         open={encargadoOpen}
         onClose={() => setEncargadoOpen(false)}
       />
-
-      {/* ═══ MODAL: ENCARGADO DE COMPRA (Task 161) ═══ */}
-      <EncargadoCompra open={compraOpen} onClose={() => setCompraOpen(false)} />
 
       {/* ═══ MODAL: IMPORTAR PLANILLA (mismo motor que tenía LA BASE + sucursales) ═══ */}
       {importOpen && (

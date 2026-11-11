@@ -234,7 +234,7 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1500px] max-h-[96vh] flex flex-col overflow-hidden">
         {/* ─── Cabecera ─── */}
         <div
           className="px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 flex-wrap"
@@ -255,7 +255,7 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
                 ENCARGADO DE COMPRA
               </h2>
               <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-cyan-200/90">
-                IA · Solo SELECCIONADOS · desde COD 100.000
+                Solo SELECCIONADOS · desde COD 100.000
               </p>
             </div>
           </div>
@@ -270,7 +270,7 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
               title={
                 ia?.activa
                   ? "NVIDIA NIM conectado"
-                  : "Sin API key de NVIDIA: análisis determinístico"
+                  : "Modo respaldo: análisis determinístico"
               }
             >
               <span

@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Database, Boxes, Calculator, Network, ShoppingCart, MapPin, ArrowRight } from "lucide-react";
 import { esUsuarioVip } from "@/lib/encargados-sucursal";
+import { EncargadoCompra } from "./encargado-compra";
 
 // Sucursales oficiales de VIZA (misma lista que SUCURSALES_VIZA en
 // src/lib/sucursal-usuario.ts, en el orden del dueño). Se repite acá SOLO
@@ -206,12 +207,14 @@ function AgenteCard({
   titulo,
   estado = "PRÓXIMAMENTE",
   onClick,
+  hint,
 }: {
   c: string;
   icon: ReactNode;
   titulo: string;
   estado?: string;
   onClick?: () => void;
+  hint?: string;
 }) {
   return (
     <button
@@ -224,7 +227,7 @@ function AgenteCard({
         border: `1px dashed ${c}55`,
         boxShadow: `0 10px 30px -16px ${c}66`,
       }}
-      title={`${titulo}${onClick ? " — abrir Stock General" : " — próximo paso del sistema"}`}
+      title={`${titulo}${onClick ? ` — ${hint || "abrir Stock General"}` : " — próximo paso del sistema"}`}
     >
       <span
         className="absolute inset-x-0 top-0 h-[2px]"
@@ -256,7 +259,7 @@ function AgenteDistribucionCard({ onClick }: { onClick?: () => void }) {
   );
 }
 
-function AgenteCompraCard({ onClick }: { onClick?: () => void }) {
+function AgenteCompraCard({ onClick, hint }: { onClick?: () => void; hint?: string }) {
   return (
     <AgenteCard
       c={C_COMPRA}
@@ -264,6 +267,7 @@ function AgenteCompraCard({ onClick }: { onClick?: () => void }) {
       titulo="ENCARGADO DE COMPRA"
       estado="ACTIVO"
       onClick={onClick}
+      hint={hint}
     />
   );
 }
@@ -416,6 +420,11 @@ function Conector({ color = DORADO }: { color?: string }) {
 export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion }: OrquestadorProps) {
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
   const esSupremo = user.role === "supremo_admin";
+  // Pedido del dueño: el ENCARGADO DE COMPRA se abre y se trabaja DENTRO del
+  // ORQUESTADOR (interface grande), sin tener que entrar a STOCK GENERAL.
+  // La API del módulo es exclusiva del supremo; para admins/VIP el cuadro
+  // mantiene el comportamiento anterior (abre STOCK GENERAL).
+  const [compraOpen, setCompraOpen] = useState(false);
   // Task 165: VIP por ROL promovido desde el GDA o por la lista histórica.
   const esVip = esUsuarioVip(user.email, user.role);
   const etiquetaUsuario = esSupremo
@@ -521,7 +530,12 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           <div style={place(POS.base)}><BaseCard onClick={onGoBase} /></div>
           <div style={place(POS.cotizador)}><CotizadorCard onClick={onGoSales} /></div>
           <div style={place(POS.distribucion)}><AgenteDistribucionCard onClick={onGoStock} /></div>
-          <div style={place(POS.compra)}><AgenteCompraCard onClick={onGoStock} /></div>
+          <div style={place(POS.compra)}>
+            <AgenteCompraCard
+              onClick={esSupremo ? () => setCompraOpen(true) : onGoStock}
+              hint={esSupremo ? "abrir el Encargado de Compra" : "abrir Stock General"}
+            />
+          </div>
           {SUCURSALES_CUADROS.map((nombre, i) => (
             <div key={nombre} style={place({ x: SUC_X, y: SUC_Y[i], w: SUC_W, h: SUC_H })}>
               <SucursalCard nombre={nombre} />
@@ -539,7 +553,12 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           <Conector color={C_STOCK} />
           <div className="min-h-[110px]"><AgenteDistribucionCard onClick={onGoStock} /></div>
           <Conector color={C_COMPRA} />
-          <div className="min-h-[110px]"><AgenteCompraCard onClick={onGoStock} /></div>
+          <div className="min-h-[110px]">
+            <AgenteCompraCard
+              onClick={esSupremo ? () => setCompraOpen(true) : onGoStock}
+              hint={esSupremo ? "abrir el Encargado de Compra" : "abrir Stock General"}
+            />
+          </div>
           <Conector color={C_DISTRI} />
           <div className="grid grid-cols-2 gap-2.5">
             {SUCURSALES_CUADROS.map((nombre) => (
@@ -548,6 +567,12 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion 
           </div>
         </div>
       </main>
+
+      {/* Pedido del dueño: la interface del ENCARGADO DE COMPRA se abre
+          GRANDE encima del ORQUESTADOR, desde su propio cuadro. */}
+      {esSupremo && (
+        <EncargadoCompra open={compraOpen} onClose={() => setCompraOpen(false)} />
+      )}
     </div>
   );
 }
