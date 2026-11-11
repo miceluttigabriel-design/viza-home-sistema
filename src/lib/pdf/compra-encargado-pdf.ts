@@ -73,8 +73,13 @@ function colorPrioridad(p: PrioridadCompra): [number, number, number] {
 
 export function generarPdfCompra(
   plan: PlanCompra,
-  ia: AnalisisCompraIA | null
+  ia: AnalisisCompraIA | null,
+  opciones?: { proveedor?: string | null }
 ): jsPDF {
+  // Task 169: PDF de UN proveedor. En ese modo el documento es el pedido de
+  // ese proveedor: cambia el subtítulo y NO se imprime el análisis global
+  // (resumen/prioridades/alertas son de TODA la red, no de un proveedor).
+  const proveedorPdf = String(opciones?.proveedor || "").trim();
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -225,7 +230,9 @@ export function generarPdfCompra(
   doc.setFontSize(8);
   doc.setTextColor(...GOLD);
   doc.text(
-    "NECESIDAD DE COMPRA DE LA RED · SOLO RECOMENDACIÓN · SIN ORDEN DE COMPRA",
+    proveedorPdf
+      ? `PROVEEDOR: ${proveedorPdf} · SOLO RECOMENDACIÓN · SIN ORDEN DE COMPRA`
+      : "NECESIDAD DE COMPRA DE LA RED · SOLO RECOMENDACIÓN · SIN ORDEN DE COMPRA",
     MARGEN,
     98
   );
@@ -290,34 +297,40 @@ export function generarPdfCompra(
   y += cajaH + 14;
 
   // ───────────── ANÁLISIS DEL ENCARGADO ─────────────
-  tituloSeccion("ANÁLISIS DEL ENCARGADO DE COMPRA");
-  const etiquetaIA = ia?.activa
-    ? `IA NVIDIA NIM · ${ia.modelo || "modelo configurado"}`
-    : "RESPALDO DETERMINÍSTICO · IA NO CONFIGURADA";
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.6);
-  doc.setTextColor(...(ia?.activa ? ([21, 128, 61] as [number, number, number]) : GREY));
-  doc.text(etiquetaIA, MARGEN, y);
-  y += 10;
+  // En el PDF de UN proveedor no va: el análisis (resumen, prioridades,
+  // alertas) es de TODA la red y confundiría el pedido de ese proveedor.
+  if (!proveedorPdf) {
+    tituloSeccion("ANÁLISIS DEL ENCARGADO DE COMPRA");
+    const etiquetaIA = ia?.activa
+      ? `IA NVIDIA NIM · ${ia.modelo || "modelo configurado"}`
+      : "RESPALDO DETERMINÍSTICO · IA NO CONFIGURADA";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.6);
+    doc.setTextColor(...(ia?.activa ? ([21, 128, 61] as [number, number, number]) : GREY));
+    doc.text(etiquetaIA, MARGEN, y);
+    y += 10;
 
-  if (ia?.resumen) {
-    parrafo(ia.resumen);
-  } else {
-    parrafo(
-      plan.filas.length > 0
-        ? `El motor detectó necesidad de compra en ${plan.resumen.productos} código(s): ${plan.resumen.unidades} unidad(es) para ${plan.resumen.proveedores} proveedor(es).`
-        : "No hay necesidad de compra: la red está cubierta con el stock actual y las transferencias internas."
-    );
+    if (ia?.resumen) {
+      parrafo(ia.resumen);
+    } else {
+      parrafo(
+        plan.filas.length > 0
+          ? `El motor detectó necesidad de compra en ${plan.resumen.productos} código(s): ${plan.resumen.unidades} unidad(es) para ${plan.resumen.proveedores} proveedor(es).`
+          : "No hay necesidad de compra: la red está cubierta con el stock actual y las transferencias internas."
+      );
+    }
+    if (ia?.prioridades?.length) lista("PRIORIDADES", ia.prioridades);
+    if (ia?.alertas?.length) lista("ALERTAS", ia.alertas, [146, 64, 14]);
+    if (ia?.recomendaciones?.length) {
+      lista("RECOMENDACIONES POR PROVEEDOR", ia.recomendaciones, [21, 87, 137]);
+    }
+    if (ia?.mensaje) parrafo(ia.mensaje, 7.6, GREY);
   }
-  if (ia?.prioridades?.length) lista("PRIORIDADES", ia.prioridades);
-  if (ia?.alertas?.length) lista("ALERTAS", ia.alertas, [146, 64, 14]);
-  if (ia?.recomendaciones?.length) {
-    lista("RECOMENDACIONES POR PROVEEDOR", ia.recomendaciones, [21, 87, 137]);
-  }
-  if (ia?.mensaje) parrafo(ia.mensaje, 7.6, GREY);
 
   // ───────────── NECESIDAD POR PROVEEDOR ─────────────
-  tituloSeccion("NECESIDAD AGRUPADA POR PROVEEDOR");
+  tituloSeccion(
+    proveedorPdf ? "NECESIDAD DEL PROVEEDOR" : "NECESIDAD AGRUPADA POR PROVEEDOR"
+  );
   const colsProv: Columna[] = [
     { label: "PROVEEDOR", w: 245 },
     { label: "CÓDIGOS", w: 80, align: "right" },
@@ -563,4 +576,23 @@ export function nombreArchivoPdfCompra(plan: PlanCompra): string {
     ? new Date().toISOString().slice(0, 10)
     : d.toISOString().slice(0, 10);
   return `VIZA-HOME-COMPRA-${fecha}.pdf`;
+}
+
+// Task 169: nombre del PDF de UN proveedor.
+export function nombreArchivoPdfCompraProveedor(
+  plan: PlanCompra,
+  proveedor: string
+): string {
+  const d = new Date(plan.generadoEn);
+  const fecha = Number.isNaN(d.getTime())
+    ? new Date().toISOString().slice(0, 10)
+    : d.toISOString().slice(0, 10);
+  const prov = String(proveedor || "PROVEEDOR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "PROVEEDOR";
+  return `VIZA-HOME-COMPRA-${prov}-${fecha}.pdf`;
 }

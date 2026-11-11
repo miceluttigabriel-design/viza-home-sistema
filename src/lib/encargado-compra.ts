@@ -135,6 +135,50 @@ export interface PlanCompra {
   alertas: string[];
 }
 
+// Task 169 (pedido del dueño): PDF POR PROVEEDOR.
+// Toma el plan completo y devuelve una vista SOLO de ese proveedor: filas,
+// ventas, la fila del proveedor y el resumen recalculado. El cálculo de la
+// compra NO cambia: es el mismo plan, únicamente filtrado para el PDF.
+export function filtrarPlanPorProveedor(
+  plan: PlanCompra,
+  proveedor: string
+): PlanCompra {
+  const objetivo = String(proveedor || "").trim().toUpperCase();
+  const filas = plan.filas.filter(
+    (f) => String(f.proveedor || "SIN PROVEEDOR").trim().toUpperCase() === objetivo
+  );
+  const ventas = plan.ventas.filter(
+    (v) => String(v.proveedor || "SIN PROVEEDOR").trim().toUpperCase() === objetivo
+  );
+  const proveedores = plan.proveedores.filter(
+    (p) => String(p.proveedor || "").trim().toUpperCase() === objetivo
+  );
+  const skusConVenta = new Set(ventas.map((v) => v.sku));
+  const resumen: ResumenCompra = {
+    productos: filas.length,
+    unidades: filas.reduce((acc, f) => acc + f.compra, 0),
+    proveedores: filas.length > 0 ? 1 : 0,
+    prioridadAlta: filas.filter((f) => f.prioridad === "ALTA").length,
+    prioridadMedia: filas.filter((f) => f.prioridad === "MEDIA").length,
+    prioridadBaja: filas.filter((f) => f.prioridad === "BAJA").length,
+    productosAnalizados: plan.resumen.productosAnalizados,
+    productosConVenta: skusConVenta.size,
+    unidadesVendidas: ventas.reduce((acc, v) => acc + v.vendido, 0),
+    unidadesEnCentral: filas.reduce((acc, f) => acc + f.central, 0),
+    noSeleccionados: plan.resumen.noSeleccionados,
+    codigosIgnorados: plan.resumen.codigosIgnorados,
+  };
+  return {
+    ...plan,
+    filas,
+    ventas,
+    proveedores,
+    resumen,
+    // Las alertas son globales: en el PDF del proveedor no se muestran.
+    alertas: [],
+  };
+}
+
 // ─── Análisis que devuelve la IA (o el respaldo determinístico) ───
 export interface AnalisisCompraIA {
   activa: boolean;

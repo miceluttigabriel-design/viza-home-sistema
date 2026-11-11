@@ -7,6 +7,7 @@ import {
   ArrowRight,
   BrainCircuit,
   CheckCircle2,
+  ChevronDown,
   Download,
   Eye,
   EyeOff,
@@ -27,6 +28,7 @@ import { toast } from "sonner";
 import {
   generarPdfCompra,
   nombreArchivoPdfCompra,
+  nombreArchivoPdfCompraProveedor,
 } from "@/lib/pdf/compra-encargado-pdf";
 import type {
   AnalisisCompraIA,
@@ -34,6 +36,7 @@ import type {
   PlanCompra,
   PrioridadCompra,
 } from "@/lib/encargado-compra";
+import { filtrarPlanPorProveedor } from "@/lib/encargado-compra";
 
 const AZUL = "#0d3d5e";
 const DORADO = "#D9B86B";
@@ -141,6 +144,8 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
   const [cargando, setCargando] = useState(false);
   const [iaCargando, setIaCargando] = useState(false);
   const [pdfCargando, setPdfCargando] = useState(false);
+  // Task 169: menú del botón EXPORTAR PDF (todos / un proveedor).
+  const [pdfMenuOpen, setPdfMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"necesidades" | "proveedores" | "analisis">(
     "necesidades"
@@ -217,13 +222,26 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
     }));
   }, [filasFiltradas]);
 
-  const descargarPdf = async () => {
+  const descargarPdf = async (proveedor?: string) => {
     if (!plan) return;
     setPdfCargando(true);
     try {
-      const doc = generarPdfCompra(plan, ia);
-      doc.save(nombreArchivoPdfCompra(plan));
-      toast.success("PDF del Encargado de Compra generado");
+      // Task 169: sin proveedor = PDF completo de la red. Con proveedor = el
+      // mismo plan filtrado a ese proveedor (pedido de compra del proveedor).
+      const planPdf = proveedor ? filtrarPlanPorProveedor(plan, proveedor) : plan;
+      const doc = generarPdfCompra(planPdf, proveedor ? null : ia, {
+        proveedor: proveedor || null,
+      });
+      doc.save(
+        proveedor
+          ? nombreArchivoPdfCompraProveedor(plan, proveedor)
+          : nombreArchivoPdfCompra(plan)
+      );
+      toast.success(
+        proveedor
+          ? `PDF de ${proveedor} generado`
+          : "PDF del Encargado de Compra generado"
+      );
     } catch (e) {
       toast.error(`PDF: ${(e as Error).message}`);
     } finally {
@@ -325,19 +343,85 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
               />
               {vigilando ? "VIGILANDO" : "EN PAUSA"}
             </span>
-            <button
-              onClick={() => void descargarPdf()}
-              disabled={!plan || pdfCargando}
-              className="h-8 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 text-white disabled:opacity-40 flex items-center gap-1.5 transition-colors"
-              title="Exportar la necesidad de compra en PDF"
-            >
-              {pdfCargando ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
+            <div className="relative">
+              <div className="flex items-center rounded-lg bg-white/10 overflow-hidden">
+                <button
+                  onClick={() => void descargarPdf()}
+                  disabled={!plan || pdfCargando}
+                  className="h-8 pl-2.5 pr-2 hover:bg-white/20 text-white disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+                  title="Exportar la necesidad de compra completa en PDF"
+                >
+                  {pdfCargando ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  <span className="text-[9px] font-black tracking-widest">EXPORTAR PDF</span>
+                </button>
+                <span className="h-5 w-px bg-white/25" aria-hidden="true" />
+                <button
+                  onClick={() => setPdfMenuOpen((v) => !v)}
+                  disabled={!plan || pdfCargando}
+                  className="h-8 px-1.5 hover:bg-white/20 text-white disabled:opacity-40 flex items-center justify-center transition-colors"
+                  title="Exportar el PDF de UN proveedor"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {pdfMenuOpen && plan && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setPdfMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-72 max-h-80 overflow-y-auto rounded-xl border border-stone-200 bg-white shadow-2xl">
+                    <p className="px-3 py-2 text-[9px] font-black tracking-widest text-stone-400 uppercase border-b border-stone-100">
+                      Exportar PDF
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPdfMenuOpen(false);
+                        void descargarPdf();
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-cyan-50 transition-colors border-b border-stone-100"
+                    >
+                      <span className="block text-[11px] font-black text-stone-800 uppercase tracking-wide">
+                        Todos los proveedores
+                      </span>
+                      <span className="block text-[10px] text-stone-500">
+                        {plan.resumen.productos} código(s) · {plan.resumen.unidades} unidad(es)
+                      </span>
+                    </button>
+                    {plan.proveedores.map((p) => (
+                      <button
+                        key={p.proveedor}
+                        type="button"
+                        onClick={() => {
+                          setPdfMenuOpen(false);
+                          void descargarPdf(p.proveedor);
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-cyan-50 transition-colors"
+                      >
+                        <span className="block text-[11px] font-black text-stone-800 uppercase tracking-wide truncate">
+                          {p.proveedor}
+                        </span>
+                        <span className="block text-[10px] text-stone-500">
+                          {p.productos} código(s) · {p.unidades} unidad(es)
+                          {p.prioritarios > 0 ? ` · ${p.prioritarios} prioridad alta` : ""}
+                        </span>
+                      </button>
+                    ))}
+                    {plan.proveedores.length === 0 && (
+                      <p className="px-3 py-3 text-[10px] text-stone-400">
+                        Sin proveedores con necesidad de compra.
+                      </p>
+                    )}
+                  </div>
+                </>
               )}
-              <span className="text-[9px] font-black tracking-widest">EXPORTAR PDF</span>
-            </button>
+            </div>
             <button
               onClick={onClose}
               className="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
