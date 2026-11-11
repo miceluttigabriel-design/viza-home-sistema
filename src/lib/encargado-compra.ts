@@ -29,9 +29,13 @@ import {
   type EntradaProductoEncargado,
 } from "@/lib/encargado-distribucion";
 
-// Task 161 (pedido del dueño): el Encargado de Compra trabaja SOLO con:
-//   · productos marcados con la etiqueta verde SELECCIONADO en la Base;
+// Task 161 + Task 168 (pedido del dueño): el Encargado de Compra trabaja con:
+//   · productos SELECCIONADO (etiqueta verde) o PARA PEDIDO (etiqueta azul);
+//   · productos SIN etiqueta (en blanco, todavía sin categoría);
 //   · códigos desde 100.000 en adelante (los códigos viejos se descartan).
+// Cualquier otra etiqueta (DESCONTINUADO, QUEMA STOCK, etc.) queda FUERA:
+// si un producto en blanco recibe una etiqueta de DESCONTINUADO, el Encargado
+// de Compra deja de considerarlo.
 export const CODIGO_MINIMO_COMPRA = 100_000;
 
 export function codigoCompraValido(sku: unknown): boolean {
@@ -111,7 +115,8 @@ export interface ResumenCompra {
   productosConVenta: number;
   unidadesVendidas: number;
   unidadesEnCentral: number;
-  /** productos descartados por no estar SELECCIONADOS en la Base */
+  /** productos descartados por tener una etiqueta que no es SELECCIONADO
+   *  (verde) ni PARA PEDIDO (azul); los productos SIN etiqueta SÍ se analizan */
   noSeleccionados: number;
   /** productos descartados por código menor a 100.000 */
   codigosIgnorados: number;
@@ -223,8 +228,16 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   let codigosIgnorados = 0;
 
   for (const producto of entrada.productos || []) {
-    // Regla del dueño: SOLO productos SELECCIONADOS (etiqueta verde).
-    if (!producto.seleccionado) {
+    // Regla del dueño (Task 168): el Encargado de Compra analiza
+    //   · SELECCIONADO   (etiqueta verde)
+    //   · PARA PEDIDO    (etiqueta azul)
+    //   · SIN ETIQUETA   (en blanco, todavía sin categoría)
+    // Si un producto en blanco recibe CUALQUIER otra etiqueta (DESCONTINUADO,
+    // QUEMA STOCK, VIZA LÍQUIDA, etc.) queda FUERA del análisis.
+    const etiqueta = String(producto.etiqueta || "").toLowerCase();
+    const comprable =
+      etiqueta === "" || etiqueta === "verde" || etiqueta === "azul";
+    if (!comprable) {
       noSeleccionados += 1;
       continue;
     }
@@ -371,7 +384,7 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   }
   if (noSeleccionados > 0) {
     alertas.add(
-      `${noSeleccionados} producto(s) no están marcados como SELECCIONADO (etiqueta verde) en la Base y quedaron fuera del análisis de compra.`
+      `${noSeleccionados} producto(s) tienen otra etiqueta en la Base (por ejemplo DESCONTINUADO o QUEMA STOCK): quedaron fuera del análisis de compra. El Encargado analiza SELECCIONADO, PARA PEDIDO y los que están SIN etiqueta.`
     );
   }
   if (codigosIgnorados > 0) {

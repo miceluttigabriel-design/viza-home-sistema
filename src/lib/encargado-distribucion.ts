@@ -51,6 +51,13 @@ export interface EntradaProductoEncargado {
   proveedor?: string | null;
   /** true = etiqueta verde SELECCIONADO en la Base */
   seleccionado?: boolean;
+  /** etiquetaColor tal cual la Base: "verde", "azul", "dorado", "rojo",
+   *  id de etiqueta creada, o null = SIN etiqueta (en blanco).
+   *  Regla del dueño (Task 168): el Encargado de Compra analiza
+   *  SELECCIONADO (verde) + PARA PEDIDO (azul) + EN BLANCO (null).
+   *  Cualquier otra etiqueta (DESCONTINUADO, QUEMA STOCK, VIZA LÍQUIDA...)
+   *  queda FUERA del análisis. */
+  etiqueta?: string | null;
   modelo: string | null;
   colores: string[];
   /** CORES tal cual viene de la Base (respaldo si no se parseó antes) */

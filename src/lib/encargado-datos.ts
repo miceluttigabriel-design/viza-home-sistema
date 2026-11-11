@@ -154,6 +154,9 @@ export async function cargarDatosEncargado(
       proveedor: p.fabricante,
       // La etiqueta VERDE de la Base es la que el dueño llama SELECCIONADO.
       seleccionado: String(p.etiquetaColor || "").toLowerCase() === "verde",
+      // Etiqueta cruda (Task 168): el Encargado de Compra incluye verde,
+      // azul (PARA PEDIDO) y productos SIN etiqueta; excluye el resto.
+      etiqueta: p.etiquetaColor ? String(p.etiquetaColor).toLowerCase() : null,
       modelo: p.modelo,
       colores: parsearColores(cores),
       colorLegacy: cores,

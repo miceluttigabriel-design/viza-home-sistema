@@ -14,7 +14,6 @@ import {
   Package,
   RefreshCw,
   Search,
-  Sparkles,
   TrendingDown,
   Warehouse,
   X,
@@ -670,12 +669,6 @@ export function EncargadoDistribucion({
                 <>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <div
-                        className="h-8 w-8 rounded-lg flex items-center justify-center"
-                        style={{ background: "rgba(21,87,137,0.08)" }}
-                      >
-                        <Sparkles className="h-4 w-4" style={{ color: AZUL }} />
-                      </div>
                       <div>
                         <p className="text-[11px] font-black text-stone-800">
                           {ia.activa ? "ANÁLISIS CON IA" : "ANÁLISIS DETERMINÍSTICO"}

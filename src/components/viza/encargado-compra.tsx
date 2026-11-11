@@ -15,7 +15,6 @@ import {
   RefreshCw,
   Search,
   ShoppingCart,
-  Sparkles,
   TrendingDown,
   Truck,
   X,
@@ -696,12 +695,6 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
                 <>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <div
-                        className="h-8 w-8 rounded-lg flex items-center justify-center"
-                        style={{ background: "rgba(14,116,144,0.1)" }}
-                      >
-                        <Sparkles className="h-4 w-4" style={{ color: "#0e7490" }} />
-                      </div>
                       <div>
                         <p className="text-[11px] font-black text-stone-800">
                           {ia.activa ? "ANÁLISIS CON IA" : "ANÁLISIS DETERMINÍSTICO"}
