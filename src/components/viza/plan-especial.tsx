@@ -805,16 +805,20 @@ export function PlanEspecial({
     return Array.from(new Set(combinaciones.map((c) => c.proveedor)));
   }, [catalogo, combinaciones]);
 
-  // GRUPO (columna CATEGORIA) del proveedor elegido — selector PRINCIPAL.
+  // GRUPO (selector PRINCIPAL, pedido del dueño: "tiene que estar TODO lo
+  // de la columna GRUPO de la BASE del sistema y TODO lo de CATEGORIA del
+  // Excel"). El dueño pidió que sea TODO el universo (no filtrado por el
+  // proveedor elegido): mostramos la lista completa (BASE + lista VIZA,
+  // sin repetidos). Respaldo: los grupos del proveedor y los del catálogo.
   const gruposDelProveedor = useMemo(() => {
+    if (catalogo.grupos.length > 0) return catalogo.grupos;
     if (proveedor && catalogo.gruposPorProveedor[proveedor]?.length) {
       return catalogo.gruposPorProveedor[proveedor];
     }
-    if (catalogo.grupos.length > 0) return catalogo.grupos;
     return Array.from(
       new Set(
         catalogo.porcentajes
-          .filter((p) => p.fabricante === proveedor && p.grupo)
+          .filter((p) => p.grupo)
           .map((p) => p.grupo)
       )
     );

@@ -77,60 +77,68 @@ export async function GET() {
     const proveedores: string[] = [];
     const tiposPorProveedor: Record<string, string[]> = {};
     const gruposPorProveedor: Record<string, string[]> = {};
-    const tipos = new Set<string>();
     const grupos = new Set<string>();
-    for (const p of pares) {
-      const fab = String(p.fabricante || "").trim();
-      if (!fab) continue;
-      const grp = String(p.grupo || "").trim();
-      const tip = String(p.tipo || "").trim();
-      if (!tiposPorProveedor[fab]) {
+    const tipos = new Set<string>();
+    const provKeys = new Set<string>();
+    const grupoKeys = new Set<string>();
+    const tipoKeys = new Set<string>();
+    const norm = (v: string) => String(v || "").trim().toUpperCase();
+
+    // Un solo agregador para la BASE y la LISTA EXCEL: dedupe por clave
+    // normalizada (los repetidos se eliminan y manda lo primero que entra,
+    // que es la BASE -> si BASE y Excel tienen la misma combinación, gana
+    // la BASE).
+    const agregar = (fabRaw: string, grpRaw: string, tipRaw: string) => {
+      const fab = String(fabRaw || "").trim();
+      if (!fab) return;
+      const fabKey = norm(fab);
+      if (!provKeys.has(fabKey)) {
+        provKeys.add(fabKey);
         tiposPorProveedor[fab] = [];
         gruposPorProveedor[fab] = [];
         proveedores.push(fab);
       }
+      const grp = String(grpRaw || "").trim();
+      const tip = String(tipRaw || "").trim();
       if (grp) {
-        if (!gruposPorProveedor[fab].includes(grp)) gruposPorProveedor[fab].push(grp);
-        grupos.add(grp);
+        const grpKey = norm(grp);
+        if (!grupoKeys.has(grpKey)) {
+          grupoKeys.add(grpKey);
+          grupos.add(grp);
+        }
+        if (!gruposPorProveedor[fab].some((v) => norm(v) === grpKey))
+          gruposPorProveedor[fab].push(grp);
       }
       if (tip) {
-        if (!tiposPorProveedor[fab].includes(tip)) tiposPorProveedor[fab].push(tip);
-        tipos.add(tip);
+        const tipKey = norm(tip);
+        if (!tipoKeys.has(tipKey)) {
+          tipoKeys.add(tipKey);
+          tipos.add(tip);
+        }
+        if (!tiposPorProveedor[fab].some((v) => norm(v) === tipKey))
+          tiposPorProveedor[fab].push(tip);
       }
-    }
-    // LISTA EXCEL (pedido del dueño: "quiero que ponga tanto de la BASE
-    // como del Excel… los repetidos los eliminás"): se ofrecen TODAS las
-    // combinaciones del Excel en el buscador del PEDIDO ESPECIAL, sin
-    // repetir las que la BASE ya tiene (dedupe por clave normalizada).
-    // NUNCA se escriben en la BASE (tabla Product); es solo para buscar acá.
-    for (const c of combosDelCatalogoExtra()) {
-      const fab = String(c.fabricante || "").trim();
-      if (!fab) continue;
-      if (!tiposPorProveedor[fab]) {
-        tiposPorProveedor[fab] = [];
-        gruposPorProveedor[fab] = [];
-        proveedores.push(fab);
-      }
-      const grp = String(c.grupo || "").trim();
-      const tip = String(c.tipo || "").trim();
-      if (grp) {
-        if (!gruposPorProveedor[fab].includes(grp)) gruposPorProveedor[fab].push(grp);
-        grupos.add(grp);
-      }
-      if (tip) {
-        if (!tiposPorProveedor[fab].includes(tip)) tiposPorProveedor[fab].push(tip);
-        tipos.add(tip);
-      }
-    }
+    };
+
+    // 1) TODO lo de la BASE (fabricante + GRUPO + TIPO).
+    for (const p of pares) agregar(p.fabricante, p.grupo, p.tipo);
+    // 2) TODO lo de la LISTA EXCEL (FABRICANTE + CATEGORIA + DIVISION), sin
+    //    repetir lo que ya tiene la BASE.
+    for (const c of combosDelCatalogoExtra()) agregar(c.fabricante, c.grupo, c.tipo);
     proveedores.sort((a, b) => a.localeCompare(b));
 
     // Los tipos creados entran en TODAS las listas (global + por
     // proveedor): si no están catalogados en la BASE, todavía así el
     // vendedor puede elegirlos para cualquier proveedor.
     for (const t of extraSet) {
-      tipos.add(t);
+      const tKey = norm(t);
+      if (!tipoKeys.has(tKey)) {
+        tipoKeys.add(tKey);
+        tipos.add(t);
+      }
       for (const fab of proveedores) {
-        if (!tiposPorProveedor[fab].includes(t)) tiposPorProveedor[fab].push(t);
+        if (!tiposPorProveedor[fab].some((v) => norm(v) === tKey))
+          tiposPorProveedor[fab].push(t);
       }
     }
 
