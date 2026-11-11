@@ -162,14 +162,17 @@ const redondeoComercial = (v: number): number =>
 // ─── HORIZONTE DEL PLAN (Task 166) ──────────────────────────────────────────
 // Reporte del dueño: "tiene 4 fechas pero abajo sale apenas 2 refuerzos y
 // pago final". El plan tenía DOS recortes que borraban refuerzos cargados:
-//   1) tope fijo de 18 meses: una fecha posterior al mes 18 se recortaba a 18;
+//   1) el mes guardado se recortaba a 18 EN SILENCIO, así que una fecha
+//      posterior al mes 18 pasaba el control como si fuera el mes 18 (la
+//      fecha quedaba a la vista, pero el refuerzo se mezclaba/desaparecía);
 //   2) el bucle se cortaba cuando el saldo llegaba a 0, así que si el capital
 //      terminaba de pagarse antes, el refuerzo del último mes NUNCA se
 //      mostraba (quedaba invisible, sin aviso).
-// Ahora el horizonte lo marcan las FECHAS que carga el vendedor: el plan
-// llega hasta el último refuerzo. El tope de 60 meses (5 años) es solo una
-// guarda técnica para fechas absurdas.
-export const MAX_MESES_SAFRA = 60;
+// REGLA DEL DUEÑO (confirmada): el PLAN SAFRA es de hasta 18 MESES contados
+// desde la FECHA DE EMISIÓN del presupuesto. Una fecha fuera de ese plazo
+// ahora se marca en ROJO y BLOQUEA el presupuesto con el motivo a la vista
+// — nunca se recorta ni se esconde.
+export const MAX_MESES_SAFRA = 18;
 
 // Mes de un refuerzo derivado de su FECHA (fuente de verdad) y de la fecha de
 // emisión. Misma regla que el cronograma: diferencia de meses de calendario,
@@ -288,21 +291,22 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     });
   }
 
-  // === REFUERZOS: MES DERIVADO DE LA FECHA Y ORDENADO (Task 166) ===
+  // === REFUERZOS: MES DERIVADO DE LA FECHA (Task 166) ===
   // El mes SIEMPRE se recalcula desde la FECHA cargada por el vendedor (la
   // fecha es la fuente de verdad). Antes se usaba el mes guardado, que podía
-  // quedar viejo si se cambiaba la emisión: el refuerzo se mostraba en un mes
-  // que no era el de su fecha. Se ordenan por mes para que el "último" sea
-  // realmente el último pago (el que cierra el plan).
-  const refuerzosCalculados = refuerzos
+  // quedar viejo o recortado a 18: el refuerzo se mostraba en un mes que no
+  // era el de su fecha. Se ordenan por mes para que el "último" sea realmente
+  // el último pago (el que cierra el plan).
+  // El plazo del Plan Safra es de 18 meses desde la emisión: un refuerzo con
+  // fecha fuera de ese plazo NO entra al cálculo — la pantalla lo marca en
+  // rojo y bloquea el presupuesto (nunca se lo recorta ni se lo esconde).
+  const refuerzosCalculados = (refuerzos || [])
     .map((r) => {
       const mesFecha = mesDeFecha(fechaEmision, r.fecha);
-      const mesCrudo = mesFecha === null ? (r.mes || 1) : mesFecha;
-      return {
-        ...r,
-        mes: Math.max(1, Math.min(MAX_MESES_SAFRA, mesCrudo)),
-      };
+      const mesCrudo = mesFecha === null ? (r.mes || 0) : mesFecha;
+      return { ...r, mes: mesCrudo };
     })
+    .filter((r) => r.mes >= 1 && r.mes <= MAX_MESES_SAFRA)
     .sort((a, b) => a.mes - b.mes);
   const nRefuerzos = refuerzosCalculados.length;
   const maxMes = nRefuerzos > 0 ? refuerzosCalculados[nRefuerzos - 1].mes : 0;
@@ -610,7 +614,12 @@ export const usePlanSafraStore = create<PlanSafraState>()(
           const dBase = new Date(fechaBase + "T00:00:00");
           const dRefuerzo = new Date(fecha + "T00:00:00");
           const mesCalculado = (dRefuerzo.getFullYear() - dBase.getFullYear()) * 12 + (dRefuerzo.getMonth() - dBase.getMonth());
-          const mesSeguro = Math.max(1, Math.min(MAX_MESES_SAFRA, mesCalculado));
+          // Task 166: se guarda el mes REAL, SIN recortarlo a 18. El plazo del
+          // Plan Safra es 18 meses desde la emisión, pero una fecha fuera de
+          // plazo tiene que quedar a la vista para marcarse en rojo y bloquear
+          // el presupuesto — antes se recortaba en silencio y el refuerzo
+          // desaparecía del resultado sin ningún aviso.
+          const mesSeguro = Math.max(0, mesCalculado);
           return {
             refuerzos: state.refuerzos.map((r) =>
               r.id === id

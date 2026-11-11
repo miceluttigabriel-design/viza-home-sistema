@@ -281,13 +281,18 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
       toast.error("Completá el Nombre del cliente para generar el presupuesto");
       return;
     }
-    // Task 166 (reporte del dueño): el plan llega hasta el ÚLTIMO refuerzo
-    // cargado (tope técnico de 60 meses = 5 años). Antes se cortaba en el mes
-    // 18 y una fecha posterior quedaba recortada / invisible.
+    // Task 166 (regla confirmada por el dueño): el PLAN SAFRA es de hasta 18
+    // MESES contados desde la fecha de emisión. Una fecha fuera de ese plazo
+    // se marca en rojo en la sección REFUERZOS y bloquea el presupuesto con
+    // el motivo a la vista (antes se recortaba en silencio y el refuerzo
+    // desaparecía del resultado).
     const refuerzosFueraDePlazo = refuerzos.filter(refuerzoFueraDeRango);
     if (refuerzosFueraDePlazo.length > 0) {
+      const fechas = refuerzosFueraDePlazo
+        .map((r) => (r.fecha ? r.fecha.split("-").reverse().join("/") : "sin fecha"))
+        .join(", ");
       toast.error(
-        `Revisá las fechas de los refuerzos: tienen que estar entre el mes 1 y el mes ${MAX_MESES_SAFRA} del plan.`
+        `El Plan Safra es de hasta ${MAX_MESES_SAFRA} meses desde la emisión. Corregí: ${fechas}`
       );
       return;
     }
@@ -835,8 +840,8 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
             <Calendar className="h-10 w-10 text-stone-300 mx-auto mb-2" />
             <p className="text-sm font-medium text-stone-500">No hay refuerzos cargados</p>
             <p className="text-xs text-stone-400 mt-1 mb-4">
-              Hacé click en "AGREGAR REFUERZO" para añadir pagos extra en los meses que elijas
-              (desde el mes 1 hasta el mes {MAX_MESES_SAFRA}).
+              Hacé click en "AGREGAR REFUERZO" para añadir pagos extra. El plan es de
+              hasta {MAX_MESES_SAFRA} meses contados desde la fecha de emisión.
             </p>
           </div>
         ) : (
@@ -889,7 +894,7 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
                   </div>
                   {fueraDePlazo && (
                     <div className="col-span-2 -mt-1 text-[10px] text-rose-600 font-semibold">
-                      ⚠ La fecha tiene que estar entre el mes 1 y el mes {MAX_MESES_SAFRA} del plan
+                      ⚠ Fuera del plazo: el Plan Safra llega hasta {MAX_MESES_SAFRA} meses desde la emisión
                     </div>
                   )}
                 </div>
@@ -988,10 +993,22 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
             </p>
           )}
           {refuerzos.some(refuerzoFueraDeRango) && (
-            <p className="text-xs font-bold text-rose-700">
-              ⚠️ Hay refuerzos con fecha fuera del rango (mes 1 al {MAX_MESES_SAFRA}). Corregí la
-              fecha marcada en rojo en la sección REFUERZOS.
-            </p>
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-rose-700">
+                ⚠️ El Plan Safra llega hasta {MAX_MESES_SAFRA} meses desde la fecha de emisión
+                ({fechaBasePlan.split("-").reverse().join("/")}). Estas fechas están fuera del plazo:
+              </p>
+              <ul className="text-xs font-semibold text-rose-700 list-disc pl-5">
+                {refuerzos.filter(refuerzoFueraDeRango).map((r) => (
+                  <li key={r.id}>
+                    {r.fecha ? r.fecha.split("-").reverse().join("/") : "sin fecha"} (mes {mesDe(r)})
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs font-semibold text-rose-700">
+                Corregí la fecha marcada en rojo en la sección REFUERZOS para poder generar el presupuesto.
+              </p>
+            </div>
           )}
         </div>
       )}
