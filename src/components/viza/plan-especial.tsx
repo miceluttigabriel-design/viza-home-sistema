@@ -411,9 +411,13 @@ export function PlanEspecial({
         tiposExtra: Array.isArray(dataCat.tiposExtra) ? dataCat.tiposExtra : [],
         porcentajes: Array.isArray(dataCat.porcentajes) ? dataCat.porcentajes : [],
       });
+      // TASA ACTIVA DE LA BASE (la misma que el admin actualiza en el
+      // panel): GET /api/config-cambio devuelve { cambioRS, cambioUS, ... }
+      // en la RAÍZ. El costo en US$ se convierte SIEMPRE con esta tasa
+      // actualizada y todos los planes se muestran en Gs.
       const resTasa = await fetch("/api/config-cambio");
       const dataTasa = await resTasa.json().catch(() => ({}));
-      const us = Number(dataTasa?.tasas?.cambioUS);
+      const us = Number(dataTasa?.cambioUS);
       if (Number.isFinite(us) && us > 0) setCambioUS(us);
     } catch {
       // silent: la UI muestra "sin combinaciones" y la tasa default
