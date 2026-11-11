@@ -354,6 +354,7 @@ export function PlanEspecial({
     descripcion,
     plan,
     cuotas,
+    entregaStr,
     fechaInicioPago,
     safraEntradaStr,
     safraMeses,
@@ -366,6 +367,7 @@ export function PlanEspecial({
     setDescripcion,
     setPlan,
     setCuotas,
+    setEntregaStr,
     setFechaInicioPago,
     setSafraEntradaStr,
     setSafraMeses,
@@ -511,6 +513,7 @@ export function PlanEspecial({
           costo,
           plan,
           cuotas,
+          entrega: entregaConEntrega,
           fechaInicioPago,
           safraEntrada,
           safraMeses,
@@ -778,6 +781,8 @@ export function PlanEspecial({
   const esMoto = useMemo(() => esTipoMoto(tipoProducto), [tipoProducto]);
   const diasSinEntrega = useMemo(() => diasHastaFecha(fechaInicioPago), [fechaInicioPago]);
   const safraEntrada = useMemo(() => parseCosto(safraEntradaStr) || 0, [safraEntradaStr]);
+  // Entrega inicial OPCIONAL del plan CUOTAS CON ENTREGA (0 = sin cargar).
+  const entregaConEntrega = parseCosto(entregaStr) || 0;
 
   // === Cálculo EN VIVO (recalcula solo si cambian los % de la BASE) ===
   const costo = parseCosto(costoStr);
@@ -795,6 +800,7 @@ export function PlanEspecial({
       pctSafra: porcentajesElegidos.pctSafra,
       plan,
       cuotas,
+      entrega: parseCosto(entregaStr) || 0,
       diasSinEntrega,
       safraEntrada,
       safraMeses,
@@ -810,6 +816,7 @@ export function PlanEspecial({
     cambioUS,
     plan,
     cuotas,
+    entregaStr,
     diasSinEntrega,
     safraEntrada,
     safraMeses,
@@ -818,6 +825,34 @@ export function PlanEspecial({
     esMoto,
     hoy,
   ]);
+
+  // Resultado ESTÁNDAR del plan CON ENTREGA (sin la entrega personalizada):
+  // se usa SOLO para validar que la entrega cargada no supere el total del
+  // plan. Si el plan no es con entrega o no hay entrega, no se calcula.
+  const resultadoEstandarConEntrega =
+    !costo || plan !== "cuotas_con_entrega" || entregaConEntrega <= 0
+      ? null
+      : calcularPedidoEspecial({
+          costo,
+          modoCosto,
+          cambioUS,
+          pctContado: porcentajesElegidos.pctContado,
+          pct1A6: porcentajesElegidos.pct1A6,
+          pct7A13: porcentajesElegidos.pct7A13,
+          pct14A30: porcentajesElegidos.pct14A30,
+          pctTecnico: porcentajesElegidos.pctTecnico,
+          pctSafra: porcentajesElegidos.pctSafra,
+          plan,
+          cuotas,
+          entrega: 0,
+          diasSinEntrega,
+          safraEntrada,
+          safraMeses,
+          chequesCantidad,
+          chequesFechas,
+          esMoto,
+          fechaEmision: hoy,
+        });
 
   // Resultado VÁLIDO para mostrar (cheque necesita sus fechas; safra su
   // cronograma; el resto el número principal).
@@ -834,6 +869,16 @@ export function PlanEspecial({
   if (!proveedor) faltantes.push("el proveedor");
   if (!tipoProducto) faltantes.push("el tipo de producto");
   if (!descripcion.trim()) faltantes.push("la descripción");
+  if (
+    plan === "cuotas_con_entrega" &&
+    entregaConEntrega > 0 &&
+    resultadoEstandarConEntrega &&
+    entregaConEntrega >= resultadoEstandarConEntrega.total
+  ) {
+    faltantes.push(
+      `una entrega menor al total del plan (${formatPYG(resultadoEstandarConEntrega.total)})`
+    );
+  }
   if (plan === "cuotas_sin_entrega") {
     if (!fechaInicioPago) faltantes.push("la fecha de inicio de pago");
     else if (diasSinEntrega !== null && diasSinEntrega < 0)
@@ -1426,6 +1471,20 @@ export function PlanEspecial({
                   ))}
                 </select>
               </div>
+              {plan === "cuotas_con_entrega" && (
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-semibold text-stone-500 uppercase whitespace-nowrap flex items-center gap-1">
+                    <Landmark className="h-3 w-3" />
+                    Entrega (Gs):
+                  </label>
+                  <CampoMonto
+                    value={entregaStr}
+                    onChange={setEntregaStr}
+                    placeholder="0 = la 1ª cuota"
+                    className="w-40 h-10 px-3 rounded-lg border border-stone-300 text-sm font-semibold focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+                  />
+                </div>
+              )}
               {plan === "cuotas_sin_entrega" && (
                 <>
                   <div className="flex items-center gap-2">
@@ -1453,6 +1512,19 @@ export function PlanEspecial({
                   )}
                 </>
               )}
+              {plan === "cuotas_con_entrega" &&
+                entregaConEntrega > 0 &&
+                resultado && (
+                  <p
+                    className="text-[11px] font-semibold leading-snug basis-full"
+                    style={{ color: AZUL }}
+                  >
+                    Entrega de {formatPYG(entregaConEntrega)} +{" "}
+                    {Math.max(1, cuotas - 1)}{" "}
+                    {Math.max(1, cuotas - 1) === 1 ? "cuota" : "cuotas"} de{" "}
+                    {formatPYG(resultado.cuotaValor)}.
+                  </p>
+                )}
             </div>
           )}
 
@@ -1608,8 +1680,19 @@ export function PlanEspecial({
               </p>
               {(plan === "cuotas_con_entrega" || plan === "cuotas_sin_entrega") && (
                 <p className="text-sm font-semibold mt-2" style={{ color: AZUL }}>
-                  Total del plan: {formatPYG(resultadoOk.total)} ({resultadoOk.cuotas} ×{" "}
-                  {formatPYG(resultadoOk.cuotaValor)})
+                  Total del plan: {formatPYG(resultadoOk.total)}{" "}
+                  {plan === "cuotas_con_entrega" && resultadoOk.entrega > 0 ? (
+                    <>
+                      (Entrega {formatPYG(resultadoOk.entrega)} +{" "}
+                      {Math.max(1, resultadoOk.cuotas - 1)}{" "}
+                      {Math.max(1, resultadoOk.cuotas - 1) === 1 ? "cuota" : "cuotas"} de{" "}
+                      {formatPYG(resultadoOk.cuotaValor)})
+                    </>
+                  ) : (
+                    <>
+                      ({resultadoOk.cuotas} × {formatPYG(resultadoOk.cuotaValor)})
+                    </>
+                  )}
                 </p>
               )}
               {plan === "cuotas_sin_entrega" && fechaInicioPago && (

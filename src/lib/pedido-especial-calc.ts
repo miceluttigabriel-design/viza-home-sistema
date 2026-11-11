@@ -140,6 +140,12 @@ export interface ParamsPedidoEspecial {
   // Plan elegido + parámetros por plan.
   plan: PlanPedidoEspecial;
   cuotas: number; // cuotas_*: 1-30 (se recorta a rango)
+  // cuotas_con_entrega: valor OPCIONAL de la entrega inicial (Gs). 0 o
+  // vacío = la entrega es la 1ª cuota estándar (comportamiento de antes).
+  // Si viene un valor, la entrega pasa a ser ese monto y el resto del
+  // total del plan se reparte entre las cuotas restantes (misma regla
+  // del presupuesto PLAN CUOTA CON ENTREGA).
+  entrega?: number;
   // cuotas_sin_entrega: días entre HOY y la 1ª cuota (0-60). La pantalla
   // lo calcula con la fecha elegida; null = fecha inválida/ausente.
   diasSinEntrega: number | null;
@@ -198,6 +204,9 @@ export interface ResultadoPedidoEspecial {
   valorContado: number;
   // Valor de CADA cuota (cuotas_con_entrega / cuotas_sin_entrega; 0 otros).
   cuotaValor: number;
+  // CUOTAS CON ENTREGA: entrega inicial efectiva (Gs). 0 = no se cargó
+  // una entrega personalizada (la 1ª cuota hace de entrega, como antes).
+  entrega: number;
   // MONTO PRINCIPAL del plan elegido:
   //   contado → valorContado · cuotas → cuota × N · mayorista → valorTecnico
   //   safra → total pagado (entrada + refuerzos) · cheque → cheques × N
@@ -435,6 +444,7 @@ export function calcularPedidoEspecial(
     margenAplicado: 0,
     valorContado,
     cuotaValor: 0,
+    entrega: 0,
     total: 0,
     recargoSinEntregaPct: 0,
     valorTecnico: 0,
@@ -478,6 +488,33 @@ export function calcularPedidoEspecial(
         cuotaValor: cuota,
         total: cuota * n,
         recargoSinEntregaPct: recargo,
+      };
+    }
+
+    // CON ENTREGA: la entrega inicial es OPCIONAL (cuadrito del pedido
+    // especial, igual que el plan CUOTA CON ENTREGA del presupuesto).
+    //   · Sin entrega cargada: todo queda como siempre (cada cuota = el
+    //     valor de la tabla y la 1ª cuota hace de entrega).
+    //   · Con entrega cargada: la entrega pasa a ser ese monto y el resto
+    //     del total del plan se reparte entre las cuotas restantes, con
+    //     redondeo comercial al millar superior (el margen nunca baja).
+    const entrega = Math.max(0, Math.round(Number(p.entrega) || 0));
+    if (entrega > 0) {
+      const totalPlan = cuotaBase * n;
+      // La entrega no puede pagar todo el plan: si es igual o mayor,
+      // el plan no cierra (la pantalla lo avisa antes de guardar).
+      if (entrega >= totalPlan) return null;
+      const cuotasRestantes = Math.max(1, n - 1);
+      const cuotaAjustada = redondeoComercial(
+        (totalPlan - entrega) / cuotasRestantes
+      );
+      return {
+        ...base,
+        cuotas: n,
+        margenAplicado: margenBase,
+        cuotaValor: cuotaAjustada,
+        total: entrega + cuotaAjustada * cuotasRestantes,
+        entrega,
       };
     }
 

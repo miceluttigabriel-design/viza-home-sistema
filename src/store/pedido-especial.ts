@@ -38,6 +38,12 @@ export interface PedidoEspecialState {
   plan: PlanPedidoEspecial;
   cuotas: number; // 1-30 (solo planes de cuotas)
 
+  // === CUOTAS CON ENTREGA ===
+  // Entrega inicial OPCIONAL en Gs (texto crudo del input). Vacío o 0 =
+  // la 1ª cuota hace de entrega, como siempre. Si se carga un valor, la
+  // entrega pasa a ser ese monto y el resto se reparte en las cuotas.
+  entregaStr: string;
+
   // === CUOTAS SIN ENTREGA ===
   // Fecha de inicio de la 1ª cuota (ISO YYYY-MM-DD). 0-30 días = mismo
   // valor que CON ENTREGA; 31-60 días = recargo 3% (misma regla del
@@ -59,6 +65,7 @@ export interface PedidoEspecialState {
   setDescripcion: (d: string) => void;
   setPlan: (p: PlanPedidoEspecial) => void;
   setCuotas: (n: number) => void;
+  setEntregaStr: (s: string) => void;
   setFechaInicioPago: (f: string) => void;
   setSafraEntradaStr: (s: string) => void;
   setSafraMeses: (n: number) => void;
@@ -76,6 +83,7 @@ const initial = {
   descripcion: "",
   plan: "contado" as PlanPedidoEspecial,
   cuotas: 1,
+  entregaStr: "",
   fechaInicioPago: "",
   safraEntradaStr: "",
   safraMeses: 6,
@@ -93,6 +101,7 @@ type PedidoEspecialPersistedState = Pick<
   | "descripcion"
   | "plan"
   | "cuotas"
+  | "entregaStr"
   | "fechaInicioPago"
   | "safraEntradaStr"
   | "safraMeses"
@@ -109,6 +118,7 @@ function migrarV1(persisted: unknown): PedidoEspecialPersistedState {
     (p as { plan: PlanPedidoEspecial }).plan = "cuotas_con_entrega";
   }
   if (!p.fechaInicioPago) p.fechaInicioPago = "";
+  if (typeof p.entregaStr !== "string") p.entregaStr = "";
   if (!p.safraEntradaStr) p.safraEntradaStr = "";
   if (!Number.isFinite(p.safraMeses) || p.safraMeses < 1) p.safraMeses = 6;
   if (!Number.isFinite(p.chequesCantidad) || p.chequesCantidad < 1) p.chequesCantidad = 3;
@@ -133,6 +143,7 @@ export const usePedidoEspecialStore = create<PedidoEspecialState>()(
       setDescripcion: (d) => set({ descripcion: d }),
       setPlan: (p) => set({ plan: p }),
       setCuotas: (n) => set({ cuotas: Math.max(1, Math.min(30, Math.floor(n || 1))) }),
+      setEntregaStr: (s) => set({ entregaStr: String(s ?? "") }),
       setFechaInicioPago: (f) => set({ fechaInicioPago: f }),
       setSafraEntradaStr: (s) => set({ safraEntradaStr: s }),
       setSafraMeses: (n) => set({ safraMeses: Math.max(1, Math.min(18, Math.floor(n || 1))) }),
@@ -161,6 +172,7 @@ export const usePedidoEspecialStore = create<PedidoEspecialState>()(
         descripcion: state.descripcion,
         plan: state.plan,
         cuotas: state.cuotas,
+        entregaStr: state.entregaStr,
         fechaInicioPago: state.fechaInicioPago,
         safraEntradaStr: state.safraEntradaStr,
         safraMeses: state.safraMeses,

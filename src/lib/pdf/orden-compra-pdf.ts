@@ -194,6 +194,19 @@ export function buildOrdenCompraPdf(fila: FilaOrdenCompraPdf): jsPDF {
   doc.setLineWidth(0.5);
   doc.line(margin, y + rowH, margin + contentW, y + rowH);
 
+  // COSTO TAL CUAL LO CARGÓ EL VENDEDOR (pedido del dueño): si lo puso en
+  // DÓLARES, la orden muestra DÓLARES; si lo puso en GUARANÍES, muestra
+  // GUARANÍES. La orden de compra NO convierte US$ → Gs: no hay cambio
+  // aplicado ni nota de conversión (antes salía siempre en Gs).
+  const esCostoUSD = String(fila.modoCosto) === "usd";
+  const costoMostrado = esCostoUSD
+    ? Math.max(0, Number(fila.costoOriginal) || 0)
+    : Math.max(0, Number(fila.costoGs) || 0);
+  const fmtCostoOrden = (v: number) =>
+    esCostoUSD
+      ? `US$ ${v.toLocaleString("es-PY", { maximumFractionDigits: 2 })}`
+      : formatPYG(v);
+
   let xxx = margin + 8;
   doc.setTextColor(...GREY);
   doc.setFont("helvetica", "normal");
@@ -214,11 +227,11 @@ export function buildOrdenCompraPdf(fila: FilaOrdenCompraPdf): jsPDF {
   doc.text("1", xxx + 6, y + 11.5);
   xxx += colCant;
   doc.setTextColor(...DARK);
-  doc.text(formatPYG(fila.costoGs), xxx, y + 11.5);
+  doc.text(fmtCostoOrden(costoMostrado), xxx, y + 11.5);
   xxx += colCosto;
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...BLUE);
-  doc.text(formatPYG(fila.costoGs), margin + contentW - 10, y + 11.5, {
+  doc.text(fmtCostoOrden(costoMostrado), margin + contentW - 10, y + 11.5, {
     align: "right",
   });
   y += rowH;
@@ -237,22 +250,13 @@ export function buildOrdenCompraPdf(fila: FilaOrdenCompraPdf): jsPDF {
   doc.setTextColor(255, 255, 255);
   doc.text("TOTAL A COMPRAR", totalBoxX + 14, y + 17.5);
   doc.setFontSize(12);
-  doc.text(formatPYG(fila.costoGs), totalBoxX + totalBoxW - 14, y + 17.5, {
+  doc.text(fmtCostoOrden(costoMostrado), totalBoxX + totalBoxW - 14, y + 17.5, {
     align: "right",
   });
   y += totalBoxH + 2 + 14;
 
-  // Nota del costo original (si el vendedor lo puso en US$).
-  if (String(fila.modoCosto) === "usd" && Number(fila.costoOriginal) > 0) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...GREY);
-    doc.text(
-      `Costo original: US$ ${Number(fila.costoOriginal).toLocaleString("es-PY")} · cambio aplicado US$ 1 = Gs ${Number(fila.cambioUS || 0).toLocaleString("es-PY")}`,
-      totalBoxX + 14,
-      y + 2
-    );
-  }
+  // (Sin nota de conversión: la orden muestra el costo TAL CUAL lo cargó
+  //  el vendedor — en US$ o en Gs — y no aplica cambio.)
 
   // ═══ 4) FIRMA (v7: SOLO el encargado que verificó — "Firma del
   //     Provedor no hace falta") ═══

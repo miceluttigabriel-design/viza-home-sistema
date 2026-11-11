@@ -182,6 +182,9 @@ export interface DetallePresupuesto {
   costoOriginal?: number;
   costoProd?: number;
   margenAplicado?: number;
+  // CUOTAS CON ENTREGA: entrega inicial cargada por el vendedor (0 = la
+  // 1ª cuota hace de entrega, comportamiento de siempre).
+  entrega?: number;
   recargoSinEntregaPct?: number;
   fechaInicioPago?: string;
   safraEntrada?: number;
@@ -375,6 +378,7 @@ export interface DatosPresupuestoEntrada {
   costo: number;
   plan: PlanPedidoEspecial;
   cuotas: number;
+  entrega: number; // CUOTAS CON ENTREGA: entrega inicial opcional (Gs)
   fechaInicioPago: string;
   safraEntrada: number;
   safraMeses: number;
@@ -398,6 +402,9 @@ export function validarDatosPresupuesto(body: any): DatosPresupuestoEntrada | nu
   if (!PLANES_VALIDOS.has(plan)) return null;
 
   const cuotas = Math.max(1, Math.min(30, Math.floor(Number(body?.cuotas) || 1)));
+  // Entrega inicial OPCIONAL del plan CUOTAS CON ENTREGA (Gs). 0/vacío =
+  // comportamiento de siempre (la 1ª cuota hace de entrega).
+  const entrega = Math.max(0, Math.round(Number(body?.entrega) || 0));
   const fechaInicioPago = /^\d{4}-\d{2}-\d{2}$/.test(String(body?.fechaInicioPago || ""))
     ? String(body.fechaInicioPago)
     : "";
@@ -422,6 +429,7 @@ export function validarDatosPresupuesto(body: any): DatosPresupuestoEntrada | nu
     costo,
     plan,
     cuotas,
+    entrega,
     fechaInicioPago,
     safraEntrada,
     safraMeses,
@@ -516,6 +524,7 @@ export async function crearPresupuesto(
       pctSafra: porc.pctSafra,
       plan: datos.plan,
       cuotas: datos.cuotas,
+      entrega: datos.plan === "cuotas_con_entrega" ? datos.entrega : 0,
       diasSinEntrega,
       safraEntrada: datos.safraEntrada,
       safraMeses: datos.safraMeses,
@@ -547,6 +556,10 @@ export async function crearPresupuesto(
       costoOriginal: datos.costo,
       costoProd: resultado.costoProd,
       margenAplicado: resultado.margenAplicado,
+      entrega:
+        datos.plan === "cuotas_con_entrega" && resultado.entrega > 0
+          ? resultado.entrega
+          : 0,
       recargoSinEntregaPct: resultado.recargoSinEntregaPct,
       fechaInicioPago: datos.plan === "cuotas_sin_entrega" ? datos.fechaInicioPago : "",
       safraEntrada: datos.plan === "safra" ? datos.safraEntrada : 0,

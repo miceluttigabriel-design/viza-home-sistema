@@ -34,6 +34,7 @@ interface DetallePdf {
   fechaInicioPago?: string;
   safraEntrada?: number;
   safraMeses?: number;
+  entrega?: number;
   cronograma?: FilaCronogramaEspecial[];
   cheques?: ChequeEspecial[];
 }

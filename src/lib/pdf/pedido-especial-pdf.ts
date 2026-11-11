@@ -77,6 +77,9 @@ export interface FilaPedidoEspecialPdf {
     fechaInicioPago?: string;
     safraEntrada?: number;
     safraMeses?: number;
+    // CUOTAS CON ENTREGA: entrega inicial personalizada (0/vacío = la
+    // 1ª cuota hace de entrega, como siempre).
+    entrega?: number;
     cronograma?: FilaCronogramaEspecial[];
     cheques?: ChequeEspecial[];
   } | null;
@@ -341,6 +344,29 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
     doc.setTextColor(...DARK);
     doc.text(formatPYG(fila.total), margin + contentW - 10, y + 17.5, { align: "right" });
     y += rowPH;
+
+    // CUOTAS CON ENTREGA personalizada: dejar explícito en el papel cuánto
+    // es la entrega inicial y cómo queda repartido el resto en las cuotas
+    // (la tabla de arriba muestra el valor de cada cuota).
+    const entregaPersonalizada = Math.max(0, fila.detalle?.entrega || 0);
+    if (plan === "cuotas_con_entrega" && entregaPersonalizada > 0) {
+      ensureSpace(18);
+      y += 11;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...GREY);
+      doc.text(
+        `ENTREGA INICIAL: ${formatPYG(entregaPersonalizada)} · RESTO EN ${Math.max(
+          1,
+          nCuotas - 1
+        )} ${plural(Math.max(1, nCuotas - 1), "CUOTA", "CUOTAS")} DE ${formatPYG(
+          fila.cuotaValor
+        )}`,
+        margin + 10,
+        y
+      );
+      y += 4;
+    }
 
     // ═══ 2b) SAFRA: CRONOGRAMA DE PAGOS — CONFORME EL PANEL ═══
     // Task 113 v6 (pedido del dueño: "la parte de cálculos de abajo
