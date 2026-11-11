@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { valoresDistinctCapacidad } from "@/lib/producto-capacidad";
 import { valoresDistinctCores } from "@/lib/producto-cores";
+import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 // Columnas numéricas del modelo Product (devuelven min/max en lugar de distinct)
 const NUMERIC_COLUMNS = new Set([
@@ -117,9 +118,21 @@ export async function GET(req: NextRequest) {
     }
 
     const role = (session.user as any)?.role;
+    const email = ((session.user as any)?.email || "").trim().toLowerCase();
+    // Pedido del dueño: los VIP también usan la BASE completa (solo lectura)
+    // y sus FILTROS POR COLUMNA. La lista de valores del desplegable tiene que
+    // salir de la MISMA base que ven: admin, supremo, VIP (rol promovido
+    // desde el GDA) y usuarios de consulta ven TODO; un vendedor sigue viendo
+    // solo lo visible en el catálogo. Antes el VIP quedaba fuera y los
+    // filtros le aparecían vacíos o incompletos (la Base guarda los productos
+    // con showInCatalog = false).
+    const veBaseCompleta =
+      role === "admin" ||
+      role === "supremo_admin" ||
+      role === "vip" ||
+      esEmailSoloLectura(email, role);
     const baseWhere: Record<string, unknown> = {};
-    // Admin y supremo_admin ven todos los productos. Colaboradores solo los visibles.
-    if (role !== "admin" && role !== "supremo_admin") {
+    if (!veBaseCompleta) {
       baseWhere.showInCatalog = true;
     }
 
