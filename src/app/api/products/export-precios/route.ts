@@ -4,9 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import ExcelJS from "exceljs";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
-import { idsProductosConHashtag } from "@/lib/producto-hashtag";
 import { idsPorCapacidad, leerCapacidades } from "@/lib/producto-capacidad";
 import { idsPorCores, leerCores } from "@/lib/producto-cores";
+import { aplicarCondicionesEtiqueta, condicionesEtiqueta } from "@/lib/filtro-etiqueta";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TASK 167 - EXPORTAR LISTA DE PRECIOS (pedido del dueño)
@@ -64,17 +64,9 @@ export async function GET(req: NextRequest) {
       if (category && category !== "Todas") where.category = category;
       if (sku) where.sku = { contains: sku };
 
-      // ─── Filtro por etiqueta (espejo de /api/products) ───
-      if (etiquetaColor === "sin") {
-        where.etiquetaColor = null;
-      } else if (etiquetaColor === "editados") {
-        where.ultimaEdicionAt = { not: null };
-      } else if (etiquetaColor === "hashtag") {
-        const idsHashtag = await idsProductosConHashtag(!veBaseCompleta);
-        where.id = { in: idsHashtag.length > 0 ? idsHashtag : ["__sin_coincidencia__"] };
-      } else if (etiquetaColor) {
-        where.etiquetaColor = etiquetaColor;
-      }
+      // ─── Filtro por etiqueta (misma regla combinada que /api/products) ───
+      const condsEtiqueta = await condicionesEtiqueta(etiquetaColor, veBaseCompleta);
+      aplicarCondicionesEtiqueta(where, condsEtiqueta);
 
       if (search) {
         const orList: Record<string, unknown>[] = [

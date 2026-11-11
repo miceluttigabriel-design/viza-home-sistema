@@ -3,8 +3,9 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { leerCostosEditados } from "@/lib/costo-editado";
-import { idsProductosConHashtag, leerHashtags } from "@/lib/producto-hashtag";
+import { leerHashtags } from "@/lib/producto-hashtag";
 import { hashtagVisibleParaVendedor, hoyParaguay } from "@/lib/hashtag-formato";
+import { aplicarCondicionesEtiqueta, condicionesEtiqueta } from "@/lib/filtro-etiqueta";
 import { naceConMargenDefault } from "@/lib/gasto-adm";
 import { calcularValorMayorista } from "@/lib/margen-mayorista";
 import { guardarCapacidad, idsPorCapacidad, leerCapacidades } from "@/lib/producto-capacidad";
@@ -69,26 +70,13 @@ export async function GET(req: NextRequest) {
     if (sku) {
       where.sku = { contains: sku };
     }
-    // Filtro por etiqueta de color o por productos editados
-    if (etiquetaColor === "sin") {
-      // Productos SIN etiqueta
-      where.etiquetaColor = null;
-    } else if (etiquetaColor === "editados") {
-      // Productos que SÍ fueron editados manualmente (tienen ultimaEdicionAt)
-      where.ultimaEdicionAt = { not: null };
-    } else if (etiquetaColor === "hashtag") {
-      // T123 (pedido del dueño): filtro #HASHTAG — SOLO productos con # real
-      // cargado (valor >= 1; un valor < 1 no es un # real — ver
-      // valorGsRealesHashtag). Vendedor → solo los VISIBLES (no vencidos,
-      // MISMA regla de Task 95 que ya usa el buscador); admin/supremo/
-      // consulta → todos, también los vencidos (es su base de trabajo).
-      const idsHashtag = await idsProductosConHashtag(!veBaseCompleta);
-      // Sin resultados: id imposible → lista vacía (mismo truco de CAPACIDAD)
-      where.id = { in: idsHashtag.length > 0 ? idsHashtag : ["__sin_coincidencia__"] };
-    } else if (etiquetaColor) {
-      // Productos con la etiqueta específica
-      where.etiquetaColor = etiquetaColor;
-    }
+    // Filtros de etiqueta (Task 167b): acepta UNO o VARIOS valores separados
+    // por coma. Varios = UNIÓN (SELECCIONADO + QUEMA STOCK + VIZA LÍQUIDA...).
+    // EDITADOS es un modo aparte y manda solo. Un solo valor se comporta
+    // exactamente igual que antes. La lógica vive en src/lib/filtro-etiqueta.ts
+    // y la comparte el export de la lista de precios.
+    const condsEtiqueta = await condicionesEtiqueta(etiquetaColor, veBaseCompleta);
+    aplicarCondicionesEtiqueta(where, condsEtiqueta);
     if (search) {
       // CORRECCIÓN v1.1: Búsqueda CASE-INSENSITIVE (no distingue mayúsculas de minúsculas)
       // Ahora "moto" encuentra "MOTO KENTON", "Moto", "mOtO", etc.

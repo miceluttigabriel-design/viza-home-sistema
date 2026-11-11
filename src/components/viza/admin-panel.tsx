@@ -558,8 +558,22 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   const [codSort, setCodSort] = useState<"asc" | "desc" | null>(null);
   // Ordenamiento de la columna DESCRIPCION (alfabético: Z-A = desc / A-Z = asc)
   const [nameSort, setNameSort] = useState<"asc" | "desc" | null>(null);
-  // Filtro activo de etiqueta de color: "verde" | "azul" | "dorado" | "rojo" | null
-  const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  // Filtros de etiqueta activos (Task 167b): AHORA se pueden combinar varios
+  // (SELECCIONADO + QUEMA STOCK + VIZA LÍQUIDA + #HASHTAG...) y la tabla y el
+  // export muestran/exportan la UNIÓN. Un solo filtro se comporta igual que
+  // antes. EDITADOS es un modo aparte: al elegirlo se limpian los demás.
+  const [labelFilters, setLabelFilters] = useState<string[]>([]);
+  const tieneFiltroEtiqueta = (id: string) => labelFilters.includes(id);
+  const toggleFiltroEtiqueta = (id: string) => {
+    setLabelFilters((prev) => {
+      if (id === "editados") return prev.includes("editados") ? [] : ["editados"];
+      const sinEditados = prev.filter((v) => v !== "editados");
+      return sinEditados.includes(id)
+        ? sinEditados.filter((v) => v !== id)
+        : [...sinEditados, id];
+    });
+    setPage(1);
+  };
   // ─── EXPORTAR LISTA DE PRECIOS (Task 167, pedido del dueño) ───
   // Botón compacto con dos opciones: BASE COMPLETA o SOLO LO FILTRADO
   // (SELECCIONADO, QUEMA STOCK, VIZA LÍQUIDA, #HASHTAG, búsqueda, filtros por
@@ -811,7 +825,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
     try {
       const params = new URLSearchParams();
       if (search.trim()) params.set("search", search.trim());
-      if (labelFilter) params.set("etiquetaColor", labelFilter);
+      if (labelFilters.length > 0) params.set("etiquetaColor", labelFilters.join(","));
       params.set("page", String(page));
       params.set("pageSize", String(PAGE_SIZE));
       // Enviar filtros de columna como JSON
@@ -851,7 +865,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
     } finally {
       setLoadingProducts(false);
     }
-  }, [search, page, columnFilters, labelFilter, stockSort, codSort, nameSort]);
+  }, [search, page, columnFilters, labelFilters, stockSort, codSort, nameSort]);
 
   useEffect(() => {
     fetchProducts();
@@ -875,7 +889,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   const paramsDeFiltros = () => {
     const params = new URLSearchParams();
     if (search.trim()) params.set("search", search.trim());
-    if (labelFilter) params.set("etiquetaColor", labelFilter);
+    if (labelFilters.length > 0) params.set("etiquetaColor", labelFilters.join(","));
     const activeFilters = Object.fromEntries(
       Object.entries(columnFilters).filter(([, v]) => Array.isArray(v) && v.length > 0)
     );
@@ -896,7 +910,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   };
 
   const hayFiltrosActivos =
-    !!search.trim() || !!labelFilter || Object.values(columnFilters).some((v) => v.length > 0);
+    !!search.trim() || labelFilters.length > 0 || Object.values(columnFilters).some((v) => v.length > 0);
 
   const exportarListaPrecios = async (modo: "completa" | "filtrado") => {
     setExportPreciosOpen(false);
@@ -1468,7 +1482,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                           </span>
                           <span className="block text-[11px] text-stone-500 mt-0.5">
                             {hayFiltrosActivos
-                              ? `${total} producto${total === 1 ? "" : "s"} con los filtros activos`
+                              ? labelFilters.length > 1
+                                ? `${total} producto${total === 1 ? "" : "s"} con ${labelFilters.length} filtros combinados`
+                                : `${total} producto${total === 1 ? "" : "s"} con los filtros activos`
                               : `${total} producto${total === 1 ? "" : "s"} (sin filtros activos)`}
                           </span>
                         </button>
@@ -1484,10 +1500,6 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                             Todos los productos, sin filtros
                           </span>
                         </button>
-                        <div className="px-3 py-2 bg-stone-50 border-t border-stone-100 text-[10px] leading-snug text-stone-500">
-                          <b className="text-stone-700">Solo precios:</b> contado y cuotas 1 a 30,
-                          sin entrega inicial. No incluye costos ni márgenes.
-                        </div>
                       </div>
                     </>
                   )}
@@ -1619,10 +1631,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                 {/* Filtros por etiqueta - clickeables */}
                 <button
                   type="button"
-                  className={`leyenda-item ${labelFilter === null ? "filtro-activo" : ""}`}
+                  className={`leyenda-item ${labelFilters.length === 0 ? "filtro-activo" : ""}`}
                   data-filtro="todos"
                   onClick={() => {
-                    setLabelFilter(null);
+                    setLabelFilters([]);
                     setPage(1);
                   }}
                   title="Mostrar todos los productos"
@@ -1636,7 +1648,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     border: "2px solid transparent",
                     background: "transparent",
                     color: "#525252",
-                    fontWeight: labelFilter === null ? 700 : 400,
+                    fontWeight: labelFilters.length === 0 ? 700 : 400,
                     transition: "all 0.2s ease",
                   }}
                 >
@@ -1645,12 +1657,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                 {/* Filtro EDITADOS - muestra solo productos con edición manual, ordenados del más reciente al más antiguo */}
                 <button
                   type="button"
-                  className={`leyenda-item ${labelFilter === "editados" ? "filtro-activo" : ""}`}
+                  className={`leyenda-item ${tieneFiltroEtiqueta("editados") ? "filtro-activo" : ""}`}
                   data-filtro="editados"
-                  onClick={() => {
-                    setLabelFilter(prev => prev === "editados" ? null : "editados");
-                    setPage(1);
-                  }}
+                  onClick={() => toggleFiltroEtiqueta("editados")}
                   title="Mostrar solo productos editados manualmente (del más reciente al más antiguo)"
                   style={{
                     display: "inline-flex",
@@ -1659,10 +1668,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     cursor: "pointer",
                     padding: "5px 12px",
                     borderRadius: "5px",
-                    border: labelFilter === "editados" ? "2px solid #856404" : "2px solid transparent",
-                    background: labelFilter === "editados" ? "#FFF3CD" : "transparent",
-                    color: labelFilter === "editados" ? "#856404" : "#525252",
-                    fontWeight: labelFilter === "editados" ? 700 : 400,
+                    border: tieneFiltroEtiqueta("editados") ? "2px solid #856404" : "2px solid transparent",
+                    background: tieneFiltroEtiqueta("editados") ? "#FFF3CD" : "transparent",
+                    color: tieneFiltroEtiqueta("editados") ? "#856404" : "#525252",
+                    fontWeight: tieneFiltroEtiqueta("editados") ? 700 : 400,
                     transition: "all 0.3s ease",
                     fontSize: "13px",
                   }}
@@ -1672,12 +1681,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                 </button>
                 <button
                   type="button"
-                  className={`leyenda-item ${labelFilter === "verde" ? "filtro-activo" : ""}`}
+                  className={`leyenda-item ${tieneFiltroEtiqueta("verde") ? "filtro-activo" : ""}`}
                   data-filtro="verde"
-                  onClick={() => {
-                    setLabelFilter(prev => prev === "verde" ? null : "verde");
-                    setPage(1);
-                  }}
+                  onClick={() => toggleFiltroEtiqueta("verde")}
                   title="Filtrar: SELECCIONADOS"
                   style={{
                     display: "inline-flex",
@@ -1686,10 +1692,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     cursor: "pointer",
                     padding: "4px 10px",
                     borderRadius: "5px",
-                    border: labelFilter === "verde" ? "2px solid #28A745" : "2px solid transparent",
-                    background: labelFilter === "verde" ? "rgba(40, 167, 69, 0.15)" : "transparent",
-                    color: labelFilter === "verde" ? "#1B5E20" : "#525252",
-                    fontWeight: labelFilter === "verde" ? 700 : 400,
+                    border: tieneFiltroEtiqueta("verde") ? "2px solid #28A745" : "2px solid transparent",
+                    background: tieneFiltroEtiqueta("verde") ? "rgba(40, 167, 69, 0.15)" : "transparent",
+                    color: tieneFiltroEtiqueta("verde") ? "#1B5E20" : "#525252",
+                    fontWeight: tieneFiltroEtiqueta("verde") ? 700 : 400,
                     transition: "all 0.2s ease",
                   }}
                 >
@@ -1698,12 +1704,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                 </button>
                 <button
                   type="button"
-                  className={`leyenda-item ${labelFilter === "azul" ? "filtro-activo" : ""}`}
+                  className={`leyenda-item ${tieneFiltroEtiqueta("azul") ? "filtro-activo" : ""}`}
                   data-filtro="azul"
-                  onClick={() => {
-                    setLabelFilter(prev => prev === "azul" ? null : "azul");
-                    setPage(1);
-                  }}
+                  onClick={() => toggleFiltroEtiqueta("azul")}
                   title="Filtrar: PARA PEDIDO"
                   style={{
                     display: "inline-flex",
@@ -1712,10 +1715,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     cursor: "pointer",
                     padding: "4px 10px",
                     borderRadius: "5px",
-                    border: labelFilter === "azul" ? "2px solid #007BFF" : "2px solid transparent",
-                    background: labelFilter === "azul" ? "rgba(0, 123, 255, 0.15)" : "transparent",
-                    color: labelFilter === "azul" ? "#0D47A1" : "#525252",
-                    fontWeight: labelFilter === "azul" ? 700 : 400,
+                    border: tieneFiltroEtiqueta("azul") ? "2px solid #007BFF" : "2px solid transparent",
+                    background: tieneFiltroEtiqueta("azul") ? "rgba(0, 123, 255, 0.15)" : "transparent",
+                    color: tieneFiltroEtiqueta("azul") ? "#0D47A1" : "#525252",
+                    fontWeight: tieneFiltroEtiqueta("azul") ? 700 : 400,
                     transition: "all 0.2s ease",
                   }}
                 >
@@ -1724,12 +1727,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                 </button>
                 <button
                   type="button"
-                  className={`leyenda-item ${labelFilter === "dorado" ? "filtro-activo" : ""}`}
+                  className={`leyenda-item ${tieneFiltroEtiqueta("dorado") ? "filtro-activo" : ""}`}
                   data-filtro="dorado"
-                  onClick={() => {
-                    setLabelFilter(prev => prev === "dorado" ? null : "dorado");
-                    setPage(1);
-                  }}
+                  onClick={() => toggleFiltroEtiqueta("dorado")}
                   title="Filtrar: DESCONTINUADO"
                   style={{
                     display: "inline-flex",
@@ -1738,10 +1738,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     cursor: "pointer",
                     padding: "4px 10px",
                     borderRadius: "5px",
-                    border: labelFilter === "dorado" ? "2px solid #FFC107" : "2px solid transparent",
-                    background: labelFilter === "dorado" ? "rgba(255, 193, 7, 0.15)" : "transparent",
-                    color: labelFilter === "dorado" ? "#5D4037" : "#525252",
-                    fontWeight: labelFilter === "dorado" ? 700 : 400,
+                    border: tieneFiltroEtiqueta("dorado") ? "2px solid #FFC107" : "2px solid transparent",
+                    background: tieneFiltroEtiqueta("dorado") ? "rgba(255, 193, 7, 0.15)" : "transparent",
+                    color: tieneFiltroEtiqueta("dorado") ? "#5D4037" : "#525252",
+                    fontWeight: tieneFiltroEtiqueta("dorado") ? 700 : 400,
                     transition: "all 0.2s ease",
                   }}
                 >
@@ -1750,12 +1750,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                 </button>
                 <button
                   type="button"
-                  className={`leyenda-item ${labelFilter === "rojo" ? "filtro-activo" : ""}`}
+                  className={`leyenda-item ${tieneFiltroEtiqueta("rojo") ? "filtro-activo" : ""}`}
                   data-filtro="rojo"
-                  onClick={() => {
-                    setLabelFilter(prev => prev === "rojo" ? null : "rojo");
-                    setPage(1);
-                  }}
+                  onClick={() => toggleFiltroEtiqueta("rojo")}
                   title="Filtrar: QUEMA STOCK"
                   style={{
                     display: "inline-flex",
@@ -1764,10 +1761,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     cursor: "pointer",
                     padding: "4px 10px",
                     borderRadius: "5px",
-                    border: labelFilter === "rojo" ? "2px solid #DC3545" : "2px solid transparent",
-                    background: labelFilter === "rojo" ? "rgba(220, 53, 69, 0.15)" : "transparent",
-                    color: labelFilter === "rojo" ? "#B71C1C" : "#525252",
-                    fontWeight: labelFilter === "rojo" ? 700 : 400,
+                    border: tieneFiltroEtiqueta("rojo") ? "2px solid #DC3545" : "2px solid transparent",
+                    background: tieneFiltroEtiqueta("rojo") ? "rgba(220, 53, 69, 0.15)" : "transparent",
+                    color: tieneFiltroEtiqueta("rojo") ? "#B71C1C" : "#525252",
+                    fontWeight: tieneFiltroEtiqueta("rojo") ? 700 : 400,
                     transition: "all 0.2s ease",
                   }}
                 >
@@ -1780,12 +1777,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                   <button
                     key={e.id}
                     type="button"
-                    className={`leyenda-item ${labelFilter === e.id ? "filtro-activo" : ""}`}
+                    className={`leyenda-item ${tieneFiltroEtiqueta(e.id) ? "filtro-activo" : ""}`}
                     data-filtro={e.id}
-                    onClick={() => {
-                      setLabelFilter(prev => prev === e.id ? null : e.id);
-                      setPage(1);
-                    }}
+                    onClick={() => toggleFiltroEtiqueta(e.id)}
                     title={`Filtrar: ${e.nombre.toUpperCase()}`}
                     style={{
                       display: "inline-flex",
@@ -1794,10 +1788,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                       cursor: "pointer",
                       padding: "4px 10px",
                       borderRadius: "5px",
-                      border: labelFilter === e.id ? `2px solid ${e.color}` : "2px solid transparent",
-                      background: labelFilter === e.id ? `${e.color}26` : "transparent",
-                      color: labelFilter === e.id ? "#1c1917" : "#525252",
-                      fontWeight: labelFilter === e.id ? 700 : 400,
+                      border: tieneFiltroEtiqueta(e.id) ? `2px solid ${e.color}` : "2px solid transparent",
+                      background: tieneFiltroEtiqueta(e.id) ? `${e.color}26` : "transparent",
+                      color: tieneFiltroEtiqueta(e.id) ? "#1c1917" : "#525252",
+                      fontWeight: tieneFiltroEtiqueta(e.id) ? 700 : 400,
                       transition: "all 0.2s ease",
                     }}
                   >
@@ -1815,12 +1809,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     roja de la columna #HASHTAG le avisa para renovar). */}
                 <button
                   type="button"
-                  className={`leyenda-item ${labelFilter === "hashtag" ? "filtro-activo" : ""}`}
+                  className={`leyenda-item ${tieneFiltroEtiqueta("hashtag") ? "filtro-activo" : ""}`}
                   data-filtro="hashtag"
-                  onClick={() => {
-                    setLabelFilter(prev => prev === "hashtag" ? null : "hashtag");
-                    setPage(1);
-                  }}
+                  onClick={() => toggleFiltroEtiqueta("hashtag")}
                   title="Filtrar: SOLO productos con #HASHTAG"
                   style={{
                     display: "inline-flex",
@@ -1829,16 +1820,27 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     cursor: "pointer",
                     padding: "4px 10px",
                     borderRadius: "5px",
-                    border: labelFilter === "hashtag" ? "2px solid #0d3d5e" : "2px solid transparent",
-                    background: labelFilter === "hashtag" ? "rgba(21, 87, 137, 0.15)" : "transparent",
-                    color: labelFilter === "hashtag" ? "#0d3d5e" : "#525252",
-                    fontWeight: labelFilter === "hashtag" ? 700 : 400,
+                    border: tieneFiltroEtiqueta("hashtag") ? "2px solid #0d3d5e" : "2px solid transparent",
+                    background: tieneFiltroEtiqueta("hashtag") ? "rgba(21, 87, 137, 0.15)" : "transparent",
+                    color: tieneFiltroEtiqueta("hashtag") ? "#0d3d5e" : "#525252",
+                    fontWeight: tieneFiltroEtiqueta("hashtag") ? 700 : 400,
                     transition: "all 0.2s ease",
                   }}
                 >
                   <span style={{ fontWeight: 800, fontSize: "13px" }}>#</span>
                   HASHTAG
                 </button>
+                {/* Task 167b: ahora se pueden marcar VARIOS filtros. El aviso
+                    deja claro que se combinan (la tabla y el export muestran
+                    la unión de todos los elegidos). */}
+                <span
+                  className="text-[10px] text-stone-500 ml-0.5"
+                  title="Hacé click en más de un filtro para ver y exportar la unión de todos"
+                >
+                  {labelFilters.length > 1
+                    ? `${labelFilters.length} filtros combinados`
+                    : "+ podés combinar varios"}
+                </span>
               </div>
             </div>
           </div>
