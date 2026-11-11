@@ -17,6 +17,10 @@ import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 // ZAGO PEREIRA) ve el botón IR A STOCK GENERAL y puede entrar a esa vista
 // fuera del supremo (lista única en src/lib/acceso-stock-general.ts).
 import { puedeIrAStockGeneral } from "@/lib/acceso-stock-general";
+// Pedido del dueño: el ENCARGADO DE COMPRA se habilita además del supremo a
+// baltazar@viza.com.py y viza@viza.com.py (lista única en
+// src/lib/acceso-encargado-compra.ts).
+import { puedeUsarEncargadoCompra } from "@/lib/acceso-encargado-compra";
 import { esUsuarioVip } from "@/lib/encargados-sucursal";
 
 export default function Home() {
@@ -84,6 +88,10 @@ export default function Home() {
   // cualquier otro email, se ignora y cae a su vista normal.
   const verStockGeneral = puedeIrAStockGeneral(user.email);
 
+  // Pedido del dueño: ENCARGADO DE COMPRA habilitado para el supremo y para
+  // baltazar@viza.com.py / viza@viza.com.py. Nadie más lo ve ni lo abre.
+  const verEncargadoCompra = puedeUsarEncargadoCompra(user.email, role);
+
   // Vista efectiva (Task 91 + Task 144): si todavía no navegó (null), la
   // inicial es el ORQUESTADOR para el SUPREMO, los ADMINS y los VIPs (todos
   // los que pueden verlo). El resto sigue cayendo donde caía antes
@@ -114,6 +122,18 @@ export default function Home() {
           onGoBase={() => setAdminView("base")}
           onGoStock={() => setAdminView("stock")}
           onGoSales={() => setAdminView("sales")}
+          onGoCompra={
+            verEncargadoCompra ? () => setAdminView("compra") : undefined
+          }
+        />
+      );
+    }
+    if (view === "compra" && verEncargadoCompra) {
+      return (
+        <EncargadoCompra
+          open
+          modo="pagina"
+          onClose={() => setAdminView("orquestador")}
         />
       );
     }
@@ -183,6 +203,20 @@ export default function Home() {
           onGoBase={() => setAdminView("admin")}
           onGoStock={() => setAdminView("stock")}
           onGoSales={() => setAdminView("sales")}
+          onGoCompra={
+            verEncargadoCompra ? () => setAdminView("compra") : undefined
+          }
+        />
+      );
+    }
+    // Pedido del dueño: los ADMIN habilitados abren el ENCARGADO DE COMPRA
+    // como PÁGINA COMPLETA, igual que el supremo.
+    if (view === "compra" && verEncargadoCompra) {
+      return (
+        <EncargadoCompra
+          open
+          modo="pagina"
+          onClose={() => setAdminView("orquestador")}
         />
       );
     }

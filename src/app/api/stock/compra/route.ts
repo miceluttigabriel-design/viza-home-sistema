@@ -9,6 +9,7 @@ import {
 import { calcularPlanCompra } from "@/lib/encargado-compra";
 import { guardarSnapshot } from "@/lib/encargado-historial";
 import { cargarDatosEncargado } from "@/lib/encargado-datos";
+import { puedeUsarEncargadoCompra } from "@/lib/acceso-encargado-compra";
 
 // ═══════════════════════════════════════════════════════════════════
 // ENCARGADO DE COMPRA — API (Task 161)
@@ -19,7 +20,8 @@ import { cargarDatosEncargado } from "@/lib/encargado-datos";
 //
 // Analiza la NECESIDAD DE COMPRA de la red: stock de las 4 sucursales +
 // CENTRAL + ventas detectadas. NO genera órdenes de compra ni compra a
-// proveedores: solo recomienda y alimenta el PDF. Exclusivo del supremo.
+// proveedores: solo recomienda y alimenta el PDF. Habilitado para el
+// supremo y para los usuarios de src/lib/acceso-encargado-compra.ts.
 // ═══════════════════════════════════════════════════════════════════
 
 export const dynamic = "force-dynamic";
@@ -33,11 +35,17 @@ async function responder(req: NextRequest) {
     }
 
     const role = (session.user as any)?.role || "";
-    // Task 161 (pedido del dueño): igual que el ENCARGADO DE DISTRIBUCIÓN,
-    // este módulo es SOLO del usuario supremo.
-    if (role !== "supremo_admin") {
+    const email = (session.user as any)?.email || "";
+    // Pedido del dueño: el módulo sigue siendo del supremo, pero también lo
+    // usan los ADMIN habilitados (baltazar@viza.com.py y viza@viza.com.py —
+    // lista única en src/lib/acceso-encargado-compra.ts). Cualquier otro
+    // usuario recibe 403, aunque sea admin.
+    if (!puedeUsarEncargadoCompra(email, role)) {
       return NextResponse.json(
-        { error: "El Encargado de Compra es exclusivo del usuario supremo" },
+        {
+          error:
+            "El Encargado de Compra está habilitado solo para el supremo y los usuarios autorizados",
+        },
         { status: 403 }
       );
     }

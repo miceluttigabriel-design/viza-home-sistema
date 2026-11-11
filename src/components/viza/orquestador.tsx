@@ -64,7 +64,8 @@ interface OrquestadorProps {
   // no se renderiza para admins ni VIPs.
   onGoGestion?: () => void;
   // Pedido del dueño: abre el ENCARGADO DE COMPRA como PÁGINA COMPLETA.
-  // Solo el supremo recibe esta prop (la API del módulo es exclusiva de él).
+  // Lo recibe el supremo y los usuarios habilitados (page.tsx decide según
+  // src/lib/acceso-encargado-compra.ts).
   onGoCompra?: () => void;
 }
 
