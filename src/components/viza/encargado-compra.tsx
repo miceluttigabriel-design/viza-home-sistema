@@ -701,14 +701,6 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
                   ))}
                 </div>
               )}
-
-              <p className="text-[9px] text-stone-400 font-medium leading-relaxed">
-                Regla: solo productos SELECCIONADOS (etiqueta verde de la Base) y códigos desde
-                100.000. Cada sucursal necesita al menos 1 unidad; primero se usa CENTRAL y las
-                transferencias internas. Sin Stock Ideal, el objetivo es 1 por sucursal o lo vendido
-                si fue mayor. El VENDIDO sale de la baja real del stock entre análisis (aunque la
-                sucursal quede en 0). Nada se compra solo: este plan y el PDF los decide el dueño.
-              </p>
             </>
           )}
 
