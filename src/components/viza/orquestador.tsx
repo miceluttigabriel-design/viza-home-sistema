@@ -8,16 +8,18 @@
 // ADMINS y los usuarios VIP. El GDA y las acciones críticas (IMPORTAR EXCEL,
 // DISTRIBUCIÓN INTELIGENTE) siguen siendo SOLO del supremo.
 //
-// Distribución del dibujo del dueño (se mantiene EXACTA):
+// Distribución del dibujo (rediseño pedido por el dueño):
 //   · COLUMNA IZQUIERDA, pegada al borde final de la pantalla, uno debajo
 //     del otro y bien alineados:
 //       STOCK GENERAL → vista inventario
 //       LA BASE → AdminPanel
 //       COTIZADOR → SalesPanel
-//   · DERECHA (ligado al Stock): ENCARGADO DE DISTRIBUCIÓN (activo, con IA)
-//     —ligado a los 4 cuadritos de sucursales: NUEVA ESPERANZA · KATUETE ·
-//       LA PALOMA · SALTOS DEL GUAIRA— y debajo AGENTE DE COMPRA
-//     (ligado al Encargado de Distribución).
+//   · AL LADO DERECHO DE CADA CUADRO PRINCIPAL:
+//       ENCARGADO DE DISTRIBUCIÓN (a la altura de STOCK GENERAL)
+//       ENCARGADO DE COMPRA       (a la altura de LA BASE)
+//   · DERECHA: los 4 cuadritos de sucursales — NUEVA ESPERANZA · KATUETE ·
+//     LA PALOMA · SALTOS DEL GUAIRA — unidos al Encargado de Distribución.
+//   · Sin etiquetas "ALIMENTA"/"LIGADO": solo las líneas del flujo.
 //
 // Marca: azul #155789 · dorado #D9B86B · logo /viza-home-logo-nuevo.png
 // SOLO ES VISUALIZACIÓN: no toca datos, no toca APIs, no toca la base.
@@ -294,50 +296,47 @@ function SucursalCard({ nombre }: { nombre: string }) {
   );
 }
 
-// ─── DIAGRAMA: lienzo fijo de 1152 × 500 que se escala solo al ancho de la pantalla ───
-const W = 1152;
+// ─── DIAGRAMA: lienzo fijo que se escala solo al ancho de la pantalla ───
+const W = 1050;
 const H = 500;
 
-// Cuadros: x, y, ancho, alto (en px del lienzo)
-// Task 151 (pedido del dueño): STOCK GENERAL · LA BASE · COTIZADOR van en UNA
-// sola columna pegada al borde izquierdo, uno debajo del otro y alineados.
+// Cuadros: x, y, ancho, alto (en px del lienzo).
+// Pedido del dueño: los dos encargados van AL LADO de su módulo principal —
+// DISTRIBUCIÓN a la altura de STOCK GENERAL y COMPRA a la altura de LA BASE.
 const POS = {
-  stock: { x: 0, y: 0, w: 380, h: 130 },
-  base: { x: 0, y: 160, w: 380, h: 130 },
-  cotizador: { x: 0, y: 320, w: 380, h: 130 },
-  // Task 159: dos cuadritos menores en lugar del antiguo Distribuidor.
-  distribucion: { x: 720, y: 125, w: 270, h: 110 },
-  compra: { x: 720, y: 315, w: 270, h: 110 },
+  stock: { x: 0, y: 0, w: 360, h: 130 },
+  base: { x: 0, y: 160, w: 360, h: 130 },
+  cotizador: { x: 0, y: 320, w: 360, h: 130 },
+  distribucion: { x: 430, y: 10, w: 260, h: 110 },
+  compra: { x: 430, y: 170, w: 260, h: 110 },
 };
-const SUC_X = 1010;
-const SUC_W = 142;
-const SUC_H = 76;
-const SUC_Y = [40, 150, 260, 370];
+// Sucursales: un poco más separadas entre sí para que el conjunto respire y
+// se lea como un ecosistema, sin amontonarse contra los encargados.
+const SUC_X = 780;
+const SUC_W = 190;
+const SUC_H = 80;
+const SUC_Y = [14, 140, 266, 392];
 
 type Rect = { x: number; y: number; w: number; h: number };
 const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h });
 
-// Líneas de flujo (curvas). "alimenta" = dorado continuo · "distribuye" = violeta punteado
+// Líneas de flujo (curvas). Sin etiquetas: el dueño pidió sacar los
+// cartelitos "ALIMENTA" y "LIGADO" para que el diagrama quede limpio.
 // La columna comparte eje vertical (x=180): La Base alimenta hacia ARRIBA al
 // Stock y hacia ABAJO al Cotizador.
-const FLUJOS_PRINCIPALES = [
-  { id: "base-stock", d: "M 180 160 C 180 150, 180 140, 180 130", label: "ALIMENTA", lx: 228, ly: 145 },
-  { id: "base-cotiz", d: "M 180 290 C 180 300, 180 310, 180 320", label: "ALIMENTA", lx: 228, ly: 305 },
-  { id: "stock-distri", d: "M 380 65 C 540 65, 560 180, 720 180", label: "LIGADO", lx: 585, ly: 95 },
-];
-// Task 159: el AGENTE DE COMPRA va LIGADO al AGENTE DE DISTRIBUCIÓN
-// (línea corta vertical entre los dos cuadritos).
-const FLUJO_COMPRA = {
-  d: "M 855 315 C 855 295, 855 255, 855 235",
-  label: "LIGADO",
-  lx: 915,
-  ly: 275,
-};
-// Del Agente de Distribución salen las 4 líneas hacia los cuadritos de
-// sucursales (todas desde el mismo punto de salida).
+const FLUJO_BASE_STOCK = "M 180 160 C 180 150, 180 140, 180 130";
+const FLUJO_BASE_COTIZ = "M 180 290 C 180 300, 180 310, 180 320";
+// STOCK GENERAL → ENCARGADO DE DISTRIBUCIÓN (mismo eje horizontal, y=65).
+const FLUJO_STOCK_DISTRI = "M 360 65 C 390 65, 400 65, 430 65";
+// LA BASE → ENCARGADO DE COMPRA (mismo eje horizontal, y=225).
+const FLUJO_BASE_COMPRA = "M 360 225 C 390 225, 400 225, 430 225";
+// Los dos encargados quedan uno sobre otro: línea corta vertical que los une.
+const FLUJO_COMPRA_DISTRI = "M 560 170 C 560 155, 560 135, 560 120";
+// Del Encargado de Distribución salen las 4 líneas hacia los cuadritos de
+// sucursales (todas desde el mismo punto de salida, abriéndose en abanico).
 const FLUJOS_SUCURSALES = SUC_Y.map((y, i) => {
   const yd = y + SUC_H / 2; // centro del cuadrito
-  return { id: `distri-suc-${i}`, d: `M 990 180 C 1000 180, 1001 ${yd}, ${SUC_X} ${yd}` };
+  return { id: `distri-suc-${i}`, d: `M 690 65 C 720 65, 740 ${yd}, ${SUC_X} ${yd}` };
 });
 
 function Flecha({ id, color }: { id: string; color: string }) {
@@ -369,17 +368,6 @@ function Flujo({ d, color, punteado = false, flecha }: { d: string; color: strin
         </>
       )}
     </g>
-  );
-}
-
-function Etiqueta({ x, y, texto }: { x: number; y: number; texto: string }) {
-  return (
-    <span
-      className="absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full px-2.5 py-1 text-[8.5px] font-black tracking-widest whitespace-nowrap"
-      style={{ left: x, top: y, background: "#06080c", color: DORADO, border: `1px solid ${DORADO}66`, boxShadow: `0 0 12px ${DORADO}33` }}
-    >
-      {texto}
-    </span>
   );
 }
 
@@ -513,19 +501,15 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion,
               <Flecha id="flecha-violeta" color={C_DISTRI} />
               <Flecha id="flecha-compra" color={C_COMPRA} />
             </defs>
-            <Flujo d={FLUJOS_PRINCIPALES[0].d} color={DORADO} flecha="flecha-dorada" />
-            <Flujo d={FLUJOS_PRINCIPALES[1].d} color={DORADO} flecha="flecha-dorada" />
-            <Flujo d={FLUJOS_PRINCIPALES[2].d} color={C_STOCK} flecha="flecha-azul" />
-            <Flujo d={FLUJO_COMPRA.d} color={C_COMPRA} punteado flecha="flecha-compra" />
+            <Flujo d={FLUJO_BASE_STOCK} color={DORADO} flecha="flecha-dorada" />
+            <Flujo d={FLUJO_BASE_COTIZ} color={DORADO} flecha="flecha-dorada" />
+            <Flujo d={FLUJO_STOCK_DISTRI} color={C_STOCK} flecha="flecha-azul" />
+            <Flujo d={FLUJO_BASE_COMPRA} color={C_COMPRA} flecha="flecha-compra" />
+            <Flujo d={FLUJO_COMPRA_DISTRI} color={C_COMPRA} punteado flecha="flecha-compra" />
             {FLUJOS_SUCURSALES.map((f) => (
               <Flujo key={f.id} d={f.d} color={C_DISTRI} punteado flecha="flecha-violeta" />
             ))}
           </svg>
-
-          {FLUJOS_PRINCIPALES.map((f) => (
-            <Etiqueta key={f.id} x={f.lx} y={f.ly} texto={f.label} />
-          ))}
-          <Etiqueta x={FLUJO_COMPRA.lx} y={FLUJO_COMPRA.ly} texto={FLUJO_COMPRA.label} />
 
           <div style={place(POS.stock)}><StockCard onClick={onGoStock} /></div>
           <div style={place(POS.base)}><BaseCard onClick={onGoBase} /></div>
@@ -547,12 +531,10 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion,
         {/* ═══ VISTA CELULAR / TABLET: los mismos cuadros, uno debajo del otro ═══ */}
         <div className="lg:hidden w-full max-w-md px-4 sm:px-6">
           <div className="min-h-[120px]"><StockCard onClick={onGoStock} /></div>
-          <Conector />
-          <div className="min-h-[120px]"><BaseCard onClick={onGoBase} /></div>
-          <Conector />
-          <div className="min-h-[120px]"><CotizadorCard onClick={onGoSales} /></div>
           <Conector color={C_STOCK} />
           <div className="min-h-[110px]"><AgenteDistribucionCard onClick={onGoStock} /></div>
+          <Conector />
+          <div className="min-h-[120px]"><BaseCard onClick={onGoBase} /></div>
           <Conector color={C_COMPRA} />
           <div className="min-h-[110px]">
             <AgenteCompraCard
@@ -560,6 +542,8 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion,
               hint={onGoCompra ? "abrir el Encargado de Compra" : "abrir Stock General"}
             />
           </div>
+          <Conector />
+          <div className="min-h-[120px]"><CotizadorCard onClick={onGoSales} /></div>
           <Conector color={C_DISTRI} />
           <div className="grid grid-cols-2 gap-2.5">
             {SUCURSALES_CUADROS.map((nombre) => (
