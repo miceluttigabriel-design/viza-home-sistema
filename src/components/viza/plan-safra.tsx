@@ -132,6 +132,33 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
     return m < 1 || m > MAX_MESES_SAFRA;
   };
 
+  // ─── FECHAS LÍMITE DEL PLAN, EN LENGUAJE DEL VENDEDOR (Task 166b) ───────
+  // Los vendedores no trabajan con "mes 18": trabajan con fechas. Por eso el
+  // aviso muestra el DÍA EXACTO en que empieza y en que termina el plan, y un
+  // botón para poner la fecha límite con un click.
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  // Suma meses a una fecha ISO respetando el fin de mes (31/01 + 1 mes =
+  // 28/02, no 03/03) y devuelve ISO (YYYY-MM-DD).
+  const sumarMesesISO = (iso: string, meses: number): string => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const objetivo = new Date(y, m - 1 + meses, 1);
+    const ultimoDia = new Date(objetivo.getFullYear(), objetivo.getMonth() + 1, 0).getDate();
+    objetivo.setDate(Math.min(d || 1, ultimoDia));
+    return `${objetivo.getFullYear()}-${p2(objetivo.getMonth() + 1)}-${p2(objetivo.getDate())}`;
+  };
+  const fmtFechaPY = (iso?: string | null): string =>
+    iso ? iso.split("-").reverse().join("/") : "—";
+  // Primer pago posible (emisión + 1 mes) y último pago posible (emisión + 18).
+  const inicioPlanISO = sumarMesesISO(fechaBasePlan, 1);
+  const finPlanISO = sumarMesesISO(fechaBasePlan, MAX_MESES_SAFRA);
+  // Cuántos meses se pasó (positivo) o cuántos le faltan para entrar (negativo),
+  // siempre en palabras simples para el aviso.
+  const excesoMeses = (r: { fecha?: string; mes: number }): number =>
+    mesDe(r) - MAX_MESES_SAFRA;
+  // Fecha que sí entra al plan para corregir ese refuerzo con un click.
+  const fechaSugerida = (r: { fecha?: string; mes: number }): string =>
+    mesDe(r) < 1 ? inicioPlanISO : finPlanISO;
+
   // === Buscar productos (mismo patrón que sales-panel) ===
   const searchProducts = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -285,14 +312,12 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
     // MESES contados desde la fecha de emisión. Una fecha fuera de ese plazo
     // se marca en rojo en la sección REFUERZOS y bloquea el presupuesto con
     // el motivo a la vista (antes se recortaba en silencio y el refuerzo
-    // desaparecía del resultado).
+    // desaparecía del resultado). El mensaje habla en FECHAS, no en "mes 18".
     const refuerzosFueraDePlazo = refuerzos.filter(refuerzoFueraDeRango);
     if (refuerzosFueraDePlazo.length > 0) {
-      const fechas = refuerzosFueraDePlazo
-        .map((r) => (r.fecha ? r.fecha.split("-").reverse().join("/") : "sin fecha"))
-        .join(", ");
+      const fechas = refuerzosFueraDePlazo.map((r) => fmtFechaPY(r.fecha)).join(", ");
       toast.error(
-        `El Plan Safra es de hasta ${MAX_MESES_SAFRA} meses desde la emisión. Corregí: ${fechas}`
+        `El Plan Safra termina el ${fmtFechaPY(finPlanISO)}. Cambiá ${fechas} por una fecha hasta ese día.`
       );
       return;
     }
@@ -835,13 +860,25 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
           </button>
         }
       >
+        {/* Task 166b: regla del plan en lenguaje del vendedor — fechas, no
+            "mes 18". Es la primera cosa que ve al cargar los refuerzos. */}
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+          <Info className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
+          <p className="text-[11px] sm:text-xs text-sky-900 leading-snug">
+            El Plan Safra dura <b>{MAX_MESES_SAFRA} meses</b>. Empieza el{" "}
+            <b>{fmtFechaPY(fechaBasePlan)}</b> y el último día de pago es el{" "}
+            <b>{fmtFechaPY(finPlanISO)}</b>. Cargá las fechas de pago hasta ese día.
+          </p>
+        </div>
+
         {refuerzos.length === 0 ? (
           <div className="py-6 text-center">
             <Calendar className="h-10 w-10 text-stone-300 mx-auto mb-2" />
             <p className="text-sm font-medium text-stone-500">No hay refuerzos cargados</p>
             <p className="text-xs text-stone-400 mt-1 mb-4">
-              Hacé click en "AGREGAR REFUERZO" para añadir pagos extra. El plan es de
-              hasta {MAX_MESES_SAFRA} meses contados desde la fecha de emisión.
+              Hacé click en "AGREGAR REFUERZO" para añadir pagos extra. Las fechas
+              tienen que estar entre el {fmtFechaPY(inicioPlanISO)} y el{" "}
+              {fmtFechaPY(finPlanISO)}.
             </p>
           </div>
         ) : (
@@ -863,16 +900,8 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
                     <input
                       type="date"
                       value={r.fecha || ""}
-                      min={(() => {
-                        const d = new Date((fechaEmision || new Date().toISOString().slice(0,10)) + "T00:00:00");
-                        d.setMonth(d.getMonth() + 1);
-                        return d.toISOString().slice(0, 10);
-                      })()}
-                      max={(() => {
-                        const d = new Date((fechaEmision || new Date().toISOString().slice(0,10)) + "T00:00:00");
-                        d.setMonth(d.getMonth() + MAX_MESES_SAFRA);
-                        return d.toISOString().slice(0, 10);
-                      })()}
+                      min={inicioPlanISO}
+                      max={finPlanISO}
                       onChange={(e) => setRefuerzoFecha(r.id, e.target.value)}
                       className={`w-full h-10 px-2 rounded-md border-2 bg-white text-sm font-semibold outline-none ${
                         fueraDePlazo
@@ -893,8 +922,19 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
                     </button>
                   </div>
                   {fueraDePlazo && (
-                    <div className="col-span-2 -mt-1 text-[10px] text-rose-600 font-semibold">
-                      ⚠ Fuera del plazo: el Plan Safra llega hasta {MAX_MESES_SAFRA} meses desde la emisión
+                    <div className="col-span-2 -mt-1 space-y-0.5">
+                      <p className="text-[11px] text-rose-700 font-bold">
+                        {mesDe(r) < 1
+                          ? `❌ Esta fecha es antes del inicio del plan (${fmtFechaPY(inicioPlanISO)}).`
+                          : `❌ Esta fecha se pasa del final del plan (${fmtFechaPY(finPlanISO)}).`}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setRefuerzoFecha(r.id, fechaSugerida(r))}
+                        className="text-[11px] font-bold text-rose-800 underline decoration-rose-400 underline-offset-2 hover:text-rose-900"
+                      >
+                        Poner una fecha válida ({fmtFechaPY(fechaSugerida(r))})
+                      </button>
                     </div>
                   )}
                 </div>
@@ -975,38 +1015,70 @@ export function PlanSafra({ sucursalMia }: { sucursalMia?: string | null }) {
         </p>
       )}
 
-      {/* === AVISOS DE BLOQUEO VISIBLES ===
-          Evita el botón GENERAR PRESUPUESTO "gris sin explicación": si el
-          plan no cuadra (saldo final distinto de 0) o hay refuerzos con fecha
-          fuera del rango permitido, el motivo se muestra SIEMPRE aquí, con
-          los números exactos y cómo resolverlo. No cambia ninguna validación:
-          solo hace visible lo que ya bloqueaba.
-          REGLA DEL 50% ELIMINADA (Task 82, pedido del dueño): ya no bloquea
-          ni avisa — el plan se calcula todo automático y no exige pagos
-          mínimos en los primeros 6 meses. */}
+      {/* === ALERTAS EN LENGUAJE DEL VENDEDOR (Task 166b) ===
+          El vendedor no piensa en "mes 18": piensa en fechas. Por eso el
+          aviso dice el DÍA en que termina el plan, cuántos meses se pasó la
+          fecha y trae un botón CORREGIR que deja la fecha válida en un click.
+          Sigue bloqueando igual que antes (no cambia ninguna validación),
+          solo que ahora el motivo se entiende y se resuelve sin ayuda. */}
       {productos.length > 0 && (!cuadra || refuerzos.some(refuerzoFueraDeRango)) && (
-        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 sm:p-4 space-y-2">
-          {!cuadra && (
-            <p className="text-xs font-bold text-rose-700">
-              ⚠️ El plan no cuadra: saldo final Gs {saldoFinal.toLocaleString("es-PY")}.
-              Revisá la entrada y los refuerzos para que el saldo final quede en 0.
-            </p>
-          )}
+        <div className="space-y-3">
           {refuerzos.some(refuerzoFueraDeRango) && (
-            <div className="space-y-1">
-              <p className="text-xs font-bold text-rose-700">
-                ⚠️ El Plan Safra llega hasta {MAX_MESES_SAFRA} meses desde la fecha de emisión
-                ({fechaBasePlan.split("-").reverse().join("/")}). Estas fechas están fuera del plazo:
+            <div className="rounded-xl border-2 border-rose-300 bg-rose-50 overflow-hidden">
+              <div className="flex items-center gap-2 bg-rose-600 px-4 py-2.5">
+                <AlertTriangle className="h-5 w-5 text-white shrink-0" />
+                <p className="text-white font-extrabold text-sm sm:text-base uppercase tracking-wide">
+                  Falta corregir una fecha de pago
+                </p>
+              </div>
+              <div className="p-4 space-y-3">
+                <p className="text-sm sm:text-base text-stone-800 leading-relaxed">
+                  El Plan Safra cierra dentro de <b>{MAX_MESES_SAFRA} meses</b>. Empezó el{" "}
+                  <b>{fmtFechaPY(fechaBasePlan)}</b>, así que el{" "}
+                  <b>último día de pago es el {fmtFechaPY(finPlanISO)}</b>.
+                </p>
+                <div className="space-y-2">
+                  {refuerzos.filter(refuerzoFueraDeRango).map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-2"
+                    >
+                      <p className="flex-1 text-sm text-stone-800 leading-snug">
+                        <b className="text-rose-700">{fmtFechaPY(r.fecha)}</b>{" "}
+                        {mesDe(r) < 1
+                          ? `es antes del inicio del plan (${fmtFechaPY(inicioPlanISO)})`
+                          : `está ${excesoMeses(r)} ${
+                              excesoMeses(r) === 1 ? "mes" : "meses"
+                            } después del final del plan`}
+                        .
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setRefuerzoFecha(r.id, fechaSugerida(r))}
+                        className="h-9 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold uppercase tracking-wide whitespace-nowrap transition-colors"
+                      >
+                        Corregir a {fmtFechaPY(fechaSugerida(r))}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs font-semibold text-rose-800">
+                  Tocá CORREGIR (o cambiá la fecha en rojo en REFUERZOS) y el
+                  presupuesto se habilita.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!cuadra && (
+            <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 space-y-1">
+              <p className="text-sm font-extrabold text-amber-900">
+                Falta plata por cobrar en el plan
               </p>
-              <ul className="text-xs font-semibold text-rose-700 list-disc pl-5">
-                {refuerzos.filter(refuerzoFueraDeRango).map((r) => (
-                  <li key={r.id}>
-                    {r.fecha ? r.fecha.split("-").reverse().join("/") : "sin fecha"} (mes {mesDe(r)})
-                  </li>
-                ))}
-              </ul>
-              <p className="text-xs font-semibold text-rose-700">
-                Corregí la fecha marcada en rojo en la sección REFUERZOS para poder generar el presupuesto.
+              <p className="text-sm text-amber-900 leading-relaxed">
+                Quedan <b>Gs {saldoFinal.toLocaleString("es-PY")}</b> sin cobrar y el
+                plan tiene que terminar en <b>Gs 0</b>. Revisá la <b>ENTRADA</b> y las{" "}
+                <b>fechas de pago</b>.
               </p>
             </div>
           )}
