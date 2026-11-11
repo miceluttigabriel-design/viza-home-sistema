@@ -46,6 +46,7 @@ import {
 
 export interface ParCatalogo {
   fabricante: string;
+  grupo: string;
   tipo: string;
 }
 
@@ -54,15 +55,17 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-    // DISTINCT directo en SQL: una sola consulta liviana (solo 2 columnas).
-    // Se estiran las columnas reales de la BASE (fabricante + tipo), sin
-    // valores vacíos, ordenadas alfabético.
+    // DISTINCT directo en SQL: una sola consulta liviana (3 columnas).
+    // Se estiran las columnas reales de la BASE:
+    //   · FABRICANTE → proveedor
+    //   · CATEGORIA  → GRUPO (pedido del dueño: usar GRUPO en el PEDIDO
+    //     ESPECIAL porque es más confiable que el TIPO)
+    //   · TIPO       → TIPO DE PRODUCTO (queda OPCIONAL)
     const pares = await db.$queryRaw<ParCatalogo[]>`
-      SELECT DISTINCT "fabricante" AS fabricante, "tipo" AS tipo
+      SELECT DISTINCT "fabricante" AS fabricante, "categoria" AS grupo, "tipo" AS tipo
       FROM "Product"
       WHERE "fabricante" IS NOT NULL AND "fabricante" <> ''
-        AND "tipo" IS NOT NULL AND "tipo" <> ''
-      ORDER BY "fabricante" ASC, "tipo" ASC
+      ORDER BY "fabricante" ASC, "categoria" ASC, "tipo" ASC
     `;
 
     // Tipos CREADOS por los usuarios (Task 113 v6) — NUNCA lanza.
@@ -71,17 +74,27 @@ export async function GET() {
 
     const proveedores: string[] = [];
     const tiposPorProveedor: Record<string, string[]> = {};
+    const gruposPorProveedor: Record<string, string[]> = {};
     const tipos = new Set<string>();
+    const grupos = new Set<string>();
     for (const p of pares) {
       const fab = String(p.fabricante || "").trim();
+      if (!fab) continue;
+      const grp = String(p.grupo || "").trim();
       const tip = String(p.tipo || "").trim();
-      if (!fab || !tip) continue;
       if (!tiposPorProveedor[fab]) {
         tiposPorProveedor[fab] = [];
+        gruposPorProveedor[fab] = [];
         proveedores.push(fab);
       }
-      if (!tiposPorProveedor[fab].includes(tip)) tiposPorProveedor[fab].push(tip);
-      tipos.add(tip);
+      if (grp) {
+        if (!gruposPorProveedor[fab].includes(grp)) gruposPorProveedor[fab].push(grp);
+        grupos.add(grp);
+      }
+      if (tip) {
+        if (!tiposPorProveedor[fab].includes(tip)) tiposPorProveedor[fab].push(tip);
+        tipos.add(tip);
+      }
     }
     // Los tipos creados entran en TODAS las listas (global + por
     // proveedor): si no están catalogados en la BASE, todavía así el
@@ -93,15 +106,18 @@ export async function GET() {
       }
     }
 
-    // Task 113 v4/v6: los % de cada par, estirados de la BASE (promedios
-    // reales + cascada por proveedor + respaldo del panel). NUNCA lanza:
-    // en fallo devuelve [] y la pantalla calcula con lo que tenga.
+    // Task 113 v4/v6: los % de cada combinación, estirados de la BASE
+    // (promedios reales + cascada por proveedor/grupo + respaldo del
+    // panel). NUNCA lanza: en fallo devuelve [] y la pantalla calcula
+    // con lo que tenga.
     const porcentajes = await mapaPorcentajesDeLaBase();
 
     return NextResponse.json({
       proveedores,
       tiposPorProveedor,
+      gruposPorProveedor,
       tipos: Array.from(tipos).sort((a, b) => a.localeCompare(b)),
+      grupos: Array.from(grupos).sort((a, b) => a.localeCompare(b)),
       tiposExtra: Array.from(extraSet).sort((a, b) => a.localeCompare(b)),
       porcentajes,
     });
@@ -111,7 +127,9 @@ export async function GET() {
     return NextResponse.json({
       proveedores: [],
       tiposPorProveedor: {},
+      gruposPorProveedor: {},
       tipos: [],
+      grupos: [],
       tiposExtra: [],
       porcentajes: [],
     });

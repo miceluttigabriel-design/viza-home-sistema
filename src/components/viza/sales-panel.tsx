@@ -327,6 +327,26 @@ interface CrmFilaSucursal {
   ultimo: string | null;
 }
 
+// PEDIDO ESPECIAL emitido (v8): el CRM de la sucursal también los muestra.
+interface CrmPedidoEspecialSucursal {
+  id: string;
+  numero: string;
+  vendedorNombre: string;
+  vendedorEmail: string;
+  sucursal: string;
+  proveedor: string;
+  grupo?: string;
+  tipoProducto?: string;
+  descripcion: string;
+  clienteNombre?: string;
+  plan: string;
+  total: number;
+  estado: string;
+  ordenGenerada?: boolean;
+  ordenNumero?: string;
+  createdAt: string;
+}
+
 // Pills del filtro por PLAN del CRM (Task 78, pedido del dueño: "para
 // nosotros y los usuarios VIP también"): TODOS + los planes. CUOTA = el
 // presupuesto normal con cuotas del panel de ventas (quoteNumber
@@ -443,6 +463,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   const [crmAbierto, setCrmAbierto] = useState(false);
   const [crmCargando, setCrmCargando] = useState(false);
   const [crmFilas, setCrmFilas] = useState<CrmFilaSucursal[]>([]);
+  const [crmPedidosEspeciales, setCrmPedidosEspeciales] = useState<CrmPedidoEspecialSucursal[]>([]);
   const [crmTotalSucursal, setCrmTotalSucursal] = useState(0);
   const [crmSucursalVista, setCrmSucursalVista] = useState<string | null>(null);
   // Filtro por TIPO DE PLAN del CRM (Task 78): TODOS por defecto = igual que
@@ -563,6 +584,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         throw new Error(data?.error || `Error ${res.status}`);
       }
       setCrmFilas(Array.isArray(data.ranking) ? data.ranking : []);
+      setCrmPedidosEspeciales(
+        Array.isArray(data.pedidosEspeciales) ? data.pedidosEspeciales : []
+      );
       setCrmTotalSucursal(Number(data.totalGeneral) || 0);
       setCrmSucursalVista(
         typeof data.vistaSucursal === "string" && data.vistaSucursal
@@ -2045,6 +2069,90 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                     </tbody>
                   </table>
                 )}
+              </div>
+
+              {/* PEDIDOS ESPECIALES DE MI SUCURSAL (v8): el CRM del encargado
+                  también los muestra, con su situación. */}
+              <div className="border-t border-stone-200 shrink-0">
+                <div className="px-6 py-2 flex items-center justify-between bg-stone-50">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-stone-500">
+                    PEDIDOS ESPECIALES EMITIDOS
+                  </span>
+                  <span className="text-xs font-bold text-stone-600">
+                    {crmPedidosEspeciales.length}
+                  </span>
+                </div>
+                <div className="max-h-[200px] overflow-auto">
+                  {crmPedidosEspeciales.length === 0 ? (
+                    <p className="px-6 py-3 text-xs text-stone-400">
+                      Todavía no hay pedidos especiales
+                      {crmSucursalVista ? ` en ${crmSucursalVista}` : ""}.
+                    </p>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead className="bg-white sticky top-0 border-b border-stone-200">
+                        <tr className="text-[10px] uppercase tracking-wide text-stone-500">
+                          <th className="px-3 py-1.5 text-left">N°</th>
+                          <th className="px-3 py-1.5 text-left">Vendedor</th>
+                          <th className="px-3 py-1.5 text-left">Cliente</th>
+                          <th className="px-3 py-1.5 text-left">Grupo · Tipo</th>
+                          <th className="px-3 py-1.5 text-left">Plan</th>
+                          <th className="px-3 py-1.5 text-right">Total</th>
+                          <th className="px-3 py-1.5 text-center">Situación</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {crmPedidosEspeciales.map((p, i) => (
+                          <tr key={p.id} className={i % 2 === 0 ? "bg-white" : "bg-stone-50"}>
+                            <td className="px-3 py-1.5 font-bold whitespace-nowrap" style={{ color: "#155789" }}>
+                              {p.numero}
+                            </td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">
+                              <div className="font-semibold text-stone-700 truncate max-w-[140px]">
+                                {p.vendedorNombre || p.vendedorEmail}
+                              </div>
+                            </td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">
+                              {p.clienteNombre || "—"}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              <div className="text-stone-600">
+                                {[p.grupo, p.tipoProducto].filter(Boolean).join(" · ") || "—"}
+                              </div>
+                              <div className="text-[10px] text-stone-400 truncate max-w-[180px]" title={p.descripcion}>
+                                {p.descripcion}
+                              </div>
+                            </td>
+                            <td className="px-3 py-1.5 whitespace-nowrap font-semibold text-stone-600">
+                              {p.plan}
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-bold text-stone-800 whitespace-nowrap">
+                              {new Intl.NumberFormat("es-PY").format(Math.round(p.total || 0))}
+                            </td>
+                            <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  p.estado === "VERIFICADO"
+                                    ? "bg-sky-100 text-sky-800"
+                                    : p.estado === "APROBADO"
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-stone-100 text-stone-600"
+                                }`}
+                              >
+                                {p.estado}
+                              </span>
+                              {p.ordenGenerada && (
+                                <div className="text-[10px] text-yellow-700 font-bold">
+                                  {p.ordenNumero || "ORDEN"}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
 
               {/* Pie: resumen de su sucursal */}

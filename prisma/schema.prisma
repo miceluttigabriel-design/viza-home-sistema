@@ -627,8 +627,14 @@ model PedidoEspecialPresupuesto {
   vendedorNombre String    @default("") // nombre del vendedor (para el encargado)
   sucursal       String    @default("") // sucursal del vendedor (snapshot UsuarioSucursal)
   proveedor      String
-  tipoProducto   String
+  grupo          String    @default("") // GRUPO de la BASE (categoria)
+  tipoProducto   String    @default("") // TIPO de producto: OPCIONAL
   descripcion    String    @default("")
+  // DATOS DEL CLIENTE (pedido del dueño, v8)
+  clienteNombre        String @default("")
+  clienteTelefono      String @default("")
+  clienteDocumento     String @default("")
+  clienteObservaciones String @default("")
   modoCosto      String    @default("gs") // "usd" | "gs" (moneda del costo original)
   costoOriginal  Float // costo tal cual lo puso el vendedor (US$ o Gs)
   costoGs        Float // costo convertido a Gs

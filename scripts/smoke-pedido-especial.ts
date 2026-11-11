@@ -264,12 +264,12 @@ check("fmt+parse 0,", parseCostoPantalla(formatearMontoInput("0,")), null);
 // ════════════════════════════════════════════════════════════════════
 const filasV4: FilaPorcentajeProducto[] = [
   // Par A (2 productos, mismo %): CHACOMER GINASIA / ABDOMINALERA
-  { fabricante: "CHACOMER GINASIA", tipo: "ABDOMINALERA", marginContado: 0.05, pct1A6: 0.04, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: null, safra: "7" },
-  { fabricante: "CHACOMER GINASIA", tipo: "ABDOMINALERA", marginContado: 0.05, pct1A6: 0.04, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: 0.05, safra: "7" },
+  { fabricante: "CHACOMER GINASIA", categoria: null, tipo: "ABDOMINALERA", marginContado: 0.05, pct1A6: 0.04, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: null, safra: "7" },
+  { fabricante: "CHACOMER GINASIA", categoria: null, tipo: "ABDOMINALERA", marginContado: 0.05, pct1A6: 0.04, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: 0.05, safra: "7" },
   // Par B (mismo TIPO, otro proveedor, otro %): COEXMA / ABLANDADOR CARNE
-  { fabricante: "COEXMA S.R.L.", tipo: "ABLANDADOR CARNE", marginContado: 0.25, pct1A6: 0.04, pct7A13: 0.04, pct14A30: 0.04, margenTecnico: null, safra: "6" },
+  { fabricante: "COEXMA S.R.L.", categoria: null, tipo: "ABLANDADOR CARNE", marginContado: 0.25, pct1A6: 0.04, pct7A13: 0.04, pct14A30: 0.04, margenTecnico: null, safra: "6" },
   // Par C (TIPO único con técnico): INVERFIN / VAZIO
-  { fabricante: "INVERFIN S.A.E.C.A.", tipo: "VAZIO", marginContado: 0.15, pct1A6: 0.05, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: 0.10, safra: "null" },
+  { fabricante: "INVERFIN S.A.E.C.A.", categoria: null, tipo: "VAZIO", marginContado: 0.15, pct1A6: 0.05, pct7A13: 0.05, pct14A30: 0.04, margenTecnico: 0.10, safra: "null" },
 ];
 const mapaV4 = calcularPromediosPorcentajes(filasV4);
 
@@ -311,8 +311,8 @@ check("V4 parC tecnico", legible(parC?.tecnico ?? 0), 10);
 
 // Agrupación tolerante (espacios/case): "motos" y " MOTOS " son el MISMO tipo:
 const mapaNorm = calcularPromediosPorcentajes([
-  { fabricante: "kenton", tipo: "motos", marginContado: 0.10, pct1A6: 0.02, pct7A13: 0.015, pct14A30: 0.01, margenTecnico: null, safra: null },
-  { fabricante: "KENTON", tipo: "MOTOS", marginContado: 0.20, pct1A6: 0.02, pct7A13: 0.015, pct14A30: 0.01, margenTecnico: null, safra: null },
+  { fabricante: "kenton", categoria: null, tipo: "motos", marginContado: 0.10, pct1A6: 0.02, pct7A13: 0.015, pct14A30: 0.01, margenTecnico: null, safra: null },
+  { fabricante: "KENTON", categoria: null, tipo: "MOTOS", marginContado: 0.20, pct1A6: 0.02, pct7A13: 0.015, pct14A30: 0.01, margenTecnico: null, safra: null },
 ]);
 const parNorm = mapaNorm.porPar.get("KENTON||MOTOS");
 check("V4 normalización agrupa", parNorm?.count, 2);

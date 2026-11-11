@@ -83,6 +83,29 @@ interface CrmFila {
   ultimo: string | null; // fecha ISO del último presupuesto
 }
 
+// ─── CRM: PEDIDO ESPECIAL emitido (Task 113 v8, pedido del dueño) ───
+// "en el CRM tiene que salir también los PEDIDOS ESPECIALES que se
+// emitirán… de todos". GET /api/crm/ranking los devuelve en
+// `pedidosEspeciales` (admin/consulta = todos; encargado = su sucursal).
+interface CrmPedidoEspecial {
+  id: string;
+  numero: string;
+  vendedorEmail: string;
+  vendedorNombre: string;
+  sucursal: string;
+  proveedor: string;
+  grupo?: string;
+  tipoProducto?: string;
+  descripcion: string;
+  clienteNombre?: string;
+  plan: string;
+  total: number;
+  estado: string; // GENERADO | APROBADO | VERIFICADO
+  ordenGenerada?: boolean;
+  ordenNumero?: string;
+  createdAt: string;
+}
+
 // Pills del filtro por PLAN del CRM (Task 78): TODOS + los planes que
 // pidió el dueño. CUOTA = el presupuesto normal con cuotas del panel de
 // ventas (quoteNumber PRESUPUESTO-XX). Task 111: CONTADO = el presupuesto
@@ -770,6 +793,7 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   const [crmOpen, setCrmOpen] = useState(false);
   const [crmLoading, setCrmLoading] = useState(false);
   const [crmRanking, setCrmRanking] = useState<CrmFila[]>([]);
+  const [crmPedidosEspeciales, setCrmPedidosEspeciales] = useState<CrmPedidoEspecial[]>([]);
   const [crmSucursales, setCrmSucursales] = useState<string[]>([]);
   const [crmTotalGeneral, setCrmTotalGeneral] = useState(0);
   const [crmFiltro, setCrmFiltro] = useState<string>("GENERAL");
@@ -788,6 +812,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Error HTTP ${res.status}`);
       setCrmRanking(Array.isArray(data.ranking) ? data.ranking : []);
+      setCrmPedidosEspeciales(
+        Array.isArray(data.pedidosEspeciales) ? data.pedidosEspeciales : []
+      );
       setCrmSucursales(Array.isArray(data.sucursales) ? data.sucursales : []);
       setCrmTotalGeneral(Number(data.totalGeneral) || 0);
     } catch (error) {
@@ -2398,6 +2425,10 @@ tr.fila-etiquetada-${e.id}:hover td {
           );
         const sumaVista = filas.reduce((acc, f) => acc + totalDeFila(f), 0);
         const aprobadasVista = filas.reduce((acc, f) => acc + f.aprobadas, 0);
+        // PEDIDOS ESPECIALES del CRM (v8): mismo filtro por sucursal.
+        const pedidosVista = crmPedidosEspeciales.filter(
+          (p) => crmFiltro === "GENERAL" || p.sucursal === crmFiltro
+        );
         // Total del encabezado: con TODOS es el general de siempre; con un
         // plan, la suma de ese plan sobre TODOS los usuarios (sin filtro de
         // sucursal), igual criterio que crmTotalGeneral.
@@ -2603,6 +2634,92 @@ tr.fila-etiquetada-${e.id}:hover td {
                     </tbody>
                   </table>
                 )}
+              </div>
+
+              {/* PEDIDOS ESPECIALES EMITIDOS (Task 113 v8, pedido del dueño:
+                  "en el CRM tiene que salir también los PEDIDOS ESPECIALES
+                  que se emitirán… de todos"). Mismo filtro por sucursal. */}
+              <div className="border-t border-stone-200 shrink-0">
+                <div className="px-6 py-2 flex items-center justify-between bg-stone-50">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-stone-500">
+                    PEDIDOS ESPECIALES EMITIDOS
+                  </span>
+                  <span className="text-xs font-bold text-stone-600">
+                    {pedidosVista.length}
+                  </span>
+                </div>
+                <div className="max-h-[200px] overflow-auto">
+                  {pedidosVista.length === 0 ? (
+                    <p className="px-6 py-3 text-xs text-stone-400">
+                      Todavía no hay pedidos especiales
+                      {crmFiltro === "GENERAL" ? "" : ` en ${crmFiltro}`}.
+                    </p>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead className="bg-white sticky top-0 border-b border-stone-200">
+                        <tr className="text-[10px] uppercase tracking-wide text-stone-500">
+                          <th className="px-3 py-1.5 text-left">N°</th>
+                          <th className="px-3 py-1.5 text-left">Vendedor</th>
+                          <th className="px-3 py-1.5 text-left">Cliente</th>
+                          <th className="px-3 py-1.5 text-left">Grupo · Tipo</th>
+                          <th className="px-3 py-1.5 text-left">Plan</th>
+                          <th className="px-3 py-1.5 text-right">Total</th>
+                          <th className="px-3 py-1.5 text-center">Situación</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pedidosVista.map((p, i) => (
+                          <tr key={p.id} className={i % 2 === 0 ? "bg-white" : "bg-stone-50"}>
+                            <td className="px-3 py-1.5 font-bold whitespace-nowrap" style={{ color: "#155789" }}>
+                              {p.numero}
+                            </td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">
+                              <div className="font-semibold text-stone-700 truncate max-w-[140px]">
+                                {p.vendedorNombre || p.vendedorEmail}
+                              </div>
+                              <div className="text-[10px] text-stone-400">{p.sucursal || "—"}</div>
+                            </td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">
+                              {p.clienteNombre || "—"}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              <div className="text-stone-600">
+                                {[p.grupo, p.tipoProducto].filter(Boolean).join(" · ") || "—"}
+                              </div>
+                              <div className="text-[10px] text-stone-400 truncate max-w-[180px]" title={p.descripcion}>
+                                {p.descripcion}
+                              </div>
+                            </td>
+                            <td className="px-3 py-1.5 whitespace-nowrap font-semibold text-stone-600">
+                              {p.plan}
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-bold text-stone-800 whitespace-nowrap">
+                              {new Intl.NumberFormat("es-PY").format(Math.round(p.total || 0))}
+                            </td>
+                            <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  p.estado === "VERIFICADO"
+                                    ? "bg-sky-100 text-sky-800"
+                                    : p.estado === "APROBADO"
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-stone-100 text-stone-600"
+                                }`}
+                              >
+                                {p.estado}
+                              </span>
+                              {p.ordenGenerada && (
+                                <div className="text-[10px] text-yellow-700 font-bold">
+                                  {p.ordenNumero || "ORDEN"}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
 
               {/* Pie: resumen de la vista actual */}

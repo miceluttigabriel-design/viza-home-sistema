@@ -64,6 +64,7 @@ export interface FilaOrdenCompraPdf {
   vendedorNombre: string;
   sucursal: string;
   proveedor: string;
+  grupo?: string;
   tipoProducto: string;
   descripcion: string;
   modoCosto: string; // "usd" | "gs"
@@ -126,7 +127,10 @@ export function buildOrdenCompraPdf(fila: FilaOrdenCompraPdf): jsPDF {
   // es el n° de crédito que el encargado verificó).
   const paresDatos: [string, string][] = [
     ["PROVEEDOR", (fila.proveedor || "—").toUpperCase()],
-    ["TIPO DE PRODUCTO", (fila.tipoProducto || "—").toUpperCase()],
+    [
+      "GRUPO / TIPO DE PRODUCTO",
+      [fila.grupo, fila.tipoProducto].filter(Boolean).join(" · ").toUpperCase() || "—",
+    ],
     ["SUCURSAL QUE PIDE", (fila.sucursal || "—").toUpperCase()],
     ["PRESUPUESTO", fila.numero || "—"],
     ["VENDEDOR", (fila.vendedorNombre || fila.vendedorEmail || "—").toUpperCase()],

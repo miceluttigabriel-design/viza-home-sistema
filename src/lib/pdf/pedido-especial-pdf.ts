@@ -63,8 +63,15 @@ export interface FilaPedidoEspecialPdf {
   vendedorNombre: string;
   sucursal: string;
   proveedor: string;
+  grupo?: string;
   tipoProducto: string;
   descripcion: string;
+  // DATOS DEL CLIENTE (v8, pedido del dueño) — opcionales por compat con
+  // presupuestos viejos (sin cliente guardado).
+  clienteNombre?: string;
+  clienteTelefono?: string;
+  clienteDocumento?: string;
+  clienteObservaciones?: string;
   plan: string;
   cuotas: number;
   valorContado: number;
@@ -139,6 +146,62 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
       y = 56;
     }
   };
+
+  // ═══ 0) DATOS DEL CLIENTE (v8, pedido del dueño: "el cuadro para
+  // completar del cliente es muy importante") ═══
+  // Se dibuja arriba de los productos, con el mismo estilo del presupuesto
+  // de venta: nombre, documento y teléfono en columnas + observaciones.
+  if (fila.clienteNombre) {
+    drawSectionTitle(doc, "DATOS DEL CLIENTE", margin, y, contentW);
+    y += 14;
+    const hasDoc = !!fila.clienteDocumento;
+    const hasTel = !!fila.clienteTelefono;
+    const obs = String(fila.clienteObservaciones || "").trim();
+    const obsLines = obs
+      ? (doc.splitTextToSize(`OBS.: ${obs}`, contentW - 24) as string[]).slice(0, 2)
+      : [];
+    const boxH = 38 + (obsLines.length > 0 ? 8 + obsLines.length * 9 : 0);
+    doc.setFillColor(...LIGHT);
+    doc.rect(margin, y, contentW, boxH, "F");
+    doc.setFillColor(...GOLD);
+    doc.rect(margin, y + 6, 3, boxH - 12, "F");
+
+    const cols: [string, string, number][] = [
+      ["CLIENTE", fila.clienteNombre, margin + 12],
+    ];
+    const c2 = margin + contentW * 0.46;
+    const c3 = margin + contentW * 0.73;
+    if (hasDoc)
+      cols.push(["DOCUMENTO / CI / RUC", fila.clienteDocumento || "", c2]);
+    if (hasTel)
+      cols.push([
+        "TELÉFONO / WHATSAPP",
+        fila.clienteTelefono || "",
+        hasDoc ? c3 : c2,
+      ]);
+    cols.forEach(([label, value, cx], i) => {
+      if (i > 0) {
+        doc.setDrawColor(...LINE);
+        doc.setLineWidth(0.5);
+        doc.line(cx - 8, y + 6, cx - 8, y + 32);
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(...GREY);
+      doc.text(label, cx, y + 12);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...DARK);
+      doc.text(String(value).slice(0, 55), cx, y + 25);
+    });
+    if (obsLines.length > 0) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GREY);
+      doc.text(obsLines, margin + 12, y + 40);
+    }
+    y += boxH + 14;
+  }
 
   // ═══ 1) PRODUCTOS DE LA COTIZACIÓN (igual que el presupuesto) ═══
   drawSectionTitle(doc, "PRODUCTOS DE LA COTIZACIÓN", margin, y, contentW);

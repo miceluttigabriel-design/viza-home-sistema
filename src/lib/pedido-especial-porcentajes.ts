@@ -79,6 +79,10 @@ export function parseSafraStr(safra: string | null | undefined): number {
 // (todo en las unidades de la BD: fracciones + texto SAFRA).
 export interface FilaPorcentajeProducto {
   fabricante: string | null;
+  // GRUPO de la BASE (columna CQ "CATEGORIA" del Excel → `categoria`).
+  // El dueño pidió usar GRUPO en el PEDIDO ESPECIAL: es más confiable que
+  // el TIPO, que puede venir vacío en muchos productos.
+  categoria: string | null;
   tipo: string | null;
   marginContado: number | null;
   pct1A6: number | null;
@@ -131,8 +135,10 @@ function promediarGrupo(filas: FilaPorcentajeProducto[]): PromediosGrupo {
 // proveedor+tipo, por proveedor, por tipo y global. Testeable sin base.
 export interface MapaPorcentajes {
   porPar: Map<string, PromediosGrupo>; // clave "FAB||TIPO"
+  porParGrupo: Map<string, PromediosGrupo>; // clave "FAB||GRUPO" (categoria)
   porProveedor: Map<string, PromediosGrupo>; // clave "FAB" (Task 113 v6)
   porTipo: Map<string, PromediosGrupo>; // clave "TIPO"
+  porGrupo: Map<string, PromediosGrupo>; // clave "GRUPO" (categoria)
   global: PromediosGrupo;
 }
 
@@ -140,13 +146,32 @@ export function calcularPromediosPorcentajes(
   filas: FilaPorcentajeProducto[]
 ): MapaPorcentajes {
   const porPar = new Map<string, FilaPorcentajeProducto[]>();
+  const porParGrupo = new Map<string, FilaPorcentajeProducto[]>();
   const porProveedor = new Map<string, FilaPorcentajeProducto[]>();
   const porTipo = new Map<string, FilaPorcentajeProducto[]>();
+  const porGrupo = new Map<string, FilaPorcentajeProducto[]>();
   const todas: FilaPorcentajeProducto[] = [];
 
   for (const f of filas) {
     const fab = normalizarClave(f.fabricante);
     const tip = normalizarClave(f.tipo);
+    const grp = normalizarClave(f.categoria);
+
+    // GRUPO (col CQ): se agrupa aunque el producto no tenga TIPO (justamente
+    // GRUPO es más confiable que TIPO en la BASE). Solo necesita proveedor.
+    if (fab && grp) {
+      const claveParGrupo = `${fab}||${grp}`;
+      const arrParGrupo = porParGrupo.get(claveParGrupo) || [];
+      arrParGrupo.push(f);
+      porParGrupo.set(claveParGrupo, arrParGrupo);
+      const arrGrp = porGrupo.get(grp) || [];
+      arrGrp.push(f);
+      porGrupo.set(grp, arrGrp);
+    }
+
+    // Regla de SIEMPRE para el resto de los promedios (par / proveedor /
+    // tipo / global): el producto tiene que tener PROVEEDOR y TIPO. No se
+    // toca para no cambiar los % que ya funcionaban.
     if (!fab || !tip) continue;
     todas.push(f);
     const clavePar = `${fab}||${tip}`;
@@ -163,43 +188,61 @@ export function calcularPromediosPorcentajes(
 
   const promediosPorPar = new Map<string, PromediosGrupo>();
   for (const [clave, filasPar] of porPar) promediosPorPar.set(clave, promediarGrupo(filasPar));
+  const promediosPorParGrupo = new Map<string, PromediosGrupo>();
+  for (const [clave, filasPar] of porParGrupo) {
+    promediosPorParGrupo.set(clave, promediarGrupo(filasPar));
+  }
   const promediosPorProveedor = new Map<string, PromediosGrupo>();
   for (const [clave, filasFab] of porProveedor) promediosPorProveedor.set(clave, promediarGrupo(filasFab));
   const promediosPorTipo = new Map<string, PromediosGrupo>();
   for (const [clave, filasTipo] of porTipo) promediosPorTipo.set(clave, promediarGrupo(filasTipo));
+  const promediosPorGrupo = new Map<string, PromediosGrupo>();
+  for (const [clave, filasGrp] of porGrupo) promediosPorGrupo.set(clave, promediarGrupo(filasGrp));
 
   return {
     porPar: promediosPorPar,
+    porParGrupo: promediosPorParGrupo,
     porProveedor: promediosPorProveedor,
     porTipo: promediosPorTipo,
+    porGrupo: promediosPorGrupo,
     global: promediarGrupo(todas),
   };
 }
 
 // Convierte un grupo (fracción) a los % LEGIBLES con la cascada
-// par → proveedor → tipo → global, campo por campo (Task 113 v6:
-// "en margen se usa conforme de proveedor" — si el par no tiene dato,
-// gana el promedio del PROVEEDOR antes que el del tipo). El respaldo
-// (config del admin) entra solo si la cascada dio 0 en ese campo.
+// par proveedor+tipo → par proveedor+GRUPO → proveedor → tipo → GRUPO →
+// global, campo por campo. El respaldo (config del admin) entra solo si la
+// cascada dio 0 en ese campo.
+// El GRUPO es opcional (lo usa el PEDIDO ESPECIAL); si viene vacío la
+// cascada se comporta EXACTAMENTE como antes (par → proveedor → tipo →
+// global), así no cambiamos ningún % que ya funcionaba.
 // Exportada para la prueba de humo (mismo comportamiento en prod).
 export function resolverGrupo(
   mapa: MapaPorcentajes,
   fabricante: string,
+  grupo: string,
   tipo: string,
   respaldo?: Partial<PorcentajesPedidoEspecial> | null
 ): PorcentajesPedidoEspecial {
   const fab = normalizarClave(fabricante);
+  const grp = normalizarClave(grupo);
   const tip = normalizarClave(tipo);
-  const par = mapa.porPar.get(`${fab}||${tip}`) || GRUPO_VACIO;
+  const par = fab && tip ? mapa.porPar.get(`${fab}||${tip}`) || GRUPO_VACIO : GRUPO_VACIO;
+  const parGrupo =
+    fab && grp ? mapa.porParGrupo.get(`${fab}||${grp}`) || GRUPO_VACIO : GRUPO_VACIO;
   const prov = mapa.porProveedor.get(fab) || GRUPO_VACIO;
-  const tipoSolo = mapa.porTipo.get(tip) || GRUPO_VACIO;
+  const tipoSolo = tip ? mapa.porTipo.get(tip) || GRUPO_VACIO : GRUPO_VACIO;
+  const grupoSolo = grp ? mapa.porGrupo.get(grp) || GRUPO_VACIO : GRUPO_VACIO;
   const global = mapa.global || GRUPO_VACIO;
 
-  // Cada campo: par → proveedor → tipo → global → respaldo (config) → 0.
+  // Cada campo: par → par grupo → proveedor → tipo → grupo → global →
+  // respaldo (config) → 0.
   const porCascada = (
     delPar: number,
+    delParGrupo: number,
     delProveedor: number,
     delTipo: number,
+    delGrupo: number,
     delGlobal: number,
     delRespaldo: number | undefined
   ): number => {
@@ -207,13 +250,17 @@ export function resolverGrupo(
     const elegido =
       delPar > 0
         ? delPar
-        : delProveedor > 0
-          ? delProveedor
-          : delTipo > 0
-            ? delTipo
-            : delGlobal > 0
-              ? delGlobal
-              : 0;
+        : delParGrupo > 0
+          ? delParGrupo
+          : delProveedor > 0
+            ? delProveedor
+            : delTipo > 0
+              ? delTipo
+              : delGrupo > 0
+                ? delGrupo
+                : delGlobal > 0
+                  ? delGlobal
+                  : 0;
     const legible = Math.round(elegido * 1_000_000) / 10_000; // fracción → % legible
     if (legible > 0) return legible;
     const r = Number(delRespaldo) || 0;
@@ -224,13 +271,17 @@ export function resolverGrupo(
   const safraElegido =
     par.safra > 0
       ? par.safra
-      : prov.safra > 0
-        ? prov.safra
-        : tipoSolo.safra > 0
-          ? tipoSolo.safra
-          : global.safra > 0
-            ? global.safra
-            : 0;
+      : parGrupo.safra > 0
+        ? parGrupo.safra
+        : prov.safra > 0
+          ? prov.safra
+          : tipoSolo.safra > 0
+            ? tipoSolo.safra
+            : grupoSolo.safra > 0
+              ? grupoSolo.safra
+              : global.safra > 0
+                ? global.safra
+                : 0;
   const safraFinal =
     safraElegido > 0
       ? Math.round(safraElegido * 1_000_000) / 1_000_000
@@ -239,27 +290,29 @@ export function resolverGrupo(
         : 0;
 
   return {
-    pctContado: porCascada(par.m, prov.m, tipoSolo.m, global.m, respaldo?.pctContado),
-    pct1A6: porCascada(par.y, prov.y, tipoSolo.y, global.y, respaldo?.pct1A6),
-    pct7A13: porCascada(par.z, prov.z, tipoSolo.z, global.z, respaldo?.pct7A13),
-    pct14A30: porCascada(par.aa, prov.aa, tipoSolo.aa, global.aa, respaldo?.pct14A30),
-    pctTecnico: porCascada(par.tecnico, prov.tecnico, tipoSolo.tecnico, global.tecnico, respaldo?.pctTecnico),
+    pctContado: porCascada(par.m, parGrupo.m, prov.m, tipoSolo.m, grupoSolo.m, global.m, respaldo?.pctContado),
+    pct1A6: porCascada(par.y, parGrupo.y, prov.y, tipoSolo.y, grupoSolo.y, global.y, respaldo?.pct1A6),
+    pct7A13: porCascada(par.z, parGrupo.z, prov.z, tipoSolo.z, grupoSolo.z, global.z, respaldo?.pct7A13),
+    pct14A30: porCascada(par.aa, parGrupo.aa, prov.aa, tipoSolo.aa, grupoSolo.aa, global.aa, respaldo?.pct14A30),
+    pctTecnico: porCascada(par.tecnico, parGrupo.tecnico, prov.tecnico, tipoSolo.tecnico, grupoSolo.tecnico, global.tecnico, respaldo?.pctTecnico),
     pctSafra: safraFinal,
   };
 }
 
-// Lee los % para UNA combinación proveedor + tipo (servidor).
+// Lee los % para UNA combinación proveedor + grupo + tipo (servidor).
 // NUNCA lanza: si la BD falla devuelve ceros (o el respaldo cargado).
 export async function porcentajesDeLaBase(
   fabricante: string,
+  grupo: string,
   tipo: string,
   respaldo?: Partial<PorcentajesPedidoEspecial> | null
 ): Promise<PorcentajesPedidoEspecial> {
   try {
     const filas = await db.product.findMany({
-      where: { fabricante: { not: null }, tipo: { not: null } },
+      where: { fabricante: { not: null } },
       select: {
         fabricante: true,
+        categoria: true,
         tipo: true,
         marginContado: true,
         pct1A6: true,
@@ -269,7 +322,7 @@ export async function porcentajesDeLaBase(
         safra: true,
       },
     });
-    return resolverGrupo(calcularPromediosPorcentajes(filas), fabricante, tipo, respaldo);
+    return resolverGrupo(calcularPromediosPorcentajes(filas), fabricante, grupo, tipo, respaldo);
   } catch (error) {
     console.error("porcentajesDeLaBase:", error);
     return { ...PORCENTAJES_CERO, ...(respaldo || {}) };
@@ -277,26 +330,31 @@ export async function porcentajesDeLaBase(
 }
 
 // Un par del catálogo con sus % ya resueltos (lo que consume la pantalla).
+// `grupo` es el GRUPO de la BASE (categoria) y `tipo` el TIPO (puede venir
+// vacío: el dueño pidió GRUPO como selector principal y TIPO opcional).
 export interface ParConPorcentajes extends PorcentajesPedidoEspecial {
   fabricante: string;
+  grupo: string;
   tipo: string;
 }
 
-// Mapa COMPLETO de la BASE para la pantalla: un registro por cada par
-// (fabricante, tipo) real de los productos, con los % ya resueltos
+// Mapa COMPLETO de la BASE para la pantalla: un registro por cada
+// combinación (fabricante, GRUPO, tipo) con los % ya resueltos
 // (promedio de la BASE + respaldo del panel del admin). NUNCA lanza.
-// Task 113 v6: además, un registro por cada TIPO CREADO por los
-// vendedores (tabla PedidoEspecialTipo, tipos que no están en la BASE)
-// × cada proveedor real — con los % de la cascada (par vacío → tipo
-// vacío → PROMEDIO GENERAL de la BASE). Así la pantalla encuentra los %
-// de un tipo recién creado exactamente igual que los de la BASE.
+// El dueño pidió GRUPO como selector principal y TIPO opcional:
+//   · (FAB, GRUPO, TIPO) → combo más específico
+//   · (FAB, GRUPO, "")   → solo grupo
+//   · (FAB, "", TIPO)    → solo tipo
+//   · (FAB, "", "")      → promedio del proveedor (si no hay nada más)
+// Task 113 v6: los TIPOS CREADOS por los vendedores también entran.
 export async function mapaPorcentajesDeLaBase(): Promise<ParConPorcentajes[]> {
   try {
     const [filas, combinaciones, tiposExtra] = await Promise.all([
       db.product.findMany({
-        where: { fabricante: { not: null }, tipo: { not: null } },
+        where: { fabricante: { not: null } },
         select: {
           fabricante: true,
+          categoria: true,
           tipo: true,
           marginContado: true,
           pct1A6: true,
@@ -311,7 +369,7 @@ export async function mapaPorcentajesDeLaBase(): Promise<ParConPorcentajes[]> {
     ]);
     const mapa = calcularPromediosPorcentajes(filas);
 
-    // Respaldo del panel del admin, por clave normalizada.
+    // Respaldo del panel del admin, por clave normalizada (proveedor+tipo).
     const respaldoPorClave = new Map<string, Partial<PorcentajesPedidoEspecial>>();
     for (const c of combinaciones) {
       const clave = `${normalizarClave(c.proveedor)}||${normalizarClave(c.tipoProducto)}`;
@@ -325,43 +383,71 @@ export async function mapaPorcentajesDeLaBase(): Promise<ParConPorcentajes[]> {
       });
     }
 
-    // Un registro por par REAL (texto original de la BASE, sin duplicados).
-    const pares = new Map<string, { fabricante: string; tipo: string }>();
+    // Combinaciones REALES de la BASE (texto original, sin duplicados).
+    type ClavePar = { fabricante: string; grupo: string; tipo: string };
+    const pares = new Map<string, ClavePar>();
     const proveedoresReales = new Set<string>();
+    const claveDe = (fab: string, grp: string, tip: string) =>
+      `${normalizarClave(fab)}||${normalizarClave(grp)}||${normalizarClave(tip)}`;
+    const agregar = (fab: string, grp: string, tip: string) => {
+      const f = String(fab || "").trim();
+      if (!f) return;
+      const g = String(grp || "").trim();
+      const t = String(tip || "").trim();
+      const clave = claveDe(f, g, t);
+      if (!pares.has(clave)) pares.set(clave, { fabricante: f, grupo: g, tipo: t });
+    };
+
     for (const f of filas) {
       const fab = String(f.fabricante || "").trim();
+      if (!fab) continue;
+      const grp = String(f.categoria || "").trim();
       const tip = String(f.tipo || "").trim();
-      if (!fab || !tip) continue;
       proveedoresReales.add(fab);
-      const clave = `${normalizarClave(fab)}||${normalizarClave(tip)}`;
-      if (!pares.has(clave)) pares.set(clave, { fabricante: fab, tipo: tip });
+      // Base del proveedor (fallback final cuando no hay grupo ni tipo).
+      agregar(fab, "", "");
+      if (grp) agregar(fab, grp, "");
+      if (tip) agregar(fab, "", tip);
+      if (grp && tip) agregar(fab, grp, tip);
     }
 
     // TIPOS CREADOS (v6): un registro por (proveedor real × tipo extra).
     // Solo si el tipo extra NO existe ya en la BASE (por las dudas).
     const tiposBaseNorm = new Set(
-      Array.from(pares.values()).map((p) => normalizarClave(p.tipo))
+      Array.from(pares.values())
+        .filter((p) => p.tipo)
+        .map((p) => normalizarClave(p.tipo))
     );
     for (const extra of tiposExtra) {
       if (tiposBaseNorm.has(normalizarClave(extra))) continue;
       for (const fab of Array.from(proveedoresReales).sort()) {
-        const clave = `${normalizarClave(fab)}||${normalizarClave(extra)}`;
-        if (!pares.has(clave)) pares.set(clave, { fabricante: fab, tipo: extra });
+        agregar(fab, "", extra);
+        agregar(fab, "", "");
       }
-      // Y también sin proveedor (clave fab ""), por si la pantalla algún
-      // día busca el tipo solo: cae al promedio general igual.
-      const claveSolo = `||${normalizarClave(extra)}`;
-      if (!pares.has(claveSolo)) pares.set(claveSolo, { fabricante: "", tipo: extra });
     }
 
     const salida: ParConPorcentajes[] = [];
-    for (const [clave, par] of pares) {
-      const resueltos = resolverGrupo(mapa, par.fabricante, par.tipo, respaldoPorClave.get(clave));
-      salida.push({ fabricante: par.fabricante, tipo: par.tipo, ...resueltos });
+    for (const [, par] of pares) {
+      const claveRespaldo = `${normalizarClave(par.fabricante)}||${normalizarClave(par.tipo)}`;
+      const resueltos = resolverGrupo(
+        mapa,
+        par.fabricante,
+        par.grupo,
+        par.tipo,
+        respaldoPorClave.get(claveRespaldo)
+      );
+      salida.push({
+        fabricante: par.fabricante,
+        grupo: par.grupo,
+        tipo: par.tipo,
+        ...resueltos,
+      });
     }
     salida.sort(
       (a, b) =>
-        a.fabricante.localeCompare(b.fabricante) || a.tipo.localeCompare(b.tipo)
+        a.fabricante.localeCompare(b.fabricante) ||
+        a.grupo.localeCompare(b.grupo) ||
+        a.tipo.localeCompare(b.tipo)
     );
     return salida;
   } catch (error) {

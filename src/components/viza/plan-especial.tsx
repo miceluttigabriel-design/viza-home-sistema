@@ -199,18 +199,22 @@ interface CombinacionApi {
 interface CatalogoApi {
   proveedores: string[];
   tiposPorProveedor: Record<string, string[]>;
+  // v8: GRUPO de la BASE (columna CATEGORIA) — selector principal.
+  gruposPorProveedor: Record<string, string[]>;
+  grupos: string[];
   tipos: string[];
   // Task 113 v6: tipos de producto CREADOS por los usuarios desde esta
   // pantalla (no están en la BASE todavía; salen marcados con (nuevo)).
   tiposExtra: string[];
-  // Task 113 v4: los % de cada par (fabricante, tipo), resueltos en el
-  // servidor desde la BASE (promedio de los productos del par + respaldo
+  // Task 113 v4: los % de cada par (fabricante, grupo, tipo), resueltos en
+  // el servidor desde la BASE (promedio de los productos del par + respaldo
   // del panel del admin). Números LEGIBLES (10 = 10%).
   porcentajes: PorcentajesApi[];
 }
 
 interface PorcentajesApi {
   fabricante: string;
+  grupo: string;
   tipo: string;
   pctContado: number;
   pct1A6: number;
@@ -223,6 +227,8 @@ interface PorcentajesApi {
 const CATALOGO_VACIO: CatalogoApi = {
   proveedores: [],
   tiposPorProveedor: {},
+  gruposPorProveedor: {},
+  grupos: [],
   tipos: [],
   tiposExtra: [],
   porcentajes: [],
@@ -350,8 +356,13 @@ export function PlanEspecial({
     modoCosto,
     costoStr,
     proveedor,
+    grupo,
     tipoProducto,
     descripcion,
+    clienteNombre,
+    clienteTelefono,
+    clienteDocumento,
+    clienteObservaciones,
     plan,
     cuotas,
     entregaStr,
@@ -363,8 +374,13 @@ export function PlanEspecial({
     setModoCosto,
     setCostoStr,
     setProveedor,
+    setGrupo,
     setTipoProducto,
     setDescripcion,
+    setClienteNombre,
+    setClienteTelefono,
+    setClienteDocumento,
+    setClienteObservaciones,
     setPlan,
     setCuotas,
     setEntregaStr,
@@ -406,6 +422,11 @@ export function PlanEspecial({
           dataCat.tiposPorProveedor && typeof dataCat.tiposPorProveedor === "object"
             ? dataCat.tiposPorProveedor
             : {},
+        gruposPorProveedor:
+          dataCat.gruposPorProveedor && typeof dataCat.gruposPorProveedor === "object"
+            ? dataCat.gruposPorProveedor
+            : {},
+        grupos: Array.isArray(dataCat.grupos) ? dataCat.grupos : [],
         tipos: Array.isArray(dataCat.tipos) ? dataCat.tipos : [],
         // Task 113 v6: tipos CREADOS por los usuarios (salen con (nuevo)).
         tiposExtra: Array.isArray(dataCat.tiposExtra) ? dataCat.tiposExtra : [],
@@ -446,6 +467,8 @@ export function PlanEspecial({
   const filtroInicializado = useRef(false);
   const [guardando, setGuardando] = useState(false);
   const [aprobandoId, setAprobandoId] = useState<string | null>(null);
+  // v8 (pedido del dueño): BORRAR TODO el historial (solo admin/supremo).
+  const [borrandoHistorial, setBorrandoHistorial] = useState(false);
   // Task 113 v6: estado de VERIFICAR y de GENERAR ORDEN DE COMPRA.
   const [verificandoId, setVerificandoId] = useState<string | null>(null);
   const [ordenId, setOrdenId] = useState<string | null>(null);
@@ -500,6 +523,34 @@ export function PlanEspecial({
     cargarHistorial(valor);
   };
 
+  // BORRAR TODO el historial (v8, pedido del dueño). Solo admin/supremo:
+  // el botón solo aparece para ellos y la API lo vuelve a exigir.
+  const borrarHistorial = async () => {
+    if (borrandoHistorial) return;
+    const ok = window.confirm(
+      "¿BORRAR TODO el historial de PEDIDO ESPECIAL?\n\nSe eliminarán TODOS los presupuestos y órdenes de compra guardados. Esta acción NO se puede deshacer."
+    );
+    if (!ok) return;
+    setBorrandoHistorial(true);
+    try {
+      const res = await fetch("/api/pedido-especial/presupuestos", {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+      setHistorial([]);
+      setUltimoGuardado(null);
+      toast.success(
+        `Historial borrado: ${Number(data?.borrados) || 0} registro(s)`
+      );
+      await cargarHistorial();
+    } catch (error) {
+      toast.error(`No se pudo borrar el historial: ${(error as Error).message}`);
+    } finally {
+      setBorrandoHistorial(false);
+    }
+  };
+
   // GUARDAR el presupuesto actual en el historial (queda GENERADO).
   // El servidor RECALCULA con los % de la BASE y da el número ESPECIAL-XX.
   const guardarPresupuesto = async () => {
@@ -511,8 +562,13 @@ export function PlanEspecial({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           proveedor,
+          grupo,
           tipoProducto,
           descripcion: descripcion.trim(),
+          clienteNombre: clienteNombre.trim(),
+          clienteTelefono: clienteTelefono.trim(),
+          clienteDocumento: clienteDocumento.trim(),
+          clienteObservaciones: clienteObservaciones.trim(),
           modoCosto,
           costo,
           plan,
@@ -723,13 +779,28 @@ export function PlanEspecial({
     }
   };
 
-  // === Listas de PROVEEDOR y TIPO — ESTIRADAS DE LA BASE ===
+  // === Listas de PROVEEDOR, GRUPO y TIPO — ESTIRADAS DE LA BASE ===
   // Si el catálogo de la BASE todavía no cargó (o falla), respaldo con las
   // combinaciones que ya tienen % (así la pantalla NUNCA queda inutilizable).
   const proveedores = useMemo(() => {
     if (catalogo.proveedores.length > 0) return catalogo.proveedores;
     return Array.from(new Set(combinaciones.map((c) => c.proveedor)));
   }, [catalogo, combinaciones]);
+
+  // GRUPO (columna CATEGORIA) del proveedor elegido — selector PRINCIPAL.
+  const gruposDelProveedor = useMemo(() => {
+    if (proveedor && catalogo.gruposPorProveedor[proveedor]?.length) {
+      return catalogo.gruposPorProveedor[proveedor];
+    }
+    if (catalogo.grupos.length > 0) return catalogo.grupos;
+    return Array.from(
+      new Set(
+        catalogo.porcentajes
+          .filter((p) => p.fabricante === proveedor && p.grupo)
+          .map((p) => p.grupo)
+      )
+    );
+  }, [catalogo, proveedor]);
 
   const tiposDelProveedor = useMemo(() => {
     if (proveedor && catalogo.tiposPorProveedor[proveedor]?.length) {
@@ -746,25 +817,45 @@ export function PlanEspecial({
     );
   }, [catalogo, proveedor, combinaciones]);
 
-  const combinacionElegida = useMemo(
-    () =>
-      combinaciones.find(
-        (c) => c.proveedor === proveedor && c.tipoProducto === tipoProducto
-      ) || null,
-    [combinaciones, proveedor, tipoProducto]
-  );
+  const combinacionElegida = useMemo(() => {
+    if (!proveedor) return null;
+    if (tipoProducto) {
+      return (
+        combinaciones.find(
+          (c) => c.proveedor === proveedor && c.tipoProducto === tipoProducto
+        ) || null
+      );
+    }
+    return combinaciones.find((c) => c.proveedor === proveedor) || null;
+  }, [combinaciones, proveedor, tipoProducto]);
 
   // ═══ LOS % DE LA BASE, SOLOS (Task 113 v4, pedido del dueño) ═══
   // "Vas a usar TODAS las lógicas de la BASE, lo único que cambia es que
   // el costo lo ponemos manualmente". Los % vienen del catálogo de la
-  // BASE: promedio REAL de los productos del proveedor + tipo elegidos
-  // (misma regla de márgenes automáticas de la casa, calculada en el
-  // servidor). Respaldo por campo: la config del panel del admin, solo
+  // BASE: promedio REAL de los productos del proveedor + GRUPO + tipo
+  // elegidos (misma regla de márgenes automáticas de la casa, calculada en
+  // el servidor). Respaldo por campo: la config del panel del admin, solo
   // si algún % no aparece en la BASE.
   const porcentajesElegidos = useMemo(() => {
-    const par = catalogo.porcentajes.find(
-      (p) => p.fabricante === proveedor && p.tipo === tipoProducto
-    );
+    // Preferencia: (FAB, GRUPO, TIPO) → (FAB, GRUPO) → (FAB, TIPO) → FAB.
+    const par =
+      catalogo.porcentajes.find(
+        (p) =>
+          p.fabricante === proveedor && p.grupo === grupo && p.tipo === tipoProducto
+      ) ||
+      (grupo
+        ? catalogo.porcentajes.find(
+            (p) => p.fabricante === proveedor && p.grupo === grupo && !p.tipo
+          )
+        : undefined) ||
+      (tipoProducto
+        ? catalogo.porcentajes.find(
+            (p) => p.fabricante === proveedor && !p.grupo && p.tipo === tipoProducto
+          )
+        : undefined) ||
+      catalogo.porcentajes.find(
+        (p) => p.fabricante === proveedor && !p.grupo && !p.tipo
+      );
     const cfg = combinacionElegida;
     const elegir = (deLaBase: number | undefined, delPanel: number | undefined) => {
       const base = Number(deLaBase) || 0;
@@ -779,7 +870,7 @@ export function PlanEspecial({
       pctTecnico: elegir(par?.pctTecnico, cfg?.pctTecnico),
       pctSafra: elegir(par?.pctSafra, cfg?.pctSafra),
     };
-  }, [catalogo, proveedor, tipoProducto, combinacionElegida]);
+  }, [catalogo, proveedor, grupo, tipoProducto, combinacionElegida]);
 
   // === Parámetros específicos del plan elegido ===
   const esMoto = useMemo(() => esTipoMoto(tipoProducto), [tipoProducto]);
@@ -871,8 +962,9 @@ export function PlanEspecial({
   const faltantes: string[] = [];
   if (!costo) faltantes.push("el costo");
   if (!proveedor) faltantes.push("el proveedor");
-  if (!tipoProducto) faltantes.push("el tipo de producto");
+  if (!grupo && !tipoProducto) faltantes.push("el GRUPO (o el tipo) de producto");
   if (!descripcion.trim()) faltantes.push("la descripción");
+  if (!clienteNombre.trim()) faltantes.push("el nombre del cliente");
   if (
     plan === "cuotas_con_entrega" &&
     entregaConEntrega > 0 &&
@@ -910,8 +1002,13 @@ export function PlanEspecial({
     if (
       !costoStr &&
       !proveedor &&
+      !grupo &&
       !tipoProducto &&
       !descripcion &&
+      !clienteNombre &&
+      !clienteTelefono &&
+      !clienteDocumento &&
+      !clienteObservaciones &&
       !fechaInicioPago &&
       !safraEntradaStr &&
       chequesFechas.length === 0 &&
@@ -999,6 +1096,17 @@ export function PlanEspecial({
             <RefreshCw className={`h-3 w-3 ${cargandoHistorial ? "animate-spin" : ""}`} />
             Actualizar
           </button>
+          {puedeAprobarTodo && historial.length > 0 && (
+            <button
+              onClick={borrarHistorial}
+              disabled={borrandoHistorial}
+              className="text-[11px] font-semibold text-red-600 hover:text-red-700 transition-colors flex items-center gap-1 disabled:opacity-50"
+              title="Borrar TODO el historial de pedidos especiales (irreversible)"
+            >
+              <Trash2 className={`h-3 w-3 ${borrandoHistorial ? "animate-pulse" : ""}`} />
+              {borrandoHistorial ? "BORRANDO…" : "BORRAR HISTORIAL"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1084,11 +1192,19 @@ export function PlanEspecial({
                       )}
                       <td className="px-3 py-2.5">
                         <div className="font-semibold text-stone-800">
-                          {p.proveedor} · {p.tipoProducto}
+                          {p.proveedor}
+                        </div>
+                        <div className="text-[11px] text-stone-500">
+                          {[p.grupo, p.tipoProducto].filter(Boolean).join(" · ")}
                         </div>
                         <div className="text-[11px] text-stone-500 max-w-[220px] truncate" title={p.descripcion}>
                           {p.descripcion}
                         </div>
+                        {p.clienteNombre && (
+                          <div className="text-[10px] text-stone-400 max-w-[220px] truncate" title={p.clienteNombre}>
+                            Cliente: {p.clienteNombre}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <span className="font-bold text-stone-700">{NOMBRE_PLAN[p.plan as PlanPedidoEspecial] || p.plan}</span>
@@ -1361,8 +1477,8 @@ export function PlanEspecial({
           )}
         </div>
 
-        {/* PROVEEDOR + TIPO DE PRODUCTO — ESTIRADOS DE LA BASE (v2) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        {/* PROVEEDOR + GRUPO + TIPO — ESTIRADOS DE LA BASE (v8) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           <div>
             <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
               Proveedor * <span className="normal-case text-stone-400">(de la BASE)</span>
@@ -1385,7 +1501,31 @@ export function PlanEspecial({
           </div>
           <div>
             <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
-              Tipo de producto * <span className="normal-case text-stone-400">(de la BASE)</span>
+              Grupo * <span className="normal-case text-stone-400">(de la BASE)</span>
+            </label>
+            <select
+              value={grupo}
+              onChange={(e) => setGrupo(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border border-stone-300 text-sm bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none disabled:bg-stone-100 disabled:text-stone-400"
+              disabled={gruposDelProveedor.length === 0}
+            >
+              <option value="">
+                {proveedor
+                  ? gruposDelProveedor.length === 0
+                    ? "Sin grupos para este proveedor"
+                    : "Elegir grupo…"
+                  : "Primero el proveedor"}
+              </option>
+              {gruposDelProveedor.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+              Tipo de producto <span className="normal-case text-stone-400">(opcional)</span>
             </label>
             <select
               value={tipoProducto}
@@ -1439,6 +1579,69 @@ export function PlanEspecial({
             placeholder="Ej: Moto Zanella 110 Z1 Base 2025 roja"
             className="w-full h-10 px-3 rounded-lg border border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
           />
+        </div>
+      </section>
+
+      {/* === A2. DATOS DEL CLIENTE (v8, pedido del dueño: "el cuadro para
+          completar del cliente es muy importante en el plan pedido
+          especial") — nombre obligatorio, igual que el cotizador. === */}
+      <section className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+        <h2
+          className="text-xs font-bold uppercase tracking-wide flex items-center gap-2 mb-3"
+          style={{ color: AZUL }}
+        >
+          <FileText className="h-4 w-4" />
+          DATOS DEL CLIENTE
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-1">
+            <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+              Nombre completo *
+            </label>
+            <input
+              type="text"
+              value={clienteNombre}
+              onChange={(e) => setClienteNombre(e.target.value)}
+              placeholder="Juan Pérez"
+              className="w-full h-10 px-3 rounded-lg border border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+              Teléfono / WhatsApp
+            </label>
+            <input
+              type="text"
+              value={clienteTelefono}
+              onChange={(e) => setClienteTelefono(e.target.value)}
+              placeholder="+595 981 000 000"
+              className="w-full h-10 px-3 rounded-lg border border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+              Documento / CI / RUC
+            </label>
+            <input
+              type="text"
+              value={clienteDocumento}
+              onChange={(e) => setClienteDocumento(e.target.value)}
+              placeholder="4.123.456"
+              className="w-full h-10 px-3 rounded-lg border border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+            />
+          </div>
+          <div className="sm:col-span-3">
+            <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
+              Observaciones
+            </label>
+            <textarea
+              value={clienteObservaciones}
+              onChange={(e) => setClienteObservaciones(e.target.value)}
+              placeholder="Referencias, dirección, condiciones especiales…"
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-stone-200 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none resize-y"
+            />
+          </div>
         </div>
       </section>
 
@@ -1814,7 +2017,16 @@ export function PlanEspecial({
               {plan === "mayorista"
                 ? fila("Costo (Gs)", formatPYG(resultadoOk.costoGs))
                 : fila("Costo base (Gs)", formatPYG(resultadoOk.costoProd))}
-              {fila("Proveedor · Tipo", `${proveedor} · ${tipoProducto}`)}
+              {fila("Proveedor", proveedor)}
+              {fila(
+                "Grupo · Tipo",
+                [grupo, tipoProducto].filter(Boolean).join(" · ") || "—"
+              )}
+              {fila(
+                "Cliente",
+                clienteNombre + (clienteTelefono ? ` · ${clienteTelefono}` : "")
+              )}
+              {clienteDocumento && fila("Documento", clienteDocumento)}
               {fila("Descripción", (
                 <span className="max-w-[60%] truncate inline-block align-bottom" title={descripcion}>
                   {descripcion}
@@ -1847,7 +2059,7 @@ export function PlanEspecial({
               )}
               <button
                 onClick={guardarPresupuesto}
-                disabled={!resultadoOk || guardando}
+                disabled={!resultadoOk || guardando || faltantes.length > 0}
                 className="h-10 px-5 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 style={{ backgroundColor: DORADO, color: AZUL_OSCURO, borderColor: DORADO }}
                 title="Guardar este presupuesto en el historial"

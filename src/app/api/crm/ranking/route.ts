@@ -11,6 +11,7 @@ import {
 } from "@/lib/sucursal-usuario";
 import { sucursalEncargadoDe } from "@/lib/encargados-sucursal-server";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
+import { listarPresupuestosCrm } from "@/lib/pedido-especial-presupuestos";
 
 // GET /api/crm/ranking — CRM: ranking de presupuestos emitidos por usuario.
 // DOS formas de entrar:
@@ -192,6 +193,14 @@ export async function GET() {
           a.name.localeCompare(b.name, "es")
       );
 
+    // ─── PEDIDOS ESPECIALES EN EL CRM (Task 113 v8, pedido del dueño) ───
+    // "en el CRM tiene que salir también los PEDIDOS ESPECIALES que se
+    // emitirán… de todos": admin/consulta ven TODOS; el encargado ve los
+    // de SU sucursal (mismo alcance del ranking). NUNCA lanza.
+    const pedidosEspeciales = await listarPresupuestosCrm({
+      sucursal: sucursalEncargado || null,
+    });
+
     // ─── Vista ENCARGADO: solo SU sucursal, sin datos de las demás ───
     // Mismo ranking ya calculado, recortado a su sucursal. El total que ve
     // también es solo de su sucursal (nunca el total de la empresa).
@@ -208,6 +217,7 @@ export async function GET() {
         sucursales: [], // sin filtros: solo ve su sucursal
         totalGeneral: totalSucursal,
         vistaSucursal: sucursalEncargado,
+        pedidosEspeciales,
       });
     }
 
@@ -217,6 +227,7 @@ export async function GET() {
       // usuarios). Las sucursales de STOCK siguen siendo solo las 4 de venta.
       sucursales: SUCURSALES_USUARIO,
       totalGeneral,
+      pedidosEspeciales,
     });
   } catch (error) {
     console.error("Error CRM ranking:", error);

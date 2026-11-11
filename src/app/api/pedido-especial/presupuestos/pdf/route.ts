@@ -46,8 +46,13 @@ interface FilaPdf {
   vendedorNombre: string;
   sucursal: string;
   proveedor: string;
+  grupo: string;
   tipoProducto: string;
   descripcion: string;
+  clienteNombre: string;
+  clienteTelefono: string;
+  clienteDocumento: string;
+  clienteObservaciones: string;
   plan: string;
   cuotas: number;
   valorContado: number;
@@ -106,8 +111,13 @@ export async function POST(req: Request) {
       vendedorNombre: fila.vendedorNombre,
       sucursal: fila.sucursal,
       proveedor: fila.proveedor,
-      tipoProducto: fila.tipoProducto,
+      grupo: fila.grupo || "",
+      tipoProducto: fila.tipoProducto || "",
       descripcion: fila.descripcion,
+      clienteNombre: fila.clienteNombre || "",
+      clienteTelefono: fila.clienteTelefono || "",
+      clienteDocumento: fila.clienteDocumento || "",
+      clienteObservaciones: fila.clienteObservaciones || "",
       plan: fila.plan,
       cuotas: fila.cuotas,
       valorContado: fila.valorContado,

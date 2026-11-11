@@ -43,6 +43,7 @@ import {
   aprobarPresupuesto,
   verificarPresupuesto,
   validarDatosPresupuesto,
+  borrarTodosPresupuestos,
 } from "@/lib/pedido-especial-presupuestos";
 
 export async function GET(req: Request) {
@@ -160,5 +161,34 @@ export async function PUT(req: Request) {
   } catch (error) {
     console.error("PUT /api/pedido-especial/presupuestos:", error);
     return NextResponse.json({ error: "No se pudo actualizar el presupuesto." }, { status: 500 });
+  }
+}
+
+// ─── BORRAR TODO EL HISTORIAL (Task 113 v8, pedido del dueño) ───
+// "borra todo el historial de PEDIDO ESPECIAL": SOLO admin / supremo_admin.
+// Es irreversible: la pantalla pide confirmación antes de llamar. Si la
+// tabla no existe devuelve 0 y el sistema sigue igual.
+export async function DELETE() {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+    const role = (session.user as any)?.role;
+    const esAdmin = role === "admin" || role === "supremo_admin";
+    if (!esAdmin) {
+      return NextResponse.json(
+        { error: "Solo un administrador puede borrar el historial." },
+        { status: 403 }
+      );
+    }
+    const borrados = await borrarTodosPresupuestos();
+    return NextResponse.json({ ok: true, borrados });
+  } catch (error) {
+    console.error("DELETE /api/pedido-especial/presupuestos:", error);
+    return NextResponse.json(
+      { error: "No se pudo borrar el historial." },
+      { status: 500 }
+    );
   }
 }

@@ -41,37 +41,37 @@ console.log("\n[1] Cascada par → proveedor → tipo → general");
 //   SHOW||MOTOS : 1 producto con contado 0.50 (otro proveedor, mismo tipo)
 //   resto global: KENTON||HERRAMIENTAS 1 producto con contado 0.05
 const filas: FilaPorcentajeProducto[] = [
-  { fabricante: "GAFRA", tipo: "MOTOS", marginContado: 0.1, pct1A6: 0.02, pct7A13: 0.03, pct14A30: 0.04, margenTecnico: 0.08, safra: "7" },
-  { fabricante: "GAFRA", tipo: "MOTOS", marginContado: 0.2, pct1A6: 0.02, pct7A13: 0.03, pct14A30: 0.04, margenTecnico: 0.1, safra: "5" },
-  { fabricante: "GAFRA", tipo: "ELECTRO", marginContado: 0.3, pct1A6: 0.01, pct7A13: 0.02, pct14A30: 0.03, margenTecnico: 0.12, safra: null },
-  { fabricante: "SHOW", tipo: "MOTOS", marginContado: 0.5, pct1A6: 0.05, pct7A13: 0.06, pct14A30: 0.07, margenTecnico: 0.2, safra: "9" },
-  { fabricante: "KENTON", tipo: "HERRAMIENTAS", marginContado: 0.05, pct1A6: 0.01, pct7A13: 0.01, pct14A30: 0.01, margenTecnico: 0.06, safra: null },
+  { fabricante: "GAFRA", categoria: null, tipo: "MOTOS", marginContado: 0.1, pct1A6: 0.02, pct7A13: 0.03, pct14A30: 0.04, margenTecnico: 0.08, safra: "7" },
+  { fabricante: "GAFRA", categoria: null, tipo: "MOTOS", marginContado: 0.2, pct1A6: 0.02, pct7A13: 0.03, pct14A30: 0.04, margenTecnico: 0.1, safra: "5" },
+  { fabricante: "GAFRA", categoria: null, tipo: "ELECTRO", marginContado: 0.3, pct1A6: 0.01, pct7A13: 0.02, pct14A30: 0.03, margenTecnico: 0.12, safra: null },
+  { fabricante: "SHOW", categoria: null, tipo: "MOTOS", marginContado: 0.5, pct1A6: 0.05, pct7A13: 0.06, pct14A30: 0.07, margenTecnico: 0.2, safra: "9" },
+  { fabricante: "KENTON", categoria: null, tipo: "HERRAMIENTAS", marginContado: 0.05, pct1A6: 0.01, pct7A13: 0.01, pct14A30: 0.01, margenTecnico: 0.06, safra: null },
 ];
 const mapa = calcularPromediosPorcentajes(filas);
 
 // A) Par con datos: GAFRA+MOTOS = (0.10+0.20)/2 = 0.15 → 15 %
-const parGafraMotos = resolverGrupo(mapa, "GAFRA", "MOTOS");
+const parGafraMotos = resolverGrupo(mapa, "GAFRA", "", "MOTOS");
 check("par GAFRA+MOTOS usa el promedio del par (15 %)", Math.abs(parGafraMotos.pctContado - 15) < 0.001, `=${parGafraMotos.pctContado}`);
 
 // B) Par SIN datos (GAFRA+HERRAMIENTAS no existe): ANTES caía al tipo
 //    HERRAMIENTAS (5 %, de KENTON — de OTRO proveedor); AHORA gana el
 //    PROVEEDOR GAFRA ((0.10+0.20+0.30)/3 = 0.20 → 20 %).
-const gafraHerr = resolverGrupo(mapa, "GAFRA", "HERRAMIENTAS");
+const gafraHerr = resolverGrupo(mapa, "GAFRA", "", "HERRAMIENTAS");
 check("par vacío → PROVEEDOR GAFRA (20 %, no el 5 % del tipo de otro)", Math.abs(gafraHerr.pctContado - 20) < 0.001, `=${gafraHerr.pctContado}`);
 
 // C) Proveedor CON datos de otro tipo (SHOW solo tiene MOTOS): la
 //    peldaña PROVEEDOR gana → 50 % (no el 30 % del tipo ELECTRO de GAFRA).
-const showElectro = resolverGrupo(mapa, "SHOW", "ELECTRO");
+const showElectro = resolverGrupo(mapa, "SHOW", "", "ELECTRO");
 check("proveedor con datos de otro tipo → PROVEEDOR SHOW (50 %)", Math.abs(showElectro.pctContado - 50) < 0.001, `=${showElectro.pctContado}`);
 
 // D) Tipo sin datos (KENTON+ELECTRO? ELECTRO existe — usar HERRAMIENTAS
 //    con proveedor desconocido "NUEVO"): proveedor vacío → tipo
 //    HERRAMIENTAS = 5 %.
-const nuevoHerr = resolverGrupo(mapa, "NUEVO", "HERRAMIENTAS");
+const nuevoHerr = resolverGrupo(mapa, "NUEVO", "", "HERRAMIENTAS");
 check("proveedor nuevo → tipo HERRAMIENTAS (5 %)", Math.abs(nuevoHerr.pctContado - 5) < 0.001, `=${nuevoHerr.pctContado}`);
 
 // E) Nada en ningún lado → global ((0.10+0.20+0.30+0.50+0.05)/5 = 0.23)
-const fantasma = resolverGrupo(mapa, "XX", "YY");
+const fantasma = resolverGrupo(mapa, "XX", "", "YY");
 check("todo vacío → promedio GENERAL (23 %)", Math.abs(fantasma.pctContado - 23) < 0.001, `=${fantasma.pctContado}`);
 
 // F) SAFRA también respeta la peldaña proveedor: GAFRA+HERRAMIENTAS →
@@ -81,10 +81,10 @@ check("SAFRA por proveedor (GAFRA 6 %)", Math.abs(gafraHerr.pctSafra - 6) < 0.00
 // ─── 2) TIPO EXTRA ───
 console.log("\n[2] Tipo creado (sin productos)");
 // De un proveedor CON datos: gana el PROVEEDOR (GAFRA = 20 %).
-const extraGafra = resolverGrupo(mapa, "GAFRA", "TIPO-NUEVO-CREADO");
+const extraGafra = resolverGrupo(mapa, "GAFRA", "", "TIPO-NUEVO-CREADO");
 check("tipo extra de GAFRA → proveedor GAFRA (20 %)", Math.abs(extraGafra.pctContado - 20) < 0.001, `=${extraGafra.pctContado}`);
 // De un proveedor DESCONOCIDO: cae al promedio GENERAL (23 %).
-const extraFantasma = resolverGrupo(mapa, "FANTASMA", "TIPO-NUEVO-CREADO");
+const extraFantasma = resolverGrupo(mapa, "FANTASMA", "", "TIPO-NUEVO-CREADO");
 check("tipo extra de proveedor desconocido → general (23 %)", Math.abs(extraFantasma.pctContado - 23) < 0.001, `=${extraFantasma.pctContado}`);
 
 // ─── 3) CÁLCULO SIN CAMBIOS (regresión de las rondas 2-4) ───

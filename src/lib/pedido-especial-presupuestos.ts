@@ -89,8 +89,13 @@ export async function ensureTablaPedidoEspecialPresupuestos(): Promise<boolean> 
          "vendedorNombre" TEXT NOT NULL DEFAULT '',
          "sucursal" TEXT NOT NULL DEFAULT '',
          "proveedor" TEXT NOT NULL,
-         "tipoProducto" TEXT NOT NULL,
+         "grupo" TEXT NOT NULL DEFAULT '',
+         "tipoProducto" TEXT NOT NULL DEFAULT '',
          "descripcion" TEXT NOT NULL DEFAULT '',
+         "clienteNombre" TEXT NOT NULL DEFAULT '',
+         "clienteTelefono" TEXT NOT NULL DEFAULT '',
+         "clienteDocumento" TEXT NOT NULL DEFAULT '',
+         "clienteObservaciones" TEXT NOT NULL DEFAULT '',
          "modoCosto" TEXT NOT NULL DEFAULT 'gs',
          "costoOriginal" DOUBLE PRECISION NOT NULL DEFAULT 0,
          "costoGs" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -129,6 +134,28 @@ export async function ensureTablaPedidoEspecialPresupuestos(): Promise<boolean> 
       `CREATE INDEX IF NOT EXISTS "PedidoEspecialPresupuesto_sucursal_idx"
        ON "PedidoEspecialPresupuesto"("sucursal")`
     );
+    // Task 113 v8 (GRUPO + CLIENTE, pedido del dueño): la tabla ya existente
+    // recibe las columnas nuevas SOLAS, idempotentes y sin tocar datos.
+    try {
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "grupo" TEXT NOT NULL DEFAULT ''`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "clienteNombre" TEXT NOT NULL DEFAULT ''`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "clienteTelefono" TEXT NOT NULL DEFAULT ''`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "clienteDocumento" TEXT NOT NULL DEFAULT ''`
+      );
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "PedidoEspecialPresupuesto" ADD COLUMN IF NOT EXISTS "clienteObservaciones" TEXT NOT NULL DEFAULT ''`
+      );
+    } catch {
+      // Mismo escudo de siempre: sin estas columnas las lecturas devuelven
+      // lista vacía (P2022) y el resto del sistema sigue funcionando.
+    }
     // Task 113 v5 (ID CTR): si la tabla YA existía (deploys anteriores),
     // la columna nueva se agrega SOLA. ADD COLUMN IF NOT EXISTS es
     // idempotente e inofensivo — jamás toca datos existentes.
@@ -203,8 +230,17 @@ export interface PresupuestoPedidoEspecial {
   vendedorNombre: string;
   sucursal: string;
   proveedor: string;
+  // GRUPO de la BASE (columna CATEGORIA) — selector principal del PEDIDO
+  // ESPECIAL desde la v8 (pedido del dueño). `tipoProducto` queda OPCIONAL.
+  grupo: string;
   tipoProducto: string;
   descripcion: string;
+  // DATOS DEL CLIENTE (pedido del dueño: "el cuadro para completar del
+  // cliente es muy importante en el plan pedido especial").
+  clienteNombre: string;
+  clienteTelefono: string;
+  clienteDocumento: string;
+  clienteObservaciones: string;
   modoCosto: string;
   costoOriginal: number;
   costoGs: number;
@@ -249,8 +285,13 @@ function aFila(f: {
   vendedorNombre: string;
   sucursal: string;
   proveedor: string;
+  grupo: string;
   tipoProducto: string;
   descripcion: string;
+  clienteNombre: string;
+  clienteTelefono: string;
+  clienteDocumento: string;
+  clienteObservaciones: string;
   modoCosto: string;
   costoOriginal: number;
   costoGs: number;
@@ -293,8 +334,13 @@ function aFila(f: {
     vendedorNombre: f.vendedorNombre,
     sucursal: f.sucursal,
     proveedor: f.proveedor,
-    tipoProducto: f.tipoProducto,
+    grupo: f.grupo ?? "",
+    tipoProducto: f.tipoProducto ?? "",
     descripcion: f.descripcion,
+    clienteNombre: f.clienteNombre ?? "",
+    clienteTelefono: f.clienteTelefono ?? "",
+    clienteDocumento: f.clienteDocumento ?? "",
+    clienteObservaciones: f.clienteObservaciones ?? "",
     modoCosto: f.modoCosto,
     costoOriginal: f.costoOriginal,
     costoGs: f.costoGs,
@@ -372,8 +418,16 @@ export async function listarPresupuestos(opts: {
 // ─── Datos de entrada para CREAR un presupuesto (lo manda la pantalla) ───
 export interface DatosPresupuestoEntrada {
   proveedor: string;
+  // GRUPO de la BASE (columna CATEGORIA): selector principal desde la v8.
+  grupo: string;
+  // TIPO de producto: OPCIONAL (el dueño pidió GRUPO como principal).
   tipoProducto: string;
   descripcion: string;
+  // DATOS DEL CLIENTE (obligatorio el nombre, como en el cotizador).
+  clienteNombre: string;
+  clienteTelefono: string;
+  clienteDocumento: string;
+  clienteObservaciones: string;
   modoCosto: "usd" | "gs";
   costo: number;
   plan: PlanPedidoEspecial;
@@ -390,9 +444,19 @@ export interface DatosPresupuestoEntrada {
 // Valida el payload de POST. Devuelve los datos limpios o null.
 export function validarDatosPresupuesto(body: any): DatosPresupuestoEntrada | null {
   const proveedor = String(body?.proveedor ?? "").trim().slice(0, 80);
+  const grupo = String(body?.grupo ?? "").trim().slice(0, 120);
   const tipoProducto = String(body?.tipoProducto ?? "").trim().slice(0, 80);
   const descripcion = String(body?.descripcion ?? "").trim().slice(0, DESCRIPCION_MAX);
-  if (!proveedor || !tipoProducto || !descripcion) return null;
+  const clienteNombre = String(body?.clienteNombre ?? "").trim().slice(0, 120);
+  const clienteTelefono = String(body?.clienteTelefono ?? "").trim().slice(0, 60);
+  const clienteDocumento = String(body?.clienteDocumento ?? "").trim().slice(0, 60);
+  const clienteObservaciones = String(body?.clienteObservaciones ?? "")
+    .trim()
+    .slice(0, 500);
+  // GRUPO es el selector principal y el TIPO quedó OPCIONAL: se exige al
+  // menos uno de los dos (más proveedor, descripción y nombre del cliente).
+  if (!proveedor || !descripcion || !clienteNombre) return null;
+  if (!grupo && !tipoProducto) return null;
 
   const modoCosto = body?.modoCosto === "usd" ? "usd" : "gs";
   const costo = Number(body?.costo);
@@ -423,8 +487,13 @@ export function validarDatosPresupuesto(body: any): DatosPresupuestoEntrada | nu
 
   return {
     proveedor,
+    grupo,
     tipoProducto,
     descripcion,
+    clienteNombre,
+    clienteTelefono,
+    clienteDocumento,
+    clienteObservaciones,
     modoCosto,
     costo,
     plan,
@@ -472,7 +541,11 @@ export async function crearPresupuesto(
       pctSafra: number;
     };
     try {
-      porc = await porcentajesDeLaBase(datos.proveedor, datos.tipoProducto);
+      porc = await porcentajesDeLaBase(
+        datos.proveedor,
+        datos.grupo ?? "",
+        datos.tipoProducto
+      );
     } catch {
       const combinaciones = await listarCombinaciones();
       const comb = combinaciones.find(
@@ -579,8 +652,13 @@ export async function crearPresupuesto(
           vendedorNombre: String(usuario.nombre || "").slice(0, 120),
           sucursal,
           proveedor: datos.proveedor,
+          grupo: datos.grupo,
           tipoProducto: datos.tipoProducto,
           descripcion: datos.descripcion,
+          clienteNombre: datos.clienteNombre,
+          clienteTelefono: datos.clienteTelefono,
+          clienteDocumento: datos.clienteDocumento,
+          clienteObservaciones: datos.clienteObservaciones,
           modoCosto: datos.modoCosto,
           costoOriginal: datos.costo,
           costoGs: resultado.costoGs,
@@ -847,5 +925,62 @@ export async function generarOrdenPresupuesto(
   } catch (error) {
     console.error("generarOrdenPresupuesto (reintento):", error);
     return { ok: false, error: "No se pudo generar la orden de compra.", status: 500 };
+  }
+}
+
+// ─── CRM: TODOS los pedidos especiales (Task 113 v8) ───
+// El dueño pidió: "en el CRM tiene que salir también los PEDIDOS ESPECIALES
+// que se emitirán… de todos". Devuelve TODOS (o los de una sucursal, para
+// el encargado), con su situación. NUNCA lanza: si la tabla no existe
+// devuelve lista vacía.
+export async function listarPresupuestosCrm(opts: {
+  sucursal?: string | null;
+}): Promise<PresupuestoPedidoEspecial[]> {
+  const filtro = String(opts.sucursal || "").trim();
+  const intentar = async (): Promise<PresupuestoPedidoEspecial[]> => {
+    const filas = await db.pedidoEspecialPresupuesto.findMany({
+      where: filtro ? { sucursal: filtro } : {},
+      orderBy: { createdAt: "desc" },
+      take: HISTORIAL_LIMITE,
+    });
+    return filas.map(aFila);
+  };
+  try {
+    return await intentar();
+  } catch (error) {
+    if (!esErrorTablaFaltante(error)) return [];
+    if (!(await ensureTablaPedidoEspecialPresupuestos())) return [];
+  }
+  try {
+    return await intentar();
+  } catch {
+    return [];
+  }
+}
+
+// ─── BORRAR TODO EL HISTORIAL (Task 113 v8, pedido del dueño) ───
+// "borra todo el historial de PEDIDO ESPECIAL": elimina TODOS los
+// presupuestos/órdenes guardados. La ruta que la llama exige admin o
+// supremo_admin (el permiso se valida ANTES, acá no se confía en el cliente).
+// NUNCA lanza: devuelve cuántos borró (0 si no se pudo).
+export async function borrarTodosPresupuestos(): Promise<number> {
+  const intentar = async (): Promise<number> => {
+    const r = await db.pedidoEspecialPresupuesto.deleteMany({});
+    return r.count;
+  };
+  try {
+    return await intentar();
+  } catch (error) {
+    if (!esErrorTablaFaltante(error)) {
+      console.error("borrarTodosPresupuestos:", error);
+      return 0;
+    }
+    if (!(await ensureTablaPedidoEspecialPresupuestos())) return 0;
+  }
+  try {
+    return await intentar();
+  } catch (error) {
+    console.error("borrarTodosPresupuestos (reintento):", error);
+    return 0;
   }
 }
