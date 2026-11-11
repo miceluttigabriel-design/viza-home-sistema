@@ -35,7 +35,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+import { sucursalEncargadoDe } from "@/lib/encargados-sucursal-server";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import {
   listarPresupuestos,
@@ -58,7 +58,7 @@ export async function GET(req: Request) {
     // TODAS las sucursales; el FILTRO de sucursal es para facilitarle.
     const sucursalEncargado = esAdmin
       ? null
-      : (ENCARGADOS_SUCURSAL[email] ?? null);
+      : await sucursalEncargadoDe(email, role);
     const esEncargado = !!sucursalEncargado && !esAdmin;
 
     // Filtro ?sucursal=XXX (vacío/ausente = TODAS para quien puede ver
@@ -132,7 +132,7 @@ export async function PUT(req: Request) {
     const esAdmin = role === "admin" || role === "supremo_admin";
     const email = (session.user?.email || "").trim().toLowerCase();
     const nombre = String((session.user as any)?.name || session.user?.name || "");
-    const sucursalEncargado = esAdmin ? null : (ENCARGADOS_SUCURSAL[email] ?? null);
+    const sucursalEncargado = esAdmin ? null : await sucursalEncargadoDe(email, role);
     const body = await req.json().catch(() => null);
     const id = String((body as any)?.id || "");
     const accion = String((body as any)?.accion || "aprobar").trim().toLowerCase();

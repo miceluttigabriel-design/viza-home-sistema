@@ -57,7 +57,10 @@ export async function GET(req: NextRequest) {
     const veBaseCompleta =
       rolSesion === "admin" ||
       rolSesion === "supremo_admin" ||
-      esEmailSoloLectura(emailSesion);
+      // Task 165: el VIP (rol promovido desde el GDA) ve la BASE completa
+      // en modo SOLO LECTURA, igual que los usuarios de consulta.
+      rolSesion === "vip" ||
+      esEmailSoloLectura(emailSesion, rolSesion);
 
     const where: Record<string, unknown> = {};
     if (category && category !== "Todas") {

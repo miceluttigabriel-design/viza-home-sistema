@@ -27,7 +27,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Database, Boxes, Calculator, Network, ShoppingCart, MapPin, ArrowRight } from "lucide-react";
-import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
+import { esUsuarioVip } from "@/lib/encargados-sucursal";
 
 // Sucursales oficiales de VIZA (misma lista que SUCURSALES_VIZA en
 // src/lib/sucursal-usuario.ts, en el orden del dueño). Se repite acá SOLO
@@ -416,7 +416,8 @@ function Conector({ color = DORADO }: { color?: string }) {
 export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion }: OrquestadorProps) {
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
   const esSupremo = user.role === "supremo_admin";
-  const esVip = !!USUARIOS_VIP[user.email.trim().toLowerCase()];
+  // Task 165: VIP por ROL promovido desde el GDA o por la lista histórica.
+  const esVip = esUsuarioVip(user.email, user.role);
   const etiquetaUsuario = esSupremo
     ? "SUPREMO · ACCESO TOTAL"
     : esVip

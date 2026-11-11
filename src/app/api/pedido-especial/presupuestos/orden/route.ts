@@ -23,7 +23,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+import { sucursalEncargadoDe } from "@/lib/encargados-sucursal-server";
 import { generarOrdenPresupuesto } from "@/lib/pedido-especial-presupuestos";
 import { buildOrdenCompraPdf } from "@/lib/pdf/orden-compra-pdf";
 
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const role = (session.user as any)?.role;
     const esAdmin = role === "admin" || role === "supremo_admin";
     const email = (session.user?.email || "").trim().toLowerCase();
-    const sucursalEncargado = esAdmin ? null : (ENCARGADOS_SUCURSAL[email] ?? null);
+    const sucursalEncargado = esAdmin ? null : await sucursalEncargadoDe(email, role);
 
     const body = await req.json().catch(() => null);
     const id = String((body as any)?.id || "").trim();

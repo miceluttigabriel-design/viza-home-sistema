@@ -33,7 +33,18 @@ export const EMAILS_SOLO_LECTURA_BASE: string[] = [
 
 // Devuelve true si el email recibido es un usuario de consulta (solo lectura).
 // Tolera null/undefined, espacios y mayúsculas/minúsculas.
-export function esEmailSoloLectura(email: string | null | undefined): boolean {
+//
+// Task 165 (pedido del dueño): ahora el TIPO "VIP" también es SOLO LECTURA.
+// El tipo se guarda en User.role = "vip" cuando el dueño lo promueve desde el
+// GDA, así que se recibe el ROL de la sesión como segundo parámetro (opcional
+// para no romper los llamados viejos). Un VIP ve la Base completa y el
+// Orquestador, pero no puede editar NADA: ni celdas, ni etiquetas, ni hashtag,
+// ni importar, ni borrar.
+export function esEmailSoloLectura(
+  email: string | null | undefined,
+  role?: string | null
+): boolean {
+  if (role === "vip") return true;
   const e = (email || "").trim().toLowerCase();
   if (!e) return false;
   return EMAILS_SOLO_LECTURA_BASE.includes(e);

@@ -49,3 +49,18 @@ export const USUARIOS_VIP: Record<string, string> = {
   "julianamoleiro@viza.com.py": "CENTRAL",
   "juliozago@viza.com.py": "CENTRAL",
 };
+
+// ─── ¿Es VIP? (Task 165) ───────────────────────────────────────────────────
+// El dueño puede PROMOVER a VIP desde el GDA: eso guarda User.role = "vip" en
+// la base. Esta función combina las DOS fuentes para que el componente sepa
+// si el usuario es VIP sin consultar nada más:
+//   1) el rol guardado (promoción hecha desde el GDA), y
+//   2) la lista fija de arriba (VIPs históricos, que siguen como siempre).
+// Es client-safe: solo lee constantes, no toca Prisma ni la base.
+export function esUsuarioVip(
+  email: string | null | undefined,
+  role?: string | null
+): boolean {
+  if (role === "vip") return true;
+  return !!USUARIOS_VIP[(email || "").trim().toLowerCase()];
+}

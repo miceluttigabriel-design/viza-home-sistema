@@ -34,7 +34,9 @@ import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
 // Task 139 (pedido del dueño): usuarios VIP de la central (filipe.campos@,
 // viza.compras@) — solo la etiqueta visible; misma lib client-safe.
-import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
+// Task 165: además de la lista fija, el TIPO VIP ahora se puede PROMOVER
+// desde el GDA (User.role = "vip").
+import { esUsuarioVip } from "@/lib/encargados-sucursal";
 // Task 101 (pedido del dueño): número de CONTACTO de cada usuario, sacado de
 // la planilla oficial FUN.VIZA (columna CONTACTO, coincidencia por EMAIL).
 // Task 141: ese número ahora llega en `contacto` desde /api/admin/usuarios
@@ -101,6 +103,18 @@ function roleBadge(role: string, email?: string): { label: string; cls: string }
   if (role === "supremo_admin") {
     return { label: "SUPREMO ADMIN", cls: "bg-gradient-to-r from-amber-500 to-yellow-600 text-white border-amber-600" };
   }
+  // Task 165: el TIPO guardado en la base MANDA (promoción hecha desde el GDA
+  // con el botón GUARDAR). Así, promover a VIP/ESPECIAL desde acá se ve al
+  // instante en toda la columna Tipo.
+  if (role === "vip") {
+    return {
+      label: "VIP",
+      cls: "bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 text-amber-950 border-amber-700 shadow-[0_0_8px_rgba(217,184,107,0.65)]",
+    };
+  }
+  if (role === "especial") {
+    return { label: "ESPECIAL", cls: "bg-emerald-100 text-emerald-800 border-emerald-400" };
+  }
   // ESPECIAL (Task 139, pedido del dueño): los ENCARGADOS de sucursal que ven
   // el CRM de su sucursal (antes se mostraban como VIP — Task 76). Etiqueta
   // visible únicamente: el rol en la base sigue siendo colaborador y su
@@ -151,18 +165,35 @@ function esEspecial(email: string): boolean {
 // a poner como VIP"): lista USUARIOS_VIP de la central. Etiqueta visible
 // únicamente — no da acceso al CRM ni cambia permisos.
 function esVip(email: string): boolean {
-  return !!USUARIOS_VIP[(email || "").trim().toLowerCase()];
+  return esUsuarioVip(email);
 }
 
 function tipoUsuario(role: string, email?: string): string {
   if (role === "supremo_admin") return "SUPREMO";
-  // Task 141: ESPECIAL/VIP mandan sobre el rol ADMIN de la base. Es solo la
-  // etiqueta visible del GDA; los permisos reales NO cambian.
+  // Task 165: el TIPO PROMOVIDO desde el GDA (guardado en User.role) manda.
+  if (role === "vip") return "VIP";
+  if (role === "especial") return "ESPECIAL";
+  // Task 141: ESPECIAL/VIP históricos (listas fijas) mandan sobre el rol
+  // ADMIN de la base. Es solo la etiqueta visible del GDA.
   if (email && esEspecial(email)) return "ESPECIAL";
   if (email && esVip(email)) return "VIP";
   if (role === "admin") return "ADMIN";
   return "COMÚN";
 }
+
+// Etiqueta del TIPO que se ve en la tabla (Task 165: única fuente para el
+// select, los filtros, los contadores y el listado descargable).
+function tipoEfectivo(u: { role: string; email: string }): string {
+  return tipoUsuario(u.role, u.email);
+}
+
+// Tipo visible → rol real guardado en la base.
+const ROL_POR_TIPO: Record<string, string> = {
+  "COMÚN": "colaborador",
+  ADMIN: "admin",
+  ESPECIAL: "especial",
+  VIP: "vip",
+};
 
 // ─── SUCURSALES para dividir la tabla de usuarios (pedido del dueño) ───
 // Task 137: CENTRAL vuelve a ser una sucursal propia para USUARIOS (la
@@ -344,6 +375,10 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
   const [eliminando, setEliminando] = useState<string | null>(null);
   // Task 82: guarda el id del usuario cuyo TIPO se está cambiando (spinner).
   const [cambiandoRol, setCambiandoRol] = useState<string | null>(null);
+  // Task 165 (pedido del dueño): el TIPO se elige en el select y se CONFIRMA
+  // con el botón GUARDAR (no se guarda al tocar el select). Acá queda el
+  // borrador por usuario, sin tocar la base hasta que el dueño confirme.
+  const [tipoDraft, setTipoDraft] = useState<Record<string, string>>({});
   // Estado para polling en tiempo real
   const [destacadosIds, setDestacadosIds] = useState<Set<string>>(new Set());
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null);
@@ -668,17 +703,31 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
   };
 
   // Task 82 (pedido del dueño): cambiar el TIPO DE USUARIO de un usuario
-  // existente (COMÚN ↔ ADMIN) desde la propia tabla. Antes solo se podía
-  // elegir el tipo al CREAR el usuario. Solo SUPREMO (esta pantalla ya es
-  // solo suya). Caso de uso: filipe.campos@viza.com.py pasa de COMÚN a
-  // ADMIN — sigue sin poder editar la base (modo lectura por email) pero
-  // su etiqueta es ADM como pidió el dueño.
-  const cambiarRol = async (u: Usuario, nuevoRol: string) => {
-    const rolAnterior = u.role;
-    if (nuevoRol === rolAnterior) return;
-    const etiqueta = (r: string) => (r === "admin" ? "ADMIN" : "COMÚN");
-    if (!window.confirm(`¿Confirmás cambiar el TIPO de ${u.email} de ${etiqueta(rolAnterior)} a ${etiqueta(nuevoRol)}?`)) {
-      await cargar(true); // re-render: el select vuelve a su valor real
+  // existente desde la propia tabla.
+  // Task 165 (pedido del dueño): ahora se puede PROMOVER a CUALQUIERA de los
+  // tipos del sistema (COMÚN / ADMIN / ESPECIAL / VIP) y el cambio se
+  // confirma con el botón GUARDAR. Solo SUPREMO (esta pantalla ya es suya).
+  //   • VIP    → User.role = "vip": ve el Orquestador y la BASE completa,
+  //     pero SOLO LECTURA (no edita nada). Mismos permisos que los VIP de
+  //     siempre (lista USUARIOS_VIP).
+  //   • ESPECIAL → User.role = "especial": encargado que ve el CRM de SU
+  //     sucursal (la asignada en el GDA), en solo lectura.
+  //   • ADMIN  → User.role = "admin": Base + Ventas + Orquestador.
+  //   • COMÚN  → User.role = "colaborador": solo Ventas.
+  // OJO: la sesión es JWT — el usuario ve su nuevo tipo al volver a entrar
+  // (cerrar sesión y loguearse de nuevo). La etiqueta del GDA cambia al
+  // instante porque lee la base.
+  const guardarTipo = async (u: Usuario) => {
+    const tipoActual = tipoEfectivo(u);
+    const tipoNuevo = tipoDraft[u.id] || tipoActual;
+    if (tipoNuevo === tipoActual) return;
+    const nuevoRol = ROL_POR_TIPO[tipoNuevo];
+    if (!nuevoRol) return;
+    if (
+      !window.confirm(
+        `¿Confirmás cambiar el TIPO de ${u.email} de ${tipoActual} a ${tipoNuevo}?`
+      )
+    ) {
       return;
     }
     setCambiandoRol(u.id);
@@ -692,9 +741,17 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Error al cambiar tipo");
       }
-      toast.success(`Tipo de usuario actualizado (${etiqueta(nuevoRol)}): ${u.email}`, {
-        description: "La etiqueta cambia al instante; el usuario ve su nuevo tipo al volver a iniciar sesión",
-        duration: 7000,
+      setTipoDraft((prev) => {
+        const copia = { ...prev };
+        delete copia[u.id];
+        return copia;
+      });
+      toast.success(`Tipo de usuario actualizado (${tipoNuevo}): ${u.email}`, {
+        description:
+          tipoNuevo === "VIP"
+            ? "VIP: puede VER el Orquestador y la Base, pero NO editar nada. Entra en vigencia cuando vuelva a iniciar sesión."
+            : "Entra en vigencia cuando el usuario vuelva a iniciar sesión.",
+        duration: 8000,
       });
       await cargar(true);
     } catch (e: any) {
@@ -820,22 +877,13 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
     }
 
     // ── Totales: por tipo y por sucursal ──
-    const esComun = (r: string) => r === "colaborador" || r === "representante";
     const nSupremos = usuarios.filter((u) => u.role === "supremo_admin").length;
-    // Task 141: cada etiqueta cuenta lo mismo que se ve en la columna Tipo
-    // (ESPECIAL/VIP mandan sobre el rol ADMIN de la base).
-    const nAdmins = usuarios.filter(
-      (u) => u.role === "admin" && !esEspecial(u.email) && !esVip(u.email)
-    ).length;
-    const nEspecial = usuarios.filter(
-      (u) => u.role !== "supremo_admin" && esEspecial(u.email)
-    ).length;
-    const nVip = usuarios.filter(
-      (u) => u.role !== "supremo_admin" && !esEspecial(u.email) && esVip(u.email)
-    ).length;
-    const nComunes = usuarios.filter(
-      (u) => esComun(u.role) && !esEspecial(u.email) && !esVip(u.email)
-    ).length;
+    // Task 165: cada etiqueta cuenta lo mismo que se ve en la columna Tipo
+    // (incluye las PROMOCIONES hechas desde el GDA).
+    const nAdmins = usuarios.filter((u) => tipoEfectivo(u) === "ADMIN").length;
+    const nEspecial = usuarios.filter((u) => tipoEfectivo(u) === "ESPECIAL").length;
+    const nVip = usuarios.filter((u) => tipoEfectivo(u) === "VIP").length;
+    const nComunes = usuarios.filter((u) => tipoEfectivo(u) === "COMÚN").length;
     lines.push("================================================================================");
     lines.push(`  TOTAL: ${usuarios.length} usuarios`);
     lines.push(`    Por tipo:      Supremo: ${nSupremos} · Admin: ${nAdmins} · ESPECIAL: ${nEspecial} · VIP: ${nVip} · Común: ${nComunes}`);
@@ -862,20 +910,21 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
       (u.name || "").toLowerCase().includes(search.toLowerCase());
     // Compat hacia atrás: representante ≡ colaborador
     const esColaborador = (r: string) => r === "colaborador" || r === "representante";
-    // Task 141 (pedido del dueño): el filtro TIPO DE USUARIO ahora incluye
-    // VIP y ESPECIAL. Cada opción muestra exactamente la misma etiqueta que
-    // se ve en la columna Tipo (ESPECIAL/VIP mandan sobre el rol ADMIN).
+    // Task 165: el filtro usa exactamente la MISMA etiqueta de la columna
+    // Tipo, así que los usuarios PROMOVIDOS a VIP/ESPECIAL desde el GDA
+    // aparecen en su filtro sin importar el rol viejo de la base.
+    const tipoFila = tipoEfectivo(u);
     const matchRol =
       filtroRol === "todos"
         ? true
         : filtroRol === "especial"
-          ? u.role !== "supremo_admin" && esEspecial(u.email)
+          ? tipoFila === "ESPECIAL"
           : filtroRol === "vip"
-            ? u.role !== "supremo_admin" && !esEspecial(u.email) && esVip(u.email)
+            ? tipoFila === "VIP"
             : filtroRol === "admin"
-              ? u.role === "admin" && !esEspecial(u.email) && !esVip(u.email)
+              ? tipoFila === "ADMIN"
               : filtroRol === "colaborador"
-                ? esColaborador(u.role) && !esEspecial(u.email) && !esVip(u.email)
+                ? tipoFila === "COMÚN" && esColaborador(u.role)
                 : u.role === filtroRol;
     // Filtro por sucursal ("todas" = no filtra, solo agrupa en secciones)
     const matchSucursal = filtroSucursal === "todas" || sucursalDe(u) === filtroSucursal;
@@ -1059,7 +1108,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               ADMIN
             </div>
             <p className="text-3xl font-black text-sky-600 mt-1">
-              {usuarios.filter((u) => u.role === "admin" && !esEspecial(u.email) && !esVip(u.email)).length}
+              {usuarios.filter((u) => tipoEfectivo(u) === "ADMIN").length}
             </p>
           </div>
           {/* Task 139: los encargados del CRM ahora se llaman ESPECIAL. */}
@@ -1068,7 +1117,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               ESPECIAL (CRM)
             </div>
             <p className="text-3xl font-black text-emerald-600 mt-1">
-              {usuarios.filter((u) => u.role !== "supremo_admin" && esEspecial(u.email)).length}
+              {usuarios.filter((u) => tipoEfectivo(u) === "ESPECIAL").length}
             </p>
           </div>
           {/* Task 139: tarjeta VIP para los destacados de la central
@@ -1078,7 +1127,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               VIP
             </div>
             <p className="text-3xl font-black text-yellow-600 mt-1">
-              {usuarios.filter((u) => u.role !== "supremo_admin" && !esEspecial(u.email) && esVip(u.email)).length}
+              {usuarios.filter((u) => tipoEfectivo(u) === "VIP").length}
             </p>
           </div>
           <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm">
@@ -1086,7 +1135,7 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
               COMÚN
             </div>
             <p className="text-3xl font-black text-stone-700 mt-1">
-              {usuarios.filter((u) => (u.role === "colaborador" || u.role === "representante") && !esEspecial(u.email) && !esVip(u.email)).length}
+              {usuarios.filter((u) => tipoEfectivo(u) === "COMÚN").length}
             </p>
           </div>
         </div>
@@ -1432,24 +1481,48 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}>
                               {rb.label}
                             </span>
-                          ) : rb.label === "ESPECIAL" || rb.label === "VIP" ? (
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ${rb.cls}`}
-                              title="TIPO del usuario (no cambia el rol de la base)"
-                            >
-                              {rb.label}
-                            </span>
                           ) : (
-                            <select
-                              value={u.role === "admin" ? "admin" : "colaborador"}
-                              onChange={(e) => cambiarRol(u, e.target.value)}
-                              disabled={cambiandoRol === u.id}
-                              className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide outline-none cursor-pointer disabled:opacity-50 bg-stone-100 text-stone-700 border-stone-300"
-                              title="Cambiar rol del usuario (COMÚN ↔ ADMIN). Solo SUPREMO."
-                            >
-                              <option value="colaborador">COMÚN</option>
-                              <option value="admin">ADMIN</option>
-                            </select>
+                            /* Task 165 (pedido del dueño): el dueño puede
+                               PROMOVER el usuario a cualquiera de los TIPOS
+                               del sistema y CONFIRMAR con GUARDAR. Hasta
+                               tocar GUARDAR no se cambia nada en la base. */
+                            <div className="flex items-center gap-1">
+                              <select
+                                value={tipoDraft[u.id] ?? tipoEfectivo(u)}
+                                onChange={(e) =>
+                                  setTipoDraft((prev) => ({ ...prev, [u.id]: e.target.value }))
+                                }
+                                disabled={cambiandoRol === u.id}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide outline-none cursor-pointer disabled:opacity-50 bg-stone-100 text-stone-700 border-stone-300"
+                                title="TIPO del usuario. Elegí uno y después tocá GUARDAR."
+                              >
+                                <option value="COMÚN">COMÚN</option>
+                                <option value="ADMIN">ADMIN</option>
+                                <option value="ESPECIAL">ESPECIAL</option>
+                                <option value="VIP">VIP</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => void guardarTipo(u)}
+                                disabled={
+                                  cambiandoRol === u.id ||
+                                  (tipoDraft[u.id] ?? tipoEfectivo(u)) === tipoEfectivo(u)
+                                }
+                                className={`inline-flex items-center gap-1 h-6 px-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide text-white transition-colors ${
+                                  (tipoDraft[u.id] ?? tipoEfectivo(u)) === tipoEfectivo(u)
+                                    ? "bg-stone-300 cursor-not-allowed"
+                                    : "bg-green-600 hover:bg-green-700"
+                                }`}
+                                title="Guardar el TIPO elegido"
+                              >
+                                {cambiandoRol === u.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Check className="h-3 w-3" />
+                                )}
+                                GUARDAR
+                              </button>
+                            </div>
                           )}
                         </td>
                         <td className="px-3 py-2.5">
@@ -1699,6 +1772,8 @@ export function GestionAccesos({ user, onGoSales, onGoAdmin, onGoOrquestador }: 
                 >
                   <option value="colaborador">COMÚN (colaborador)</option>
                   <option value="admin">ADMIN</option>
+                  <option value="especial">ESPECIAL (encargado del CRM de su sucursal)</option>
+                  <option value="vip">VIP (solo lectura de la Base)</option>
                   <option value="supremo_admin">SUPREMO ADMIN</option>
                 </select>
               </div>

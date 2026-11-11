@@ -121,9 +121,15 @@ export async function POST(req: NextRequest) {
     if (!email || !password) {
       return NextResponse.json({ error: "Email y contraseña son obligatorios" }, { status: 400 });
     }
-    const finalRole = (newRole === "supremo_admin" || newRole === "admin" || newRole === "colaborador")
-      ? newRole
-      : "colaborador";
+    // Task 165: también se puede crear directo como VIP o ESPECIAL.
+    const finalRole =
+      newRole === "supremo_admin" ||
+      newRole === "admin" ||
+      newRole === "colaborador" ||
+      newRole === "vip" ||
+      newRole === "especial"
+        ? newRole
+        : "colaborador";
 
     // Task 138 (pedido del dueño): el CREAR USUARIO del GDA ahora elige la
     // SUCURSAL — "para que no quede usuario sin sucursal". Si viene, tiene

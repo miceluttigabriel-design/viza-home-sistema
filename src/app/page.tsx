@@ -16,7 +16,7 @@ import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 // ZAGO PEREIRA) ve el botón IR A STOCK GENERAL y puede entrar a esa vista
 // fuera del supremo (lista única en src/lib/acceso-stock-general.ts).
 import { puedeIrAStockGeneral } from "@/lib/acceso-stock-general";
-import { USUARIOS_VIP } from "@/lib/encargados-sucursal";
+import { esUsuarioVip } from "@/lib/encargados-sucursal";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -70,7 +70,10 @@ export default function Home() {
   // siguen siendo SOLO para el supremo (se controlan más abajo y en cada
   // componente).
   const emailUsuario = user.email.trim().toLowerCase();
-  const esVip = !!USUARIOS_VIP[emailUsuario];
+  // Task 165: VIP = rol promovido desde el GDA (User.role = "vip") o la lista
+  // histórica USUARIOS_VIP. El VIP ve el ORQUESTADOR y la BASE, pero SOLO
+  // LECTURA (ver esConsultaBase más abajo).
+  const esVip = esUsuarioVip(emailUsuario, role);
   const puedeVerOrquestador =
     role === "supremo_admin" || role === "admin" || esVip;
 
@@ -98,7 +101,7 @@ export default function Home() {
   // backend también lo rechaza en toda escritura de productos).
   // La vista alterna se activa con el botón VER BASE del panel de ventas
   // (onGoBase SOLO se pasa a estos emails; ningún otro usuario lo recibe).
-  const esConsultaBase = esEmailSoloLectura(user.email);
+  const esConsultaBase = esEmailSoloLectura(user.email, role);
   if (esConsultaBase) {
     // Task 144: los consulta que además son VIP (filipe.campos@ y
     // viza.compras@) pueden abrir el ORQUESTADOR. Siguen siendo SOLO LECTURA
@@ -148,7 +151,7 @@ export default function Home() {
 
   // Colaborador → solo SalesPanel (no puede ver Admin ni Gestión)
   // Compat hacia atrás: representante = colaborador
-  if (role === "colaborador" || role === "representante") {
+  if (role === "colaborador" || role === "representante" || role === "especial") {
     // Task 127: VILMAR (viza@viza.com.py) puede entrar al STOCK GENERAL desde
     // su botón (sin BASE y sin ORQUESTADOR: solo COTIZADOR para volver).
     if (view === "stock" && verStockGeneral) {

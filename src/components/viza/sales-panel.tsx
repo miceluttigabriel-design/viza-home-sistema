@@ -361,9 +361,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   const isSupremoRole = user.role === "supremo_admin";
   // Encargado de sucursal: ve el CRM de SU sucursal en el panel de ventas
   // (lista estática ENCARGADOS_SUCURSAL; los admins usan el CRM del panel BASE).
+  // Task 165: además, un usuario promovido a ESPECIAL desde el GDA usa la
+  // sucursal que tiene asignada (se lee de /api/mi-sucursal más abajo).
   const sucursalDelEncargado =
     ENCARGADOS_SUCURSAL[user.email.trim().toLowerCase()] ?? null;
-  const esEncargadoCrm = !!sucursalDelEncargado && !isAdmin;
+  const esEspecialPorRol = user.role === "especial";
+  const esEncargadoCrm = !isAdmin && (!!sucursalDelEncargado || esEspecialPorRol);
 
   // ─── MI SUCURSAL (Task 104, pedido del dueño) ───
   // Task 132 (pedido del dueño): el MOSTRADOR de la tasa de cambio que
@@ -389,6 +392,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       vivo = false;
     };
   }, []);
+
+  // Sucursal efectiva del encargado: la fija si es de la lista de siempre, o
+  // la asignada en el GDA si fue promovido a ESPECIAL (Task 165).
+  const sucursalEncargadoEfectiva =
+    sucursalDelEncargado || (esEspecialPorRol && sucursalMia ? sucursalMia : null);
 
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -559,7 +567,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       setCrmSucursalVista(
         typeof data.vistaSucursal === "string" && data.vistaSucursal
           ? data.vistaSucursal
-          : sucursalDelEncargado
+          : sucursalEncargadoEfectiva
       );
     } catch (error) {
       console.error("Error CRM sucursal:", error);
@@ -568,7 +576,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
     } finally {
       setCrmCargando(false);
     }
-  }, [sucursalDelEncargado]);
+  }, [sucursalEncargadoEfectiva]);
 
   // Buscar productos
   const searchProducts = useCallback(async (q: string) => {
@@ -1492,7 +1500,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 onClick={abrirCrmSucursal}
                 className="h-9 w-9 rounded-xl font-bold text-[11px] flex items-center justify-center transition-colors shadow-sm hover:brightness-110 shrink-0 order-4"
                 style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL_OSCURO }}
-                title={`CRM · Presupuestos de mi sucursal${sucursalDelEncargado ? ` (${sucursalDelEncargado})` : ""}`}
+                title={`CRM · Presupuestos de mi sucursal${sucursalEncargadoEfectiva ? ` (${sucursalEncargadoEfectiva})` : ""}`}
                 aria-label="CRM de mi sucursal"
               >
                 CRM
@@ -2069,7 +2077,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             userEmail={user.email}
             puedeVerTodo={esEncargadoCrm || isAdmin}
             puedeAprobarTodo={isAdmin}
-            sucursalEncargado={esEncargadoCrm ? sucursalDelEncargado : null}
+            sucursalEncargado={esEncargadoCrm ? sucursalEncargadoEfectiva : null}
           />
         )}
 

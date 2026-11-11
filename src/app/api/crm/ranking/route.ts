@@ -9,7 +9,7 @@ import {
   migrarCentralKatuete,
   migrarCentral,
 } from "@/lib/sucursal-usuario";
-import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+import { sucursalEncargadoDe } from "@/lib/encargados-sucursal-server";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 
 // GET /api/crm/ranking — CRM: ranking de presupuestos emitidos por usuario.
@@ -52,10 +52,12 @@ export async function GET() {
     // Usuarios de CONSULTA (viza.compras@, filipe.campos@ — Task 82): el CRM
     // es SOLO VISUALIZACIÓN y ven el ranking GENERAL (como admin). La
     // asignación de sucursal (PUT /api/crm/sucursal) sigue cerrada para ellos.
-    const esConsulta = esEmailSoloLectura(emailSesion);
+    const esConsulta = esEmailSoloLectura(emailSesion, role);
+    // Task 165: el ENCARGADO puede ser de la lista fija (ENCARGADOS_SUCURSAL)
+    // o un usuario promovido a ESPECIAL desde el GDA (UsuarioSucursal).
     const sucursalEncargado = isAdmin || esConsulta
       ? null
-      : (ENCARGADOS_SUCURSAL[emailSesion] ?? null);
+      : await sucursalEncargadoDe(emailSesion, role);
     if (!isAdmin && !sucursalEncargado && !esConsulta) {
       return NextResponse.json({ error: "Sin permiso para el CRM" }, { status: 403 });
     }

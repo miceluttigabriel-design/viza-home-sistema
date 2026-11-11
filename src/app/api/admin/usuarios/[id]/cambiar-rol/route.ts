@@ -7,18 +7,25 @@ import { db } from "@/lib/db";
 // Task 82 (pedido del dueño): cambia el TIPO DE USUARIO de un usuario
 // existente desde la Gestión de Accesos (antes solo se podía elegir el tipo
 // al CREAR el usuario; cambiar el de uno existente exigía tocar la base).
-// Caso de uso: filipe.campos@viza.com.py pasa de COMÚN a ADMIN (ADM de solo
-// visualización: su modo lectura va por EMAIL, lista en
-// src/lib/usuarios-consulta.ts, así que aunque sea ADMIN no puede editar
-// la base ni nada).
+// Caso de uso histórico: filipe.campos@viza.com.py pasa de COMÚN a ADMIN.
+//
+// Task 165 (pedido del dueño): ahora se puede PROMOVER a CUALQUIERA de los
+// tipos del sistema, con el botón GUARDAR del GDA:
+//   · "colaborador" (COMÚN)  → solo Ventas.
+//   · "admin" (ADMIN)        → Base + Ventas + Orquestador.
+//   · "vip" (VIP)            → ve el Orquestador y la BASE completa, pero
+//                              SOLO LECTURA (esEmailSoloLectura también
+//                              devuelve true para role "vip").
+//   · "especial" (ESPECIAL)  → encargado: CRM de SU sucursal (UsuarioSucursal
+//                              o la lista fija ENCARGADOS_SUCURSAL).
 // Solo el SUPREMO_ADMIN puede cambiar tipos. Reglas:
-//   · roles permitidos en el cambio: "admin" | "colaborador" (COMÚN).
-//     No se crea ni se toca ningún supremo_admin desde acá.
+//   · no se crea ni se toca ningún supremo_admin desde acá.
 //   · no se puede cambiar el tipo de un supremo_admin.
 //   · no se puede cambiar el propio tipo (evita quedar sin supremo).
 // OJO: la sesión es JWT — el nuevo rol le llega al usuario en su próximo
 // inicio de sesión (cerrar y volver a entrar). La etiqueta en la Gestión de
 // Accesos se actualiza al instante (lee la base).
+const ROLES_VALIDOS = ["admin", "colaborador", "vip", "especial"] as const;
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
@@ -51,9 +58,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const body = await req.json().catch(() => null);
     const nuevoRol = typeof body?.role === "string" ? body.role.trim() : "";
-    if (nuevoRol !== "admin" && nuevoRol !== "colaborador") {
+    if (!ROLES_VALIDOS.includes(nuevoRol as (typeof ROLES_VALIDOS)[number])) {
       return NextResponse.json(
-        { error: "Rol inválido. Valores permitidos: admin, colaborador" },
+        {
+          error:
+            "Tipo inválido. Valores permitidos: admin, colaborador (COMÚN), vip, especial",
+        },
         { status: 400 }
       );
     }
