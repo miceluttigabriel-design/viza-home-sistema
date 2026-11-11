@@ -438,7 +438,7 @@ export function generarPdfCompra(
     { label: "COD", w: 48 },
     { label: "PRODUCTO", w: 140 },
     { label: "COLOR", w: 56 },
-    { label: "STOCK RED", w: 52, align: "right" },
+    { label: "STOCK TOTAL", w: 54, align: "right" },
     { label: "CENTRAL", w: 46, align: "right" },
     { label: "OBJETIVO", w: 50, align: "right" },
     { label: "COMPRAR", w: 48, align: "right" },
