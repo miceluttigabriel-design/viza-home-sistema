@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   BrainCircuit,
   CheckCircle2,
@@ -42,6 +43,10 @@ const DORADO_OSCURO = "#b89853";
 interface EncargadoCompraProps {
   open: boolean;
   onClose: () => void;
+  // Pedido del dueño: además de la ventana (modal), el módulo puede abrirse
+  // como PÁGINA COMPLETA, igual que STOCK GENERAL: solo el módulo en pantalla
+  // y el botón para volver al ORQUESTADOR.
+  modo?: "modal" | "pagina";
 }
 
 function fmtNum(n: number): string {
@@ -131,7 +136,7 @@ interface GrupoCompra {
   filas: FilaCompra[];
 }
 
-export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
+export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoCompraProps) {
   const [plan, setPlan] = useState<PlanCompra | null>(null);
   const [ia, setIa] = useState<AnalisisCompraIA | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -232,15 +237,42 @@ export function EncargadoCompra({ open, onClose }: EncargadoCompraProps) {
   const resumen = plan?.resumen;
   const sinCompras = !!plan && plan.filas.length === 0;
 
+  const esPagina = modo === "pagina";
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1500px] max-h-[96vh] flex flex-col overflow-hidden">
+    <div
+      className={
+        esPagina
+          ? "min-h-screen bg-stone-100 flex flex-col"
+          : "fixed inset-0 z-[70] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm"
+      }
+    >
+      <div
+        className={
+          esPagina
+            ? "bg-white w-full min-h-screen flex flex-col overflow-hidden"
+            : "bg-white rounded-2xl shadow-2xl w-full max-w-[1500px] max-h-[96vh] flex flex-col overflow-hidden"
+        }
+      >
         {/* ─── Cabecera ─── */}
         <div
           className="px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 flex-wrap"
           style={{ background: "linear-gradient(135deg, #0e7490 0%, #155e75 100%)" }}
         >
           <div className="flex items-center gap-3 min-w-0">
+            {/* Página completa (pedido del dueño): mismo botón de vuelta que
+                STOCK GENERAL, para regresar al ORQUESTADOR. */}
+            {esPagina && (
+              <button
+                onClick={onClose}
+                className="h-9 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors hover:brightness-95 shrink-0"
+                style={{ background: `linear-gradient(135deg, ${DORADO_OSCURO} 0%, ${DORADO} 100%)`, color: AZUL }}
+                title="Volver al Orquestador"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">ORQUESTADOR</span>
+              </button>
+            )}
             <div
               className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center"
               style={{

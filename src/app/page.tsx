@@ -9,6 +9,7 @@ import { GestionAccesos } from "@/components/viza/gestion-accesos";
 // Task 91: Orquestador (solo supremo) + Stock General (cuadro azul nuevo)
 import { Orquestador } from "@/components/viza/orquestador";
 import { StockGeneral } from "@/components/viza/stock-general";
+import { EncargadoCompra } from "@/components/viza/encargado-compra";
 import { Loader2 } from "lucide-react";
 import { setCurrentUserId } from "@/lib/user-scoped-storage";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
@@ -28,7 +29,7 @@ export default function Home() {
   //   · colaborador/consulta → PANEL DE VENTAS directo (sin cambios)
   // Regla de oro intacta: el menú depende del ROL del usuario, no de la vista.
   const [adminView, setAdminView] = useState<
-    "orquestador" | "sales" | "admin" | "gestion" | "base" | "stock" | null
+    "orquestador" | "sales" | "admin" | "gestion" | "base" | "stock" | "compra" | null
   >(null);
 
   // Setear el userId actual en localStorage para que los stores (cart, cotizacion,
@@ -234,6 +235,19 @@ export default function Home() {
           onGoStock={() => setAdminView("stock")}
           onGoSales={() => setAdminView("sales")}
           onGoGestion={() => setAdminView("gestion")}
+          onGoCompra={() => setAdminView("compra")}
+        />
+      );
+    }
+    // Pedido del dueño: ENCARGADO DE COMPRA como PÁGINA COMPLETA (igual que
+    // STOCK GENERAL), con el botón ORQUESTADOR para volver. Exclusivo del
+    // supremo, igual que la API del módulo.
+    if (view === "compra") {
+      return (
+        <EncargadoCompra
+          open
+          modo="pagina"
+          onClose={() => setAdminView("orquestador")}
         />
       );
     }
