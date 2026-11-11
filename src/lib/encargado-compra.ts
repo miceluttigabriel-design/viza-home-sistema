@@ -28,6 +28,7 @@ import {
   type EntradaPlanEncargado,
   type EntradaProductoEncargado,
 } from "@/lib/encargado-distribucion";
+import { esBienDeEmpresa } from "@/lib/bienes-empresa";
 
 // Task 161 + Task 168 (pedido del dueño): el Encargado de Compra trabaja con:
 //   · productos SELECCIONADO (etiqueta verde) o PARA PEDIDO (etiqueta azul);
@@ -270,8 +271,16 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   let sinProveedor = 0;
   let noSeleccionados = 0;
   let codigosIgnorados = 0;
+  let bienesEmpresa = 0;
 
   for (const producto of entrada.productos || []) {
+    // Pedido del dueño: los BIENES DE USO DE LA EMPRESA (proveedor
+    // AUTOMOTOR S.A.: vehículos) NO se consideran para compra. No son
+    // mercadería de venta.
+    if (esBienDeEmpresa(producto.proveedor)) {
+      bienesEmpresa += 1;
+      continue;
+    }
     // Regla del dueño (Task 168): el Encargado de Compra analiza
     //   · SELECCIONADO   (etiqueta verde)
     //   · PARA PEDIDO    (etiqueta azul)
@@ -429,6 +438,11 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   if (noSeleccionados > 0) {
     alertas.add(
       `${noSeleccionados} producto(s) tienen otra etiqueta en la Base (por ejemplo DESCONTINUADO o QUEMA STOCK): quedaron fuera del análisis de compra. El Encargado analiza SELECCIONADO, PARA PEDIDO y los que están SIN etiqueta.`
+    );
+  }
+  if (bienesEmpresa > 0) {
+    alertas.add(
+      `${bienesEmpresa} código(s) son BIENES DE USO DE LA EMPRESA (proveedor AUTOMOTOR S.A.: vehículos) y NO se incluyen en la compra. Se ven aparte en STOCK GENERAL.`
     );
   }
   if (codigosIgnorados > 0) {

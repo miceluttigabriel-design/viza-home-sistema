@@ -8,6 +8,10 @@ import {
 } from "@/lib/stock-sucursal"; // Task 98 (tabla aparte auto-gestionada)
 import { leerCapacidades } from "@/lib/producto-capacidad"; // Task 97 (tabla aparte auto-gestionada)
 import { leerCores } from "@/lib/producto-cores"; // Task 98 (tabla aparte auto-gestionada)
+import {
+  condicionPrismaBienesEmpresa,
+  esBienDeEmpresa,
+} from "@/lib/bienes-empresa"; // Task 170: bienes de uso de la empresa (AUTOMOTOR S.A.)
 
 // Task 126 (pedido del dueño): la respuesta SIEMPRE se calcula en vivo —
 // nada de caché de ruta. Así, cada vez que LA BASE guarda una edición,
@@ -178,6 +182,10 @@ export async function GET(req: NextRequest) {
     );
     const sort = searchParams.get("sort") || "stock";
     const dir: "asc" | "desc" = searchParams.get("dir") === "desc" ? "desc" : "asc";
+    // Task 170 (pedido del dueño): "bienes=1" = ver SOLO los bienes de uso
+    // de la empresa (vehículos de AUTOMOTOR S.A.). Sin el parámetro, esos
+    // bienes NO se mezclan con el inventario de venta.
+    const soloBienes = searchParams.get("bienes") === "1";
 
     // ─── Pills de sucursales (SIEMPRE global; CENTRAL = depósito central) ───
     // Best-effort: si la tabla no existe todavía, vuelve [] y la vista solo
@@ -195,14 +203,29 @@ export async function GET(req: NextRequest) {
       const where: Record<string, unknown> = {};
       if (subgrupo) where.category = subgrupo;
       if (orBusqueda) where.OR = orBusqueda.OR;
+      // Task 170: separa los BIENES DE LA EMPRESA del inventario de venta.
+      //   · vista normal  → NOT bienes (no se mezclan)
+      //   · bienes=1      → SOLO bienes
+      const condBienes = condicionPrismaBienesEmpresa();
+      if (soloBienes) {
+        where.AND = [{ OR: (condBienes as any).OR }];
+      } else {
+        where.NOT = condBienes;
+      }
 
-      const [total, agg, byCatRaw] = await Promise.all([
+      const [total, agg, byCatRaw, totalBienes, aggBienes] = await Promise.all([
         db.product.count({ where }),
         db.product.aggregate({ where, _sum: { stock: true } }),
         db.product.groupBy({
           by: ["category"],
           where,
           _count: true,
+          _sum: { stock: true },
+        }),
+        // Siempre el total de bienes de la empresa (para el aviso del detalle)
+        db.product.count({ where: condBienes as any }),
+        db.product.aggregate({
+          where: condBienes as any,
           _sum: { stock: true },
         }),
       ]);
@@ -262,6 +285,11 @@ export async function GET(req: NextRequest) {
         stats: {
           totalProducts: total,
           totalStock: agg._sum.stock ?? 0,
+          // Task 170: bienes de uso de la empresa (fuera del inventario de venta)
+          bienesEmpresa: {
+            productos: totalBienes,
+            unidades: aggBienes._sum.stock ?? 0,
+          },
           bySubgrupo: byCatRaw
             .map((c) => ({
               category: c.category,
@@ -302,10 +330,16 @@ export async function GET(req: NextRequest) {
 
     // Combinar producto + saldo de la sucursal (el stock que se muestra es
     // el SALDO de la sucursal; el global de Product queda informativo).
-    const filas: FilaBase[] = productos.map((p) => ({
+    const filasTodas: FilaBase[] = productos.map((p) => ({
       ...p,
       stock: Math.round(saldos.get(p.id) ?? 0),
     }));
+
+    // Task 170: separa los bienes de uso de la empresa del inventario de venta.
+    const filasBienes = filasTodas.filter((f) => esBienDeEmpresa(f.fabricante));
+    const filas = soloBienes
+      ? filasBienes
+      : filasTodas.filter((f) => !esBienDeEmpresa(f.fabricante));
 
     // Stats en memoria con el SALDO de la sucursal (no el global).
     const total = filas.length;
@@ -362,6 +396,11 @@ export async function GET(req: NextRequest) {
       stats: {
         totalProducts: total,
         totalStock,
+        // Task 170: bienes de uso de la empresa en esta sucursal
+        bienesEmpresa: {
+          productos: filasBienes.length,
+          unidades: filasBienes.reduce((acc, f) => acc + f.stock, 0),
+        },
         bySubgrupo,
       },
       rows,

@@ -55,6 +55,7 @@ import {
   Layers,
   Tags,
   Building2,
+  Car,
   Search,
   RefreshCw,
   ChevronLeft,
@@ -100,6 +101,10 @@ interface SucursalResumen {
 interface StatsResp {
   totalProducts: number;
   totalStock: number;
+  // Task 170: bienes de uso de la empresa (vehículos de AUTOMOTOR S.A.).
+  // Se informan SIEMPRE, esté o no activo el detalle, para mostrar la
+  // cantidad en el aviso. Quedan fuera del inventario de venta.
+  bienesEmpresa?: { productos: number; unidades: number };
   bySubgrupo: Array<{ category: string | null; count: number; stock: number }>;
 }
 
@@ -254,6 +259,9 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
   const [busquedaAplicada, setBusquedaAplicada] = useState("");
   const [orden, setOrden] = useState<OrdenOpt>("stock-asc");
   const [subgrupo, setSubgrupo] = useState<string | null>(null); // null = todos
+  // Task 170 (pedido del dueño): detalle aparte de BIENES DE LA EMPRESA
+  // (vehículos de AUTOMOTOR S.A.). false = inventario de venta (normal).
+  const [bienesEmpresa, setBienesEmpresa] = useState(false);
   const [page, setPage] = useState(1);
   const [filas, setFilas] = useState<ProdFila[]>([]);
   const [total, setTotal] = useState(0);
@@ -290,6 +298,8 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
       if (busquedaAplicada) params.set("search", busquedaAplicada);
       if (subgrupo) params.set("subgrupo", subgrupo);
       if (sucursalSel) params.set("sucursal", sucursalSel);
+      // Task 170: bienes=1 → SOLO los bienes de uso de la empresa.
+      if (bienesEmpresa) params.set("bienes", "1");
       // Task 126: siempre datos VIVOS — jamás una copia cacheada del navegador
       // (así lo replicado desde LA BASE llega tal cual a la tabla).
       const res = await fetch(`/api/stock/general?${params.toString()}`, {
@@ -312,7 +322,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
     } finally {
       setCargando(false);
     }
-  }, [page, ordenActual, busquedaAplicada, subgrupo, sucursalSel]);
+  }, [page, ordenActual, busquedaAplicada, subgrupo, sucursalSel, bienesEmpresa]);
 
   // Patrón del propio admin-panel (fetchProducts): la llamada se hace vía
   // setTimeout(0) para que NINGÚN setState corra síncrono dentro del effect
@@ -368,6 +378,15 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
 
   const maxStockCat = stats?.bySubgrupo?.reduce((m, c) => Math.max(m, c.stock), 0) ?? 0;
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
+
+  // Task 170: entra/sale del detalle de BIENES DE LA EMPRESA. Vuelve a la
+  // primera página y limpia el sub-grupo (los bienes no son de venta).
+  const verBienesEmpresa = (ver: boolean) => {
+    setBienesEmpresa(ver);
+    setSubgrupo(null);
+    setPage(1);
+    setCargando(true);
+  };
 
   // ═══ IMPORTAR PLANILLA (Task 152: el único botón de importación del sistema;
   //     mismo motor que tenía LA BASE, con reparto por sucursal) ═══
@@ -733,6 +752,64 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
               </div>
             </div>
           </div>
+        </div>
+
+        {/* ─── Task 170: BIENES DE USO DE LA EMPRESA ───
+            Pedido del dueño: los vehículos de AUTOMOTOR S.A. no se
+            mezclan con el inventario de venta. Este detalle los muestra
+            APARTE, con su propia tabla y contadores. */}
+        <div
+          className={`rounded-2xl border p-4 sm:p-5 shadow-sm transition-colors ${
+            bienesEmpresa
+              ? "border-amber-300 bg-amber-50"
+              : "border-stone-200 bg-white"
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div
+                className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  bienesEmpresa ? "bg-amber-200" : "bg-amber-50"
+                }`}
+              >
+                <Car className={`h-5 w-5 ${bienesEmpresa ? "text-amber-800" : "text-amber-600"}`} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black tracking-widest text-amber-700 uppercase">
+                  Bienes de la empresa
+                </p>
+                <p className="text-sm font-bold text-stone-800">
+                  {bienesEmpresa
+                    ? "Viendo SOLO los bienes de uso de la empresa"
+                    : "Vehículos y bienes de uso interno, aparte del inventario de venta"}
+                </p>
+                <p className="text-[11px] text-stone-500 mt-1">
+                  {stats?.bienesEmpresa
+                    ? `${fmtNum(stats.bienesEmpresa.productos)} producto(s) · ${fmtNum(
+                        stats.bienesEmpresa.unidades
+                      )} unidad(es)${sucursalSel ? ` en ${sucursalSel}` : " en la red"} · Proveedor AUTOMOTOR S.A.`
+                    : "Proveedor AUTOMOTOR S.A."}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => verBienesEmpresa(!bienesEmpresa)}
+              className={`h-9 px-4 rounded-xl text-[10px] font-black tracking-widest uppercase transition-colors shrink-0 ${
+                bienesEmpresa
+                  ? "bg-stone-800 text-white hover:bg-stone-700"
+                  : "bg-amber-600 text-white hover:bg-amber-700"
+              }`}
+            >
+              {bienesEmpresa ? "Volver a productos" : "Ver bienes"}
+            </button>
+          </div>
+          {bienesEmpresa && (
+            <p className="mt-3 text-[11px] font-medium text-amber-800 bg-amber-100/70 rounded-xl px-3 py-2">
+              Estos bienes NO entran en el ENCARGADO DE COMPRA ni en el inventario de venta. Para
+              volver a los productos de venta, usá VOLVER A PRODUCTOS.
+            </p>
+          )}
         </div>
 
         {/* ─── Stock por sub-grupo ─── */}
