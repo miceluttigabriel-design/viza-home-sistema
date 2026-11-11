@@ -55,7 +55,7 @@ export interface SafraProducto {
 // Un pago manual hecho por el vendedor (entrada o refuerzo)
 export interface PagoManual {
   id: string;        // ID único
-  mes: number;       // 0 = entrada, 1-18 = refuerzos (derivado de fecha)
+  mes: number;       // 0 = entrada, 1-60 = refuerzos (derivado de la fecha)
   valor: number;     // monto en Gs (AUTO-CALCULADO en v2.0)
   concepto: string;  // descripción (default "Refuerzo" — sin número de mes, Task 94)
   fecha?: string;    // ISO date (YYYY-MM-DD) - input del usuario (v2.0)
@@ -63,7 +63,7 @@ export interface PagoManual {
 
 // Cronograma generado mes a mes con interés sobre saldo restante
 export interface FilaCronograma {
-  mes: number;            // 0 = entrada, 1-18 = meses
+  mes: number;            // 0 = entrada, 1-60 = meses
   fecha: string;          // ISO date
   concepto: string;        // descripción del pago
   saldoInicial: number;   // saldo al inicio del mes (antes del pago)
@@ -146,7 +146,7 @@ export interface PlanSafraState {
 // - El interés se calcula mes a mes sobre el SALDO RESTANTE de ese mes
 // - Si el cliente paga rápido, el saldo baja rápido, y por lo tanto PAGA
 //   MENOS INTERESES (menos meses = menos interés)
-// - El bucle itera del mes 1 al 18, deteniéndose si el saldo llega a 0
+// - El bucle itera del mes 1 al ultimo refuerzo, deteniéndose si el saldo llega a 0
 //
 // PRINCIPIO: "Menos meses de financiación = Menos intereses a pagar"
 //
@@ -158,6 +158,35 @@ export interface PlanSafraState {
 // sube el total a lo sumo unos miles (el margen no baja).
 const redondeoComercial = (v: number): number =>
   Math.ceil(Math.max(0, v) / 1000) * 1000;
+
+// ─── HORIZONTE DEL PLAN (Task 166) ──────────────────────────────────────────
+// Reporte del dueño: "tiene 4 fechas pero abajo sale apenas 2 refuerzos y
+// pago final". El plan tenía DOS recortes que borraban refuerzos cargados:
+//   1) tope fijo de 18 meses: una fecha posterior al mes 18 se recortaba a 18;
+//   2) el bucle se cortaba cuando el saldo llegaba a 0, así que si el capital
+//      terminaba de pagarse antes, el refuerzo del último mes NUNCA se
+//      mostraba (quedaba invisible, sin aviso).
+// Ahora el horizonte lo marcan las FECHAS que carga el vendedor: el plan
+// llega hasta el último refuerzo. El tope de 60 meses (5 años) es solo una
+// guarda técnica para fechas absurdas.
+export const MAX_MESES_SAFRA = 60;
+
+// Mes de un refuerzo derivado de su FECHA (fuente de verdad) y de la fecha de
+// emisión. Misma regla que el cronograma: diferencia de meses de calendario,
+// sin ajuste por día. Devuelve null si la fecha no es válida.
+export function mesDeFecha(
+  fechaEmision: string,
+  fecha?: string | null
+): number | null {
+  if (!fecha) return null;
+  const dBase = new Date(fechaEmision + "T00:00:00");
+  const dRef = new Date(fecha + "T00:00:00");
+  if (isNaN(dBase.getTime()) || isNaN(dRef.getTime())) return null;
+  return (
+    (dRef.getFullYear() - dBase.getFullYear()) * 12 +
+    (dRef.getMonth() - dBase.getMonth())
+  );
+}
 
 function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState> {
   const productos = state.productos || [];
@@ -259,61 +288,78 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
     });
   }
 
-  // === CONSTRUIR MAPA DE PAGOS POR MES (refuerzos, mes 1-18) ===
-  // v2.1: AUTO-CALCULAR valores de refuerzos con TWO-PASS para que el plan SIEMPRE CUADRE
-  // PASADA 1: estimar valores (saldo + interés estimado) divididos entre refuerzos
-  // PASADA 2 (después del loop): ajustar el último refuerzo para que saldoFinal = 0
-  // REGLA: el total de refuerzos NUNCA excede el total del plan.
-  // FIX v2.0.1: NO devolver refuerzos en el return para evitar loop infinito.
-  const refuerzosCalculados = refuerzos.map(r => ({ ...r }));
-  const maxMes = refuerzosCalculados.length > 0
-    ? Math.max(...refuerzosCalculados.map(r => Math.max(1, Math.min(18, r.mes))))
-    : 0;
-  if (refuerzosCalculados.length > 0 && saldoActual > 0) {
+  // === REFUERZOS: MES DERIVADO DE LA FECHA Y ORDENADO (Task 166) ===
+  // El mes SIEMPRE se recalcula desde la FECHA cargada por el vendedor (la
+  // fecha es la fuente de verdad). Antes se usaba el mes guardado, que podía
+  // quedar viejo si se cambiaba la emisión: el refuerzo se mostraba en un mes
+  // que no era el de su fecha. Se ordenan por mes para que el "último" sea
+  // realmente el último pago (el que cierra el plan).
+  const refuerzosCalculados = refuerzos
+    .map((r) => {
+      const mesFecha = mesDeFecha(fechaEmision, r.fecha);
+      const mesCrudo = mesFecha === null ? (r.mes || 1) : mesFecha;
+      return {
+        ...r,
+        mes: Math.max(1, Math.min(MAX_MESES_SAFRA, mesCrudo)),
+      };
+    })
+    .sort((a, b) => a.mes - b.mes);
+  const nRefuerzos = refuerzosCalculados.length;
+  const maxMes = nRefuerzos > 0 ? refuerzosCalculados[nRefuerzos - 1].mes : 0;
+
+  // Reparto del CAPITAL entre los refuerzos. El ÚLTIMO cierra el plan
+  // (absorbe el saldo restante), así que su capital tiene que ser > 0.
+  // GARANTÍA (bug reportado por el dueño): si la estimación dejaba el saldo
+  // en 0 antes del último mes, el bucle se cortaba y ese refuerzo NUNCA
+  // aparecía en el resultado. Acá la cuota se baja lo justo para que el
+  // saldo llegue vivo hasta el último refuerzo: todos los pagos cargados
+  // siempre se muestran.
+  if (nRefuerzos > 0 && saldoActual > 0) {
     // Estimar interés (mitad del worst-case, más realista)
-    const interesEstimado = saldoActual * (safraPctPromedio / 100) * maxMes * 0.5;
+    const interesEstimado =
+      saldoActual * (safraPctPromedio / 100) * maxMes * 0.5;
     const totalAPagar = saldoActual + interesEstimado;
     // REDONDEO COMERCIAL: cada refuerzo sale al millar superior
     // (ej: 4.295.147 → 4.296.000), sin valores quebrados.
-    const valorPorRefuerzo = redondeoComercial(
-      totalAPagar / refuerzosCalculados.length
-    );
-    // Asignar valores, el ÚLTIMO absorbe el remainder (también redondeado arriba)
+    let valorPorRefuerzo = redondeoComercial(totalAPagar / nRefuerzos);
+    // Nunca adelantar todo el capital antes del último refuerzo.
+    while (
+      nRefuerzos > 1 &&
+      valorPorRefuerzo > 0 &&
+      (nRefuerzos - 1) * valorPorRefuerzo >= saldoActual
+    ) {
+      valorPorRefuerzo -= 1000;
+    }
+    if (valorPorRefuerzo < 1000) valorPorRefuerzo = 0;
     refuerzosCalculados.forEach((r, idx) => {
-      if (idx === refuerzosCalculados.length - 1) {
-        const sumaOtros = valorPorRefuerzo * (refuerzosCalculados.length - 1);
-        r.valor = redondeoComercial(totalAPagar - sumaOtros);
-      } else {
-        r.valor = valorPorRefuerzo;
-      }
+      // El último NO se fija acá: su valor se calcula al cerrar el plan.
+      r.valor = idx === nRefuerzos - 1 ? 0 : valorPorRefuerzo;
     });
   }
 
-  // Suma todos los pagos de refuerzos que caen en el mismo mes
-  const pagosPorMes: Record<number, number> = {};
-  refuerzosCalculados.forEach((r) => {
-    if (r.mes >= 1 && r.mes <= 18 && r.valor > 0) {
-      pagosPorMes[r.mes] = (pagosPorMes[r.mes] || 0) + r.valor;
-    }
-  });
-
-  // === ITERACIÓN MES A MES (1 a 18) - PASADA 1 ===
-  // v2.2: Mostrar cada refuerzo SEPARADO (incluso en el mismo mes)
-  // v2.2: El último refuerzo se etiqueta como "PAGO FINAL"
-  // (Task 94b: además, al final del cálculo una pasada de NORMALIZACIÓN
-  // garantiza que la última fila pagada sea PAGO FINAL — ver más abajo.)
-  for (let mes = 1; mes <= 18; mes++) {
+  // === ITERACIÓN MES A MES (1 al último refuerzo) ===
+  // v2.2: Mostrar cada refuerzo SEPARADO (incluso en el mismo mes).
+  // El último refuerzo se etiqueta "PAGO FINAL" y paga el capital restante
+  // (redondeado al millar superior), así el plan SIEMPRE cierra.
+  for (let mes = 1; mes <= maxMes; mes++) {
+    // Solo se corta si ya no queda capital: con la garantía de arriba esto
+    // no ocurre antes del último refuerzo, pero se deja como red de
+    // seguridad para datos viejos en localStorage.
     if (saldoActual <= 0) break;
     const saldoInicialMes = saldoActual;
     const interesMes = saldoActual * (safraPctPromedio / 100);
     totalIntereses += interesMes;
-    const refuerzosEnMes = refuerzosCalculados.filter(r => r.mes === mes && r.valor > 0);
+    const refuerzosEnMes = refuerzosCalculados.filter((r) => r.mes === mes);
     if (refuerzosEnMes.length > 0) {
-      refuerzosEnMes.forEach((r, idx) => {
-        const esUltimo = (r.mes === maxMes && idx === refuerzosEnMes.length - 1);
-        saldoActual -= r.valor;
-        totalPagos += r.valor;
-        if (mes <= 6) { totalPagado6Meses += r.valor; }
+      refuerzosEnMes.forEach((r) => {
+        const esUltimo = r === refuerzosCalculados[nRefuerzos - 1];
+        // El último refuerzo paga TODO el capital que queda: el plan cierra
+        // exacto (puede quedar saldo levemente negativo por el redondeo al
+        // millar superior — nunca se paga de menos).
+        const pago = esUltimo ? redondeoComercial(saldoActual) : r.valor;
+        saldoActual -= pago;
+        totalPagos += pago;
+        if (mes <= 6) { totalPagado6Meses += pago; }
         cronograma.push({
           mes,
           fecha: r.fecha || addMonths(fechaEmision, mes),
@@ -322,7 +368,7 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
           // y en la fecha, así el rótulo nunca puede quedar desincronizado.
           concepto: esUltimo ? "PAGO FINAL" : "Refuerzo",
           saldoInicial: Math.round(saldoInicialMes),
-          pago: r.valor,
+          pago,
           interes: Math.round(interesMes),
           saldoFinal: Math.round(saldoActual),
         });
@@ -334,92 +380,6 @@ function calcularCronogramaHelper(state: PlanSafraState): Partial<PlanSafraState
         saldoInicial: Math.round(saldoInicialMes), pago: 0,
         interes: Math.round(interesMes), saldoFinal: Math.round(saldoActual),
       });
-    }
-  }
-
-  // === PASADA 2: AJUSTAR EL ÚLTIMO REFUERZO PARA QUE EL PLAN CUADRE ===
-  // Si el saldoFinal no es 0, ajustar el refuerzo del mes más alto
-  // para absorber la diferencia (positiva o negativa).
-  // Esto garantiza que el plan SIEMPRE cuadra (saldoFinal = 0).
-  if (refuerzosCalculados.length > 0 && Math.abs(saldoActual) > 1) {
-    // Encontrar el refuerzo con el mes más alto (último pago)
-    let lastIdx = 0;
-    let lastMes = 0;
-    refuerzosCalculados.forEach((r, i) => {
-      if (r.mes > lastMes) { lastMes = r.mes; lastIdx = i; }
-    });
-    // Ajustar el valor del último refuerzo
-    const ajuste = Math.round(saldoActual); // positivo = falta pagar, negativo = sobrepagó
-    // REDONDEO COMERCIAL: el valor ajustado también sale al millar superior.
-    // Puede quedar un saldo levemente negativo (se pagaron unos Gs de más
-    // por el redondeo): jamás de menos. Eso es válido para el plan.
-    refuerzosCalculados[lastIdx].valor = redondeoComercial(
-      refuerzosCalculados[lastIdx].valor + ajuste
-    );
-
-    // Reconstruir pagosPorMes con valor ajustado
-    const pagosPorMes2: Record<number, number> = {};
-    refuerzosCalculados.forEach((r) => {
-      if (r.mes >= 1 && r.mes <= 18 && r.valor > 0) {
-        pagosPorMes2[r.mes] = (pagosPorMes2[r.mes] || 0) + r.valor;
-      }
-    });
-
-    // Resetear estado para segunda pasada
-    saldoActual = totalContado;
-    if (entradaValor > 0) {
-      saldoActual -= entradaValor;
-    }
-    totalIntereses = 0;
-    totalPagado6Meses = entradaValor > 0 ? entradaValor : 0;
-    totalPagos = entradaValor > 0 ? entradaValor : 0;
-    cronograma.length = 0;
-
-    // Re-agregar entrada al cronograma
-    if (entradaValor > 0) {
-      cronograma.push({
-        mes: 0,
-        fecha: addMonths(fechaEmision, 0),
-        concepto: "ENTRADA",
-        saldoInicial: Math.round(totalContado),
-        pago: entradaValor,
-        interes: 0,
-        saldoFinal: Math.round(saldoActual),
-      });
-    }
-
-    // Re-correr el loop con valores ajustados (v2.2: refuerzos separados + PAGO FINAL)
-    for (let mes = 1; mes <= 18; mes++) {
-      if (saldoActual <= 0) break;
-      const saldoInicialMes = saldoActual;
-      const interesMes = saldoActual * (safraPctPromedio / 100);
-      totalIntereses += interesMes;
-      const refuerzosEnMes2 = refuerzosCalculados.filter(r => r.mes === mes && r.valor > 0);
-      if (refuerzosEnMes2.length > 0) {
-        refuerzosEnMes2.forEach((r, idx) => {
-          const esUltimo = (r.mes === maxMes && idx === refuerzosEnMes2.length - 1);
-          saldoActual -= r.valor;
-          totalPagos += r.valor;
-          if (mes <= 6) { totalPagado6Meses += r.valor; }
-          cronograma.push({
-            mes,
-            fecha: r.fecha || addMonths(fechaEmision, mes),
-            // Task 94: igual que en PASADA 1 — solo "Refuerzo", sin número.
-            concepto: esUltimo ? "PAGO FINAL" : "Refuerzo",
-            saldoInicial: Math.round(saldoInicialMes),
-            pago: r.valor,
-            interes: Math.round(interesMes),
-            saldoFinal: Math.round(saldoActual),
-          });
-        });
-      } else {
-        cronograma.push({
-          mes, fecha: addMonths(fechaEmision, mes),
-          concepto: "Solo interés (sin pago)",
-          saldoInicial: Math.round(saldoInicialMes), pago: 0,
-          interes: Math.round(interesMes), saldoFinal: Math.round(saldoActual),
-        });
-      }
     }
   }
 
@@ -591,7 +551,7 @@ export const usePlanSafraStore = create<PlanSafraState>()(
           const ultimoMes = state.refuerzos.length > 0
             ? Math.max(...state.refuerzos.map((r) => r.mes))
             : 0;
-          const nuevoMes = Math.min(18, ultimoMes + 1);
+          const nuevoMes = Math.min(MAX_MESES_SAFRA, ultimoMes + 1);
           const fechaBase = state.fechaEmision || new Date().toISOString().slice(0, 10);
           const nuevaFecha = addMonths(fechaBase, nuevoMes);
           return {
@@ -613,7 +573,7 @@ export const usePlanSafraStore = create<PlanSafraState>()(
           // (emisión + N meses) para que el mes interno y la fecha NUNCA
           // queden desincronizados. El rótulo es fijo "Refuerzo" (sin
           // número, pedido del dueño) así jamás puede contradecir la fecha.
-          const mesSeguro = Math.max(1, Math.min(18, mes));
+          const mesSeguro = Math.max(1, Math.min(MAX_MESES_SAFRA, mes));
           const fechaBase = state.fechaEmision || new Date().toISOString().slice(0, 10);
           return {
             refuerzos: state.refuerzos.map((r) =>
@@ -650,7 +610,7 @@ export const usePlanSafraStore = create<PlanSafraState>()(
           const dBase = new Date(fechaBase + "T00:00:00");
           const dRefuerzo = new Date(fecha + "T00:00:00");
           const mesCalculado = (dRefuerzo.getFullYear() - dBase.getFullYear()) * 12 + (dRefuerzo.getMonth() - dBase.getMonth());
-          const mesSeguro = Math.max(1, Math.min(18, mesCalculado));
+          const mesSeguro = Math.max(1, Math.min(MAX_MESES_SAFRA, mesCalculado));
           return {
             refuerzos: state.refuerzos.map((r) =>
               r.id === id
