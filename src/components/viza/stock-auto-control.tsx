@@ -55,18 +55,6 @@ function textoHace(iso: string | null): string {
   return `hace ${Math.floor(h / 24)} d`;
 }
 
-function textoFecha(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("es-PY", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export function StockAutoControl() {
   const [estado, setEstado] = useState<EstadoStockAuto | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -125,16 +113,19 @@ export function StockAutoControl() {
   }, [estado, esperandoDesde]);
 
   // Si en 10 minutos no hay respuesta (PC apagada), cortar la espera.
+  // Si en 3 minutos no hay respuesta, cortar la espera: el ciclo completo
+  // tarda ~40 s y la PC lo toma en menos de 1 minuto. Antes eran 10 minutos y
+  // el boton quedaba girando ("ACTUALIZANDO...") mucho tiempo.
   useEffect(() => {
     if (!esperandoDesde) return;
     const id = window.setTimeout(() => {
       setEsperandoDesde(null);
       setPidiendo(false);
       toast.warning(
-        "La PC no respondio en 10 minutos. Fijate que este encendida y con internet.",
+        "La PC no respondio. Fijate que este encendida y con internet (el chip de la PC tiene que decir EN LINEA).",
         { duration: 12000 }
       );
-    }, 10 * 60 * 1000);
+    }, 3 * 60 * 1000);
     return () => window.clearTimeout(id);
   }, [esperandoDesde]);
 
@@ -171,6 +162,13 @@ export function StockAutoControl() {
   const pedirAhora = async () => {
     if (pidiendo || esperandoDesde) return;
     setPidiendo(true);
+    // ¿La PC está dando señal? Si está apagada / sin internet NO dejamos el
+    // botón girando para siempre: avisamos claro. El pedido igual queda en
+    // cola (vence a los 30 min) y se ejecuta solo cuando la PC vuelva.
+    const senal = estado?.heartbeat
+      ? Date.now() - new Date(estado.heartbeat).getTime()
+      : Number.POSITIVE_INFINITY;
+    const pcEnLinea = Number.isFinite(senal) && senal < FRESCO_MIN * 60 * 1000;
     const id = toast.loading("Enviando el pedido a la PC...");
     try {
       const base = estado?.ultimaCorrida ?? SENTINELA;
@@ -180,6 +178,16 @@ export function StockAutoControl() {
         throw new Error(data?.error || `Error HTTP ${res.status}`);
       }
       setEstado((e) => (e ? { ...e, ...data } : e));
+
+      if (!pcEnLinea) {
+        setPidiendo(false);
+        toast.warning(
+          "La PC esta apagada o sin internet (no da senal). El pedido queda guardado 30 minutos: se ejecuta solo cuando la PC vuelva a estar en linea.",
+          { id, duration: 14000 }
+        );
+        return;
+      }
+
       setEsperandoDesde(base);
       toast.success(
         "Pedido enviado: la PC arranca en menos de 1 minuto. Te aviso cuando termine.",
@@ -257,27 +265,10 @@ export function StockAutoControl() {
         PC: {enLinea ? `en linea ${textoHace(estado.heartbeat)}` : "sin senal"}
       </span>
 
-      {/* Ultima corrida */}
-      {estado.ultimaCorrida && (
-        <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 text-xs ${
-            estado.ultimaOk === false
-              ? "bg-rose-50 text-rose-700 ring-rose-200"
-              : "bg-stone-50 text-stone-600 ring-stone-200"
-          }`}
-          title={
-            estado.ultimaOk === false
-              ? `Ultima corrida CON ERROR: ${estado.ultimoMensaje || "sin detalle"}`
-              : `Ultima corrida: ${textoFecha(estado.ultimaCorrida)} · ${estado.ultimosNuevos} nuevos · ${estado.ultimosActualizados} actualizados`
-          }
-        >
-          {estado.ultimaOk === false ? "ULTIMA: ERROR" : "ULTIMA:"}{" "}
-          {textoFecha(estado.ultimaCorrida)}
-          {estado.ultimaOk === false
-            ? ""
-            : ` · ${estado.ultimosActualizados} act.`}
-        </span>
-      )}
+      {/* Chip "ULTIMA": ELIMINADO (pedido del duenio). El resultado de la
+          ultima importacion ya se ve en el chip de STOCK de arriba
+          ("STOCK · fecha · +N nuevos · N actualizados"), asi que aca era
+          repetido (y mostraba errores viejos que confundian). */}
     </span>
   );
 }
