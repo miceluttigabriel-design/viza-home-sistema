@@ -18,15 +18,16 @@
 //
 // GET /api/pedido-especial/catalogo
 //   Cualquier usuario logueado. Devuelve:
-//     · proveedores       → DISTINCT fabricante (orden alfabético)
+//     · proveedores       → DISTINCT fabricante de la BASE (orden alfabético)
+//       + los de la LISTA EXCEL (hoja base: FABRICANTE / CATEGORIA /
+//       DIVISION) que la BASE no tiene — los repetidos se eliminan.
 //     · tiposPorProveedor → { fabricante: [tipos…] } (+ tipos creados)
-//     · tipos             → DISTINCT tipo (orden alfabético) + creados
+//     · tipos             → DISTINCT DIVISION (BASE y Excel) + creados
 //     · tiposExtra        → los nombres de los tipos CREADOS (v6)
-//     · porcentajes       → Task 113 v4: un registro por par (fabricante,
-//       tipo) con los % resueltos DE LA BASE (cascada par → proveedor →
-//       tipo → general; respaldo: los % del panel del admin si algún
-//       campo no aparece en la BASE). Para los tipos CREADOS salen con
-//       el promedio GENERAL (no hay productos de ese tipo todavía).
+//     · porcentajes       → un registro por combinación (fabricante, GRUPO,
+//       tipo): promedios de la BASE cuando la combinación está en la BASE,
+//       o promedios de la LISTA EXCEL cuando no está. NUNCA se escribe
+//       nada en Product (la BASE no se toca).
 //   Si la consulta falla devuelve listas vacías — NUNCA rompe la app.
 //
 // POST /api/pedido-especial/catalogo  { tipo: "..." }
@@ -97,12 +98,12 @@ export async function GET() {
         tipos.add(tip);
       }
     }
-    // CATÁLOGO EXTRA (pedido del dueño): proveedores de la LISTA VIZA HOME
-    // que la BASE todavía NO tiene. Se ofrecen SOLO dentro del PEDIDO
-    // ESPECIAL para cotizar; NUNCA se escriben en la BASE (tabla Product).
-    // Si el fabricante ya existe en la BASE, no se agrega nada: lo que la
-    // BASE tiene manda.
-    for (const c of combosDelCatalogoExtra(proveedores)) {
+    // LISTA EXCEL (pedido del dueño: "quiero que ponga tanto de la BASE
+    // como del Excel… los repetidos los eliminás"): se ofrecen TODAS las
+    // combinaciones del Excel en el buscador del PEDIDO ESPECIAL, sin
+    // repetir las que la BASE ya tiene (dedupe por clave normalizada).
+    // NUNCA se escriben en la BASE (tabla Product); es solo para buscar acá.
+    for (const c of combosDelCatalogoExtra()) {
       const fab = String(c.fabricante || "").trim();
       if (!fab) continue;
       if (!tiposPorProveedor[fab]) {
