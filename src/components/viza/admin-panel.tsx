@@ -560,6 +560,13 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   const [nameSort, setNameSort] = useState<"asc" | "desc" | null>(null);
   // Filtro activo de etiqueta de color: "verde" | "azul" | "dorado" | "rojo" | null
   const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  // ─── EXPORTAR LISTA DE PRECIOS (Task 167, pedido del dueño) ───
+  // Botón compacto con dos opciones: BASE COMPLETA o SOLO LO FILTRADO
+  // (SELECCIONADO, QUEMA STOCK, VIZA LÍQUIDA, #HASHTAG, búsqueda, filtros por
+  // columna...). El Excel sale SOLO con precios: contado y todas las cuotas,
+  // sin entrega inicial — nunca costo, margen ni dato interno.
+  const [exportPreciosOpen, setExportPreciosOpen] = useState(false);
+  const [exportandoPrecios, setExportandoPrecios] = useState(false);
 
   // ─── ETIQUETAS CREADAS POR EL SUPREMO (Task 84) ───
   // Etiquetas extra a las 4 fijas (verde/azul/dorado/rojo), con nombre y
@@ -858,6 +865,96 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   useEffect(() => {
     setPage(1);
   }, [search]);
+
+  // ─── EXPORTAR LISTA DE PRECIOS (Task 167, pedido del dueño) ───
+  // Arma EXACTAMENTE los mismos parámetros que usa la tabla (fetchProducts):
+  // búsqueda, etiqueta activa (SELECCIONADO / QUEMA STOCK / VIZA LÍQUIDA /
+  // #HASHTAG / etiquetas creadas), filtros por columna y orden. El backend
+  // aplica el mismo criterio, así "SOLO LO FILTRADO" baja las mismas filas
+  // que el admin está viendo en pantalla.
+  const paramsDeFiltros = () => {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("search", search.trim());
+    if (labelFilter) params.set("etiquetaColor", labelFilter);
+    const activeFilters = Object.fromEntries(
+      Object.entries(columnFilters).filter(([, v]) => Array.isArray(v) && v.length > 0)
+    );
+    if (Object.keys(activeFilters).length > 0) {
+      params.set("filters", JSON.stringify(activeFilters));
+    }
+    if (codSort) {
+      params.set("sort", "sku");
+      params.set("dir", codSort);
+    } else if (nameSort) {
+      params.set("sort", "name");
+      params.set("dir", nameSort);
+    } else if (stockSort) {
+      params.set("sort", "stock");
+      params.set("dir", stockSort);
+    }
+    return params;
+  };
+
+  const hayFiltrosActivos =
+    !!search.trim() || !!labelFilter || Object.values(columnFilters).some((v) => v.length > 0);
+
+  const exportarListaPrecios = async (modo: "completa" | "filtrado") => {
+    setExportPreciosOpen(false);
+    if (exportandoPrecios) return;
+    setExportandoPrecios(true);
+    const toastId = toast.loading(
+      modo === "filtrado"
+        ? "Generando la lista de precios de lo filtrado..."
+        : "Generando la lista de precios completa..."
+    );
+    try {
+      const params = modo === "filtrado" ? paramsDeFiltros() : new URLSearchParams();
+      params.set("scope", modo);
+      const res = await fetch(`/api/products/export-precios?${params.toString()}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Error HTTP ${res.status}`);
+      }
+      const totalExportado = Number(res.headers.get("X-Total-Productos") || "0");
+      if (totalExportado === 0) {
+        toast.warning("No hay productos con esos filtros para exportar.", {
+          id: toastId,
+          duration: 8000,
+        });
+        return;
+      }
+      // Nombre real que manda el servidor (Content-Disposition); si no llega,
+      // uno de respaldo con la misma forma.
+      let filename = `LISTA_PRECIOS_VIZA_HOME_${
+        modo === "filtrado" ? "FILTRADO" : "COMPLETA"
+      }.xlsx`;
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = /filename="([^"]+)"/i.exec(cd);
+      if (m) filename = m[1];
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(
+        `Lista de precios lista: ${totalExportado} producto${
+          totalExportado === 1 ? "" : "s"
+        } en Excel.`,
+        { id: toastId, duration: 8000 }
+      );
+    } catch (error) {
+      toast.error(`No se pudo exportar: ${(error as Error).message}`, {
+        id: toastId,
+        duration: 12000,
+      });
+    } finally {
+      setExportandoPrecios(false);
+    }
+  };
 
   const handleChange = (productId: string, key: string, value: string) => {
     // Modo SOLO LECTURA (Task 78): ninguna celda se edita (defensa extra;
@@ -1327,12 +1424,74 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     El cotizador del vendedor ya estira los % DIRECTO de la
                     BASE (margenes por proveedor + tipo de producto), asi que
                     esta configuracion manual ya no se usa. */}
-                {/* Boton EXPORTAR EXCEL — ELIMINADO (pedido del dueño): ya no
-                    hace falta. La copia de la base se manda sola por correo
-                    con las COPIAS DE SEGURIDAD (08:00 / 14:00 / 23:00) y el
-                    boton ENVIAR COPIA AHORA cubre el "quiero la copia ya".
-                    La API /api/products/export queda publicada por si algun
-                    dia hace falta, pero el boton ya no se muestra. */}
+                {/* TASK 167 (pedido del dueño) — EXPORTAR LISTA DE PRECIOS:
+                    botón COMPACTO con dos opciones:
+                      · SOLO LO FILTRADO → lo que está en pantalla (SELECCIONADO,
+                        QUEMA STOCK, VIZA LÍQUIDA, #HASHTAG, búsqueda, filtros
+                        por columna).
+                      · BASE COMPLETA → todos los productos.
+                    El Excel sale SOLO con: COD, PROVEDOR, MARCA, GRUPO,
+                    SUB-GRUPO, TIPO PRODUCTO, MODELO, CAPACIDAD, CORES,
+                    REF.FABRICA, DESCRIPCION, PRECIO CONTADO y CUOTA 1..30.
+                    NUNCA costo, margen ni dato interno (lo garantiza la API
+                    /api/products/export-precios). */}
+                <div className="relative">
+                  <button
+                    id="btn-exportar-lista-precios"
+                    onClick={() => setExportPreciosOpen((v) => !v)}
+                    disabled={exportandoPrecios}
+                    className="h-7 px-2.5 rounded-lg text-white font-bold text-[11px] flex items-center gap-1 hover:brightness-110 transition-colors disabled:opacity-60 disabled:cursor-wait"
+                    style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
+                    title="Exportar la lista de precios a Excel: contado y todas las cuotas, sin costos ni márgenes"
+                    aria-haspopup="menu"
+                    aria-expanded={exportPreciosOpen}
+                  >
+                    <FileSpreadsheet className="h-3 w-3" />
+                    {exportandoPrecios ? "EXPORTANDO…" : "EXPORTAR LISTA DE PRECIOS"}
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                  {exportPreciosOpen && (
+                    <>
+                      {/* capa para cerrar el menú al tocar afuera */}
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setExportPreciosOpen(false)}
+                      />
+                      <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-stone-200 bg-white shadow-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => exportarListaPrecios("filtrado")}
+                          className="w-full text-left px-3 py-2.5 hover:bg-amber-50 transition-colors border-b border-stone-100"
+                        >
+                          <span className="block text-[11px] font-extrabold text-stone-800 uppercase tracking-wide">
+                            {hayFiltrosActivos ? "Solo lo filtrado" : "Lo que está en pantalla"}
+                          </span>
+                          <span className="block text-[11px] text-stone-500 mt-0.5">
+                            {hayFiltrosActivos
+                              ? `${total} producto${total === 1 ? "" : "s"} con los filtros activos`
+                              : `${total} producto${total === 1 ? "" : "s"} (sin filtros activos)`}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => exportarListaPrecios("completa")}
+                          className="w-full text-left px-3 py-2.5 hover:bg-amber-50 transition-colors"
+                        >
+                          <span className="block text-[11px] font-extrabold text-stone-800 uppercase tracking-wide">
+                            Base completa
+                          </span>
+                          <span className="block text-[11px] text-stone-500 mt-0.5">
+                            Todos los productos, sin filtros
+                          </span>
+                        </button>
+                        <div className="px-3 py-2 bg-stone-50 border-t border-stone-100 text-[10px] leading-snug text-stone-500">
+                          <b className="text-stone-700">Solo precios:</b> contado y cuotas 1 a 30,
+                          sin entrega inicial. No incluye costos ni márgenes.
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 {/* Chip COPIAS DE SEGURIDAD (Task 134, pedido del dueño) —
                     solo Supremo: el interruptor ON/OFF de los backups
