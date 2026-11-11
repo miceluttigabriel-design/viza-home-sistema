@@ -4,8 +4,8 @@
 // Hay PROVEEDORES cuyos productos NO son mercadería para la venta: son
 // vehículos / bienes de uso interno de la empresa (ej. AUTOMOTOR S.A.).
 //
-// Regla única, usada por el ENCARGADO DE COMPRA y por STOCK GENERAL:
-//   · Encargado de Compra → NO los considera (no se compran).
+// Regla única, usada por el DEPARTAMENTO DE COMPRA y por STOCK GENERAL:
+//   · Departamento de Compra → NO los considera (no se compran).
 //   · Stock General      → se ven APARTE, en su propio detalle, para no
 //                          mezclarlos con el inventario de venta.
 //

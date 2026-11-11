@@ -2,7 +2,7 @@
 // ENCARGADOS · CARGA DE DATOS COMPARTIDA (Task 160/161)
 //
 // Una sola función server-side arma la entrada que necesitan el
-// ENCARGADO DE DISTRIBUCIÓN y el ENCARGADO DE COMPRA:
+// DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA y el DEPARTAMENTO DE COMPRA:
 //   · nodos = CENTRAL + las 4 sucursales (+ lo que haya en StockSucursal)
 //   · saldo real por producto/sucursal (incluye filas en 0)
 //   · STOCK IDEAL por producto/sucursal (si está configurado)
@@ -154,7 +154,7 @@ export async function cargarDatosEncargado(
       proveedor: p.fabricante,
       // La etiqueta VERDE de la Base es la que el dueño llama SELECCIONADO.
       seleccionado: String(p.etiquetaColor || "").toLowerCase() === "verde",
-      // Etiqueta cruda (Task 168): el Encargado de Compra incluye verde,
+      // Etiqueta cruda (Task 168): el Departamento de Compra incluye verde,
       // azul (PARA PEDIDO) y productos SIN etiqueta; excluye el resto.
       etiqueta: p.etiquetaColor ? String(p.etiquetaColor).toLowerCase() : null,
       modelo: p.modelo,

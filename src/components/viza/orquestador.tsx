@@ -15,10 +15,10 @@
 //       LA BASE → AdminPanel
 //       COTIZADOR → SalesPanel
 //   · AL LADO DERECHO DE CADA CUADRO PRINCIPAL:
-//       ENCARGADO DE DISTRIBUCIÓN (a la altura de STOCK GENERAL)
-//       ENCARGADO DE COMPRA       (a la altura de LA BASE)
+//       DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA (a la altura de STOCK GENERAL)
+//       DEPARTAMENTO DE COMPRA       (a la altura de LA BASE)
 //   · DERECHA: los 4 cuadritos de sucursales — NUEVA ESPERANZA · KATUETE ·
-//     LA PALOMA · SALTOS DEL GUAIRA — unidos al Encargado de Distribución.
+//     LA PALOMA · SALTOS DEL GUAIRA — unidos al Departamento Distribución/Logística.
 //   · Sin etiquetas "ALIMENTA"/"LIGADO": solo las líneas del flujo.
 //
 // Marca: azul #155789 · dorado #D9B86B · logo /viza-home-logo-nuevo.png
@@ -65,7 +65,7 @@ interface OrquestadorProps {
   // Task 144: SOLO el supremo recibe esta prop. Si no llega, el botón GDA
   // no se renderiza para admins ni VIPs.
   onGoGestion?: () => void;
-  // Pedido del dueño: abre el ENCARGADO DE COMPRA como PÁGINA COMPLETA.
+  // Pedido del dueño: abre el DEPARTAMENTO DE COMPRA como PÁGINA COMPLETA.
   // Lo recibe el supremo y los usuarios habilitados (page.tsx decide según
   // src/lib/acceso-encargado-compra.ts).
   onGoCompra?: () => void;
@@ -202,9 +202,9 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
 
 // ─── Agents cards (Task 159/160, pedido del dueño) ───
 // Dos cuadritos MENORES en el lugar del antiguo "Distribuidor Inteligente":
-//   · ENCARGADO DE DISTRIBUCIÓN → ACTIVO: analiza Base + Stock de las 4
+//   · DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA → ACTIVO: analiza Base + Stock de las 4
 //     sucursales y genera el plan + PDF (solo transferencias internas).
-//   · ENCARGADO DE COMPRA       → ACTIVO: analiza la necesidad de compra
+//   · DEPARTAMENTO DE COMPRA       → ACTIVO: analiza la necesidad de compra
 //     de la red (stock + CENTRAL + ventas) y arma el informe + PDF.
 function AgenteCard({
   c,
@@ -257,7 +257,7 @@ function AgenteDistribucionCard({ onClick }: { onClick?: () => void }) {
     <AgenteCard
       c={C_DISTRI}
       icon={<Network className="h-4 w-4" style={{ color: C_DISTRI }} />}
-      titulo="ENCARGADO DE DISTRIBUCIÓN"
+      titulo="DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA"
       estado="ACTIVO"
       onClick={onClick}
     />
@@ -269,7 +269,7 @@ function AgenteCompraCard({ onClick, hint }: { onClick?: () => void; hint?: stri
     <AgenteCard
       c={C_COMPRA}
       icon={<ShoppingCart className="h-4 w-4" style={{ color: C_COMPRA }} />}
-      titulo="ENCARGADO DE COMPRA"
+      titulo="DEPARTAMENTO DE COMPRA"
       estado="ACTIVO"
       onClick={onClick}
       hint={hint}
@@ -285,7 +285,7 @@ function SucursalCard({ nombre }: { nombre: string }) {
         background: `linear-gradient(155deg, ${C_DISTRI}1a, rgba(9,12,17,0.94) 70%)`,
         border: `1px dashed ${C_DISTRI}55`,
       }}
-      title={`${nombre} — stock controlado por el Encargado de Distribución`}
+      title={`${nombre} — stock controlado por el Departamento Distribución/Logística`}
     >
       <MapPin className="h-3.5 w-3.5 mb-1" style={{ color: C_DISTRI }} />
       <p className="text-[10.5px] font-black text-white leading-tight">{nombre}</p>
@@ -326,13 +326,13 @@ const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, to
 // Stock y hacia ABAJO al Cotizador.
 const FLUJO_BASE_STOCK = "M 180 160 C 180 150, 180 140, 180 130";
 const FLUJO_BASE_COTIZ = "M 180 290 C 180 300, 180 310, 180 320";
-// STOCK GENERAL → ENCARGADO DE DISTRIBUCIÓN (mismo eje horizontal, y=65).
+// STOCK GENERAL → DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA (mismo eje horizontal, y=65).
 const FLUJO_STOCK_DISTRI = "M 360 65 C 390 65, 400 65, 430 65";
-// LA BASE → ENCARGADO DE COMPRA (mismo eje horizontal, y=225).
+// LA BASE → DEPARTAMENTO DE COMPRA (mismo eje horizontal, y=225).
 const FLUJO_BASE_COMPRA = "M 360 225 C 390 225, 400 225, 430 225";
 // Los dos encargados quedan uno sobre otro: línea corta vertical que los une.
 const FLUJO_COMPRA_DISTRI = "M 560 170 C 560 155, 560 135, 560 120";
-// Del Encargado de Distribución salen las 4 líneas hacia los cuadritos de
+// Del Departamento Distribución/Logística salen las 4 líneas hacia los cuadritos de
 // sucursales (todas desde el mismo punto de salida, abriéndose en abanico).
 const FLUJOS_SUCURSALES = SUC_Y.map((y, i) => {
   const yd = y + SUC_H / 2; // centro del cuadrito
@@ -411,7 +411,7 @@ function Conector({ color = DORADO }: { color?: string }) {
 export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion, onGoCompra }: OrquestadorProps) {
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
   const esSupremo = user.role === "supremo_admin";
-  // Pedido del dueño: el ENCARGADO DE COMPRA se abre como PÁGINA COMPLETA
+  // Pedido del dueño: el DEPARTAMENTO DE COMPRA se abre como PÁGINA COMPLETA
   // (igual que STOCK GENERAL), sin ventana encima. Para admins/VIP el cuadro
   // mantiene el comportamiento anterior (abre STOCK GENERAL).
   // Task 165: VIP por ROL promovido desde el GDA o por la lista histórica.
@@ -518,7 +518,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion,
           <div style={place(POS.compra)}>
             <AgenteCompraCard
               onClick={onGoCompra || onGoStock}
-              hint={onGoCompra ? "abrir el Encargado de Compra" : "abrir Stock General"}
+              hint={onGoCompra ? "abrir el Departamento de Compra" : "abrir Stock General"}
             />
           </div>
           {SUCURSALES_CUADROS.map((nombre, i) => (
@@ -539,7 +539,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion,
           <div className="min-h-[110px]">
             <AgenteCompraCard
               onClick={onGoCompra || onGoStock}
-              hint={onGoCompra ? "abrir el Encargado de Compra" : "abrir Stock General"}
+              hint={onGoCompra ? "abrir el Departamento de Compra" : "abrir Stock General"}
             />
           </div>
           <Conector />

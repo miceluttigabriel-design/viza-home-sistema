@@ -12,7 +12,7 @@ import { cargarDatosEncargado } from "@/lib/encargado-datos";
 import { puedeUsarEncargadoCompra } from "@/lib/acceso-encargado-compra";
 
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE COMPRA — API (Task 161)
+// DEPARTAMENTO DE COMPRA — API (Task 161)
 //
 // POST /api/stock/compra          → analiza + IA + guarda historial
 // POST /api/stock/compra?ia=0     → solo recalcula (sin IA ni historial,
@@ -44,7 +44,7 @@ async function responder(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "El Encargado de Compra está habilitado solo para el supremo y los usuarios autorizados",
+            "El Departamento de Compra está habilitado solo para el supremo y los usuarios autorizados",
         },
         { status: 403 }
       );
@@ -63,7 +63,7 @@ async function responder(req: NextRequest) {
       const ia = conIA
         ? analisisCompraRespaldo(
             plan,
-            "Todavía no hay stock por sucursal. Importá la planilla del ERP para activar al Encargado de Compra."
+            "Todavía no hay stock por sucursal. Importá la planilla del ERP para activar al Departamento de Compra."
           )
         : null;
       return NextResponse.json({

@@ -1,6 +1,6 @@
-// ─── ACCESO AL ENCARGADO DE COMPRA (pedido del dueño) ───
+// ─── ACCESO AL DEPARTAMENTO DE COMPRA (pedido del dueño) ───
 //
-// El ENCARGADO DE COMPRA nació exclusivo del supremo_admin (Task 161). El
+// El DEPARTAMENTO DE COMPRA nació exclusivo del supremo_admin (Task 161). El
 // dueño pidió habilitar también a estos usuarios ADMIN:
 //   · baltazar@viza.com.py — GERENTE ADMINISTRATIVO
 //   · viza@viza.com.py     — VILMAR CESAR ZAGO PEREIRA (DIRECTORIO)
@@ -19,7 +19,7 @@ export const EMAILS_ENCARGADO_COMPRA: string[] = [
   "viza@viza.com.py",
 ];
 
-// true = este usuario puede abrir y usar el ENCARGADO DE COMPRA.
+// true = este usuario puede abrir y usar el DEPARTAMENTO DE COMPRA.
 export function puedeUsarEncargadoCompra(
   email?: string | null,
   role?: string | null

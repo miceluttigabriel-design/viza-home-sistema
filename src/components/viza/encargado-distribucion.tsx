@@ -241,7 +241,7 @@ export function EncargadoDistribucion({
             </div>
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-black text-white tracking-tight leading-tight">
-                ENCARGADO DE DISTRIBUCIÓN
+                DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA
               </h2>
               <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-sky-200/90">
                 IA · Stock de las 4 sucursales · solo transferencias internas

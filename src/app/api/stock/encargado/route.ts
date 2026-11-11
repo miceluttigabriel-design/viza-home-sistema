@@ -13,7 +13,7 @@ import {
 import { cargarDatosEncargado } from "@/lib/encargado-datos";
 
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE DISTRIBUCIÓN — API (Task 160)
+// DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA — API (Task 160)
 //
 // POST /api/stock/encargado          → analiza + IA + guarda historial
 // POST /api/stock/encargado?ia=0     → solo recalcula el plan (sin IA y
@@ -40,7 +40,7 @@ async function responder(req: NextRequest) {
     // igual que el botón de Stock General. Nadie más puede consultar el plan.
     if (role !== "supremo_admin") {
       return NextResponse.json(
-        { error: "El Encargado de Distribución es exclusivo del usuario supremo" },
+        { error: "El Departamento Distribución/Logística es exclusivo del usuario supremo" },
         { status: 403 }
       );
     }
@@ -106,7 +106,7 @@ async function responder(req: NextRequest) {
       {
         error:
           error?.message ||
-          "Error al calcular el plan del Encargado de Distribución",
+          "Error al calcular el plan del Departamento Distribución/Logística",
       },
       { status: 500 }
     );

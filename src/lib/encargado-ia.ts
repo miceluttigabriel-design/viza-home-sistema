@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE DISTRIBUCIÓN — CAPA DE IA (Task 160)
+// DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA — CAPA DE IA (Task 160)
 //
 // Usa NVIDIA NIM (API compatible con OpenAI):
 //   POST https://integrate.api.nvidia.com/v1/chat/completions
@@ -175,7 +175,7 @@ function contextoParaIA(plan: PlanEncargado) {
   };
 }
 
-const SYSTEM_PROMPT = `Sos el ENCARGADO DE DISTRIBUCIÓN de VIZA HOME (Paraguay).
+const SYSTEM_PROMPT = `Sos el DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA de VIZA HOME (Paraguay).
 Trabajás dentro del sistema, con stock real por sucursal. Tu única función es
 mantener pareado el stock de las 4 sucursales: NUEVA ESPERANZA, KATUETE,
 LA PALOMA y SALTOS DEL GUAIRA.
@@ -300,7 +300,7 @@ export async function analizarPlanConIA(
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE COMPRA — ANÁLISIS CON IA (Task 161)
+// DEPARTAMENTO DE COMPRA — ANÁLISIS CON IA (Task 161)
 // La IA NO calcula la necesidad: el motor de compra ya la calculó.
 // Solo interpreta, prioriza por proveedor y redacta el informe.
 // ═══════════════════════════════════════════════════════════════════
@@ -313,7 +313,7 @@ export function analisisCompraRespaldo(
   const resumen =
     r.productos > 0
       ? `Analicé ${r.productosAnalizados} códigos con stock en las 4 sucursales. Hay necesidad de compra en ${r.productos} código(s): ${r.unidades} unidad(es) para ${r.proveedores} proveedor(es).`
-      : `Analicé ${r.productosAnalizados} códigos con stock en las 4 sucursales. No hay necesidad de compra: la red está cubierta con el stock actual y las transferencias internas.`;
+      : `Analicé ${r.productosAnalizados} códigos con stock en las 4 sucursales. No hay necesidad de compra: las sucursales están cubiertas con el stock actual, CENTRAL y las transferencias internas.`;
 
   const prioridades = plan.filas.slice(0, 6).map((f) => {
     const venta =
@@ -334,7 +334,7 @@ export function analisisCompraRespaldo(
 
   const mensaje =
     r.productos === 0
-      ? "No hay compras sugeridas. Si falta mercadería en una sucursal, primero usá el ENCARGADO DE DISTRIBUCIÓN."
+      ? "No hay compras sugeridas. Si falta mercadería en una sucursal, primero usá el DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA."
       : "Esta es una recomendación de compra: el sistema no genera órdenes ni compra a proveedores.";
 
   return {
@@ -363,6 +363,7 @@ function contextoCompra(plan: PlanCompra) {
       "Productos con otra etiqueta (DESCONTINUADO, QUEMA STOCK, etc.) quedan fuera",
       "Solo códigos desde 100.000",
       "Cada sucursal necesita al menos 1 unidad",
+      "CENTRAL solo cuenta como stock ya comprado (en tránsito/depósito): NUNCA se compra para CENTRAL, solo para las 4 sucursales",
     ],
     sucursales: plan.sucursales,
     resumen: plan.resumen,
@@ -404,16 +405,18 @@ function contextoCompra(plan: PlanCompra) {
   };
 }
 
-const SYSTEM_PROMPT_COMPRA = `Sos el ENCARGADO DE COMPRA de VIZA HOME (Paraguay).
+const SYSTEM_PROMPT_COMPRA = `Sos el DEPARTAMENTO DE COMPRA de VIZA HOME (Paraguay).
 Trabajás dentro del sistema, con el stock real por sucursal y las ventas
-detectadas entre análisis. Tu función es analizar la NECESIDAD DE COMPRA de la
-red (NUEVA ESPERANZA, KATUETE, LA PALOMA y SALTOS DEL GUAIRA + CENTRAL).
+detectadas entre análisis. Tu función es analizar la NECESIDAD DE COMPRA de
+las 4 sucursales (NUEVA ESPERANZA, KATUETE, LA PALOMA y SALTOS DEL GUAIRA).
 
 REGLAS QUE NUNCA PODÉS ROMPER:
 1. El sistema SOLO recomienda compras: NUNCA generás una orden de compra ni
    decís que la compra ya fue hecha.
-2. Primero se usa el stock de CENTRAL y las transferencias internas. Solo es
-   necesidad de compra lo que queda sin cubrir después de eso.
+2. CENTRAL son productos YA COMPRADOS que están en tránsito o en el depósito
+   central: cuenta SOLO como stock disponible. NUNCA se compra para CENTRAL;
+   su stock se usa para reponer las 4 sucursales con el ENCARGADO DE
+   DISTRIBUCIÓN. La compra es únicamente para las 4 sucursales.
 3. Leés el TIPO, el COLOR (CORES), el PROVEEDOR (columna FABRICANTE) y las
    cantidades. Agrupá la recomendación por proveedor cuando sea posible.
 4. Las unidades que bajaron desde el último análisis son VENTAS: priorizá esos
@@ -427,8 +430,10 @@ REGLAS QUE NUNCA PODÉS ROMPER:
    tiene cualquier otra etiqueta (DESCONTINUADO, QUEMA STOCK, etc.) queda
    FUERA del análisis: no lo propongas. Tampoco códigos viejos (menores a
    100.000).
-9. Cada sucursal necesita al menos 1 unidad del producto analizado. Si la
-   red no alcanza para eso, esa diferencia es necesidad de compra.
+9. Cada una de las 4 sucursales necesita al menos 1 unidad del producto
+   analizado. La necesidad de compra es lo que falta DESPUÉS de contar el
+   stock de las sucursales y el de CENTRAL. Nunca propongas comprar para
+   CENTRAL.
 
 Respondé SOLO con un objeto JSON válido, sin markdown ni texto extra:
 {
@@ -465,7 +470,7 @@ export async function analizarCompraConIA(
           { role: "system", content: SYSTEM_PROMPT_COMPRA },
           {
             role: "user",
-            content: `Este es el plan determinístico del Encargado de Compra. Interpretalo y redactá el informe:\n${JSON.stringify(
+            content: `Este es el plan determinístico del Departamento de Compra. Interpretalo y redactá el informe:\n${JSON.stringify(
               contextoCompra(plan)
             )}`,
           },

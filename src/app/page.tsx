@@ -17,7 +17,7 @@ import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 // ZAGO PEREIRA) ve el botón IR A STOCK GENERAL y puede entrar a esa vista
 // fuera del supremo (lista única en src/lib/acceso-stock-general.ts).
 import { puedeIrAStockGeneral } from "@/lib/acceso-stock-general";
-// Pedido del dueño: el ENCARGADO DE COMPRA se habilita además del supremo a
+// Pedido del dueño: el DEPARTAMENTO DE COMPRA se habilita además del supremo a
 // baltazar@viza.com.py y viza@viza.com.py (lista única en
 // src/lib/acceso-encargado-compra.ts).
 import { puedeUsarEncargadoCompra } from "@/lib/acceso-encargado-compra";
@@ -88,7 +88,7 @@ export default function Home() {
   // cualquier otro email, se ignora y cae a su vista normal.
   const verStockGeneral = puedeIrAStockGeneral(user.email);
 
-  // Pedido del dueño: ENCARGADO DE COMPRA habilitado para el supremo y para
+  // Pedido del dueño: DEPARTAMENTO DE COMPRA habilitado para el supremo y para
   // baltazar@viza.com.py / viza@viza.com.py. Nadie más lo ve ni lo abre.
   const verEncargadoCompra = puedeUsarEncargadoCompra(user.email, role);
 
@@ -209,7 +209,7 @@ export default function Home() {
         />
       );
     }
-    // Pedido del dueño: los ADMIN habilitados abren el ENCARGADO DE COMPRA
+    // Pedido del dueño: los ADMIN habilitados abren el DEPARTAMENTO DE COMPRA
     // como PÁGINA COMPLETA, igual que el supremo.
     if (view === "compra" && verEncargadoCompra) {
       return (
@@ -273,7 +273,7 @@ export default function Home() {
         />
       );
     }
-    // Pedido del dueño: ENCARGADO DE COMPRA como PÁGINA COMPLETA (igual que
+    // Pedido del dueño: DEPARTAMENTO DE COMPRA como PÁGINA COMPLETA (igual que
     // STOCK GENERAL), con el botón ORQUESTADOR para volver. Exclusivo del
     // supremo, igual que la API del módulo.
     if (view === "compra") {

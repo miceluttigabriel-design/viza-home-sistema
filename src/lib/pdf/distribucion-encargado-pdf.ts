@@ -22,7 +22,7 @@ import type {
 import { motivoVisibleTransferencia } from "@/lib/encargado-distribucion";
 
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE DISTRIBUCIÓN — PDF (Task 160)
+// DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA — PDF (Task 160)
 //
 // Documento completo de transferencias internas:
 //   · resumen ejecutivo + análisis del Encargado (IA o respaldo)
@@ -104,7 +104,7 @@ export function generarPdfEncargado(
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(...GREY);
-      doc.text("ENCARGADO DE DISTRIBUCIÓN · continuación", MARGEN, 28);
+      doc.text("DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA · continuación", MARGEN, 28);
       doc.setDrawColor(...LINE);
       doc.setLineWidth(0.6);
       doc.line(MARGEN, 34, pageW - MARGEN, 34);
@@ -242,7 +242,7 @@ export function generarPdfEncargado(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(17);
   doc.setTextColor(...BLUE);
-  doc.text("ENCARGADO DE DISTRIBUCIÓN", MARGEN, 84);
+  doc.text("DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA", MARGEN, 84);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
@@ -569,7 +569,7 @@ export function generarPdfEncargado(
   doc.setFontSize(6.8);
   doc.setTextColor(...GREY);
   const nota = doc.splitTextToSize(
-    "Documento interno generado por el ENCARGADO DE DISTRIBUCIÓN de VIZA HOME. Solo contiene transferencias entre sucursales: no es una orden de compra ni genera compras a proveedores. La mercadería la mueve el equipo; el sistema recomienda y deja el plan listo.",
+    "Documento interno generado por el DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA de VIZA HOME. Solo contiene transferencias entre sucursales: no es una orden de compra ni genera compras a proveedores. La mercadería la mueve el equipo; el sistema recomienda y deja el plan listo.",
     contentW
   );
   doc.text(nota, MARGEN, y + 10);
@@ -585,7 +585,7 @@ export function generarPdfEncargado(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.6);
     doc.setTextColor(...BLUE);
-    doc.text("VIZA HOME · ENCARGADO DE DISTRIBUCIÓN", MARGEN, pageH - 18);
+    doc.text("VIZA HOME · DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA", MARGEN, pageH - 18);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...GREY);
     doc.text(

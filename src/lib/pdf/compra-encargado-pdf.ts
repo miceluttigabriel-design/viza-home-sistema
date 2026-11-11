@@ -21,7 +21,7 @@ import type {
 } from "@/lib/encargado-compra";
 
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE COMPRA — PDF (Task 161)
+// DEPARTAMENTO DE COMPRA — PDF (Task 161)
 //
 // Documento de NECESIDAD DE COMPRA de la red (4 sucursales + CENTRAL):
 //   · resumen ejecutivo + análisis del Encargado (IA o respaldo)
@@ -93,7 +93,7 @@ export function generarPdfCompra(
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(...GREY);
-      doc.text("ENCARGADO DE COMPRA · continuación", MARGEN, 28);
+      doc.text("DEPARTAMENTO DE COMPRA · continuación", MARGEN, 28);
       doc.setDrawColor(...LINE);
       doc.setLineWidth(0.6);
       doc.line(MARGEN, 34, pageW - MARGEN, 34);
@@ -224,7 +224,7 @@ export function generarPdfCompra(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(17);
   doc.setTextColor(...BLUE);
-  doc.text("ENCARGADO DE COMPRA", MARGEN, 84);
+  doc.text("DEPARTAMENTO DE COMPRA", MARGEN, 84);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
@@ -232,7 +232,7 @@ export function generarPdfCompra(
   doc.text(
     proveedorPdf
       ? `PROVEEDOR: ${proveedorPdf} · SOLO RECOMENDACIÓN · SIN ORDEN DE COMPRA`
-      : "NECESIDAD DE COMPRA DE LA RED · SOLO RECOMENDACIÓN · SIN ORDEN DE COMPRA",
+      : "NECESIDAD DE COMPRA DE LAS 4 SUCURSALES · SOLO RECOMENDACIÓN · SIN ORDEN DE COMPRA",
     MARGEN,
     98
   );
@@ -300,7 +300,7 @@ export function generarPdfCompra(
   // En el PDF de UN proveedor no va: el análisis (resumen, prioridades,
   // alertas) es de TODA la red y confundiría el pedido de ese proveedor.
   if (!proveedorPdf) {
-    tituloSeccion("ANÁLISIS DEL ENCARGADO DE COMPRA");
+    tituloSeccion("ANÁLISIS DEL DEPARTAMENTO DE COMPRA");
     const etiquetaIA = ia?.activa
       ? `IA NVIDIA NIM · ${ia.modelo || "modelo configurado"}`
       : "RESPALDO DETERMINÍSTICO · IA NO CONFIGURADA";
@@ -316,7 +316,7 @@ export function generarPdfCompra(
       parrafo(
         plan.filas.length > 0
           ? `El motor detectó necesidad de compra en ${plan.resumen.productos} código(s): ${plan.resumen.unidades} unidad(es) para ${plan.resumen.proveedores} proveedor(es).`
-          : "No hay necesidad de compra: la red está cubierta con el stock actual y las transferencias internas."
+          : "No hay necesidad de compra: las 4 sucursales están cubiertas con el stock actual, CENTRAL y las transferencias internas."
       );
     }
     if (ia?.prioridades?.length) lista("PRIORIDADES", ia.prioridades);
@@ -344,7 +344,7 @@ export function generarPdfCompra(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(21, 128, 61);
-    doc.text("SIN NECESIDAD DE COMPRA: la red está cubierta.", MARGEN + 10, y + 19);
+    doc.text("SIN NECESIDAD DE COMPRA: las sucursales están cubiertas.", MARGEN + 10, y + 19);
     y += 40;
   } else if (encabezadoTabla(colsProv)) {
     plan.proveedores.forEach((p, i) => {
@@ -540,7 +540,7 @@ export function generarPdfCompra(
   doc.setFontSize(6.8);
   doc.setTextColor(...GREY);
   const nota = doc.splitTextToSize(
-    "Documento interno generado por el ENCARGADO DE COMPRA de VIZA HOME. Solo analiza productos SELECCIONADO (verde), PARA PEDIDO (azul) y SIN etiqueta en la Base, y códigos desde 100.000; los productos con otra etiqueta (DESCONTINUADO, QUEMA STOCK, etc.) quedan fuera. Es una RECOMENDACIÓN: no es una orden de compra y no genera compras a proveedores. Antes de comprar, usar CENTRAL y las transferencias internas del ENCARGADO DE DISTRIBUCIÓN. La decisión final es del dueño.",
+    "Documento interno generado por el DEPARTAMENTO DE COMPRA de VIZA HOME. Solo analiza productos SELECCIONADO (verde), PARA PEDIDO (azul) y SIN etiqueta en la Base, y códigos desde 100.000; los productos con otra etiqueta (DESCONTINUADO, QUEMA STOCK, etc.) quedan fuera. CENTRAL cuenta solo como stock ya comprado (en tránsito/depósito): NO se compra para CENTRAL, solo para las 4 sucursales. Es una RECOMENDACIÓN: no es una orden de compra y no genera compras a proveedores. Antes de comprar, usar CENTRAL y las transferencias internas del DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA. La decisión final es del dueño.",
     contentW
   );
   doc.text(nota, MARGEN, y + 10);
@@ -556,7 +556,7 @@ export function generarPdfCompra(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.6);
     doc.setTextColor(...BLUE);
-    doc.text("VIZA HOME · ENCARGADO DE COMPRA", MARGEN, pageH - 18);
+    doc.text("VIZA HOME · DEPARTAMENTO DE COMPRA", MARGEN, pageH - 18);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...GREY);
     doc.text(

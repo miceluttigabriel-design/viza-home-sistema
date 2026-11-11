@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE DISTRIBUCIÓN — MOTOR DE CÁLCULO (Task 160)
+// DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA — MOTOR DE CÁLCULO (Task 160)
 //
 // Pedido del dueño:
 //   "quiero que reparta BALANCEADO POR CADA SUCURSAL según el TIPO de
@@ -53,7 +53,7 @@ export interface EntradaProductoEncargado {
   seleccionado?: boolean;
   /** etiquetaColor tal cual la Base: "verde", "azul", "dorado", "rojo",
    *  id de etiqueta creada, o null = SIN etiqueta (en blanco).
-   *  Regla del dueño (Task 168): el Encargado de Compra analiza
+   *  Regla del dueño (Task 168): el Departamento de Compra analiza
    *  SELECCIONADO (verde) + PARA PEDIDO (azul) + EN BLANCO (null).
    *  Cualquier otra etiqueta (DESCONTINUADO, QUEMA STOCK, VIZA LÍQUIDA...)
    *  queda FUERA del análisis. */

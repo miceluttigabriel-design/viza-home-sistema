@@ -1,19 +1,22 @@
 // ═══════════════════════════════════════════════════════════════════
-// ENCARGADO DE COMPRA — MOTOR DE CÁLCULO (Task 161)
+// DEPARTAMENTO DE COMPRA — MOTOR DE CÁLCULO (Task 161)
 //
 // Pedido del dueño: "el cuadro de necesidades va a pertenecer al
-// ENCARGADO DE COMPRA... que trabaje de la misma forma... allá adentro
+// DEPARTAMENTO DE COMPRA... que trabaje de la misma forma... allá adentro
 // él va analizar la necesidad de la compra".
 //
 // QUÉ HACE (determinístico, sin IA):
 //   · Lee el stock real de las 4 sucursales + CENTRAL y las ventas
 //     detectadas (bajadas de stock entre análisis).
-//   · Calcula el objetivo de la RED:
+//   · CENTRAL (stock ya comprado, en tránsito o en depósito) SOLO cuenta
+//     como stock disponible: NUNCA es destino de compra. El ENCARGADO DE
+//     DISTRIBUCIÓN lo reparte entre las sucursales.
+//   · Calcula el objetivo SOLO de las 4 sucursales de venta:
 //       - con STOCK IDEAL: la suma de los ideales de las sucursales;
 //       - sin ideal: el stock actual + lo vendido (reponer lo que salió).
-//   · Necesidad de compra = lo que falta a la red después de contar TODO
-//     el stock disponible (sucursales + CENTRAL). Si CENTRAL alcanza, la
-//     necesidad es 0: eso lo cubre el ENCARGADO DE DISTRIBUCIÓN.
+//   · Necesidad de compra = lo que falta a las sucursales después de contar
+//     TODO el stock disponible (sucursales + CENTRAL). Si CENTRAL alcanza,
+//     la necesidad es 0: eso lo cubre el DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA.
 //   · Prioriza por quiebre (0 en sucursales) y por ventas detectadas.
 //   · Agrupa por PROVEEDOR (columna FABRICANTE de la Base), TIPO y COLOR.
 //
@@ -22,7 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import {
-  DEPOSITO_CENTRAL,
+  SUCURSALES_BALANCE,
   codigoNumero,
   ordenarSucursales,
   type EntradaPlanEncargado,
@@ -30,7 +33,7 @@ import {
 } from "@/lib/encargado-distribucion";
 import { esBienDeEmpresa } from "@/lib/bienes-empresa";
 
-// Task 161 + Task 168 (pedido del dueño): el Encargado de Compra trabaja con:
+// Task 161 + Task 168 (pedido del dueño): el Departamento de Compra trabaja con:
 //   · productos SELECCIONADO (etiqueta verde) o PARA PEDIDO (etiqueta azul);
 //   · productos SIN etiqueta (en blanco, todavía sin categoría);
 //   · códigos desde 100.000 en adelante (los códigos viejos se descartan).
@@ -256,7 +259,13 @@ function objetivoSucursales(
 // ═══════════════════════════════════════════════════════════════════
 export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   const nodos = ordenarSucursales(entrada.nodos);
-  const sucursales = nodos.filter((n) => n !== DEPOSITO_CENTRAL);
+  // REGLA DEL DUEÑO: SOLO las 4 sucursales de venta generan necesidad de
+  // compra. CENTRAL (y cualquier otro depósito) NUNCA es destino de compra:
+  // son productos YA COMPRADOS que están en tránsito o en el depósito
+  // central. Su stock se cuenta como disponible y el ENCARGADO DE
+  // DISTRIBUCIÓN lo reparte entre las sucursales.
+  const sucursales: string[] = SUCURSALES_BALANCE.filter((s) => nodos.includes(s));
+  const nodosDeposito = nodos.filter((n) => !sucursales.includes(n));
   const generadoEn = entrada.generadoEn || new Date().toISOString();
 
   const filas: FilaCompra[] = [];
@@ -281,7 +290,7 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
       bienesEmpresa += 1;
       continue;
     }
-    // Regla del dueño (Task 168): el Encargado de Compra analiza
+    // Regla del dueño (Task 168): el Departamento de Compra analiza
     //   · SELECCIONADO   (etiqueta verde)
     //   · PARA PEDIDO    (etiqueta azul)
     //   · SIN ETIQUETA   (en blanco, todavía sin categoría)
@@ -315,7 +324,12 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
       (acc, s) => acc + entero(producto.saldos[s]),
       0
     );
-    const central = entero(producto.saldos[DEPOSITO_CENTRAL]);
+    // CENTRAL solo cuenta como STOCK disponible (ya comprado / en tránsito).
+    // Nunca se calcula necesidad de compra para CENTRAL.
+    const central = nodosDeposito.reduce(
+      (acc, n) => acc + entero(producto.saldos[n]),
+      0
+    );
     const stockRed = stockSucursales + central;
     const objetivoRed = objetivos.reduce((a, b) => a + b, 0);
     const vendidoRed = sucursales.reduce(
@@ -447,7 +461,7 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   }
   if (codigosIgnorados > 0) {
     alertas.add(
-      `${codigosIgnorados} código(s) menores a ${CODIGO_MINIMO_COMPRA.toLocaleString("es-PY")} fueron descartados: el Encargado de Compra solo trabaja desde ese código en adelante.`
+      `${codigosIgnorados} código(s) menores a ${CODIGO_MINIMO_COMPRA.toLocaleString("es-PY")} fueron descartados: el Departamento de Compra solo trabaja desde ese código en adelante.`
     );
   }
   if (prioridadAlta > 0) {
@@ -462,11 +476,11 @@ export function calcularPlanCompra(entrada: EntradaPlanEncargado): PlanCompra {
   }
   if (unidadesEnCentral > 0) {
     alertas.add(
-      `CENTRAL tiene ${unidadesEnCentral.toLocaleString("es-PY")} unidad(es) que primero deben distribuirse con el ENCARGADO DE DISTRIBUCIÓN antes de comprar.`
+      `CENTRAL tiene ${unidadesEnCentral.toLocaleString("es-PY")} unidad(es) ya compradas / en tránsito. Cuentan como STOCK disponible para reponer las 4 sucursales con el DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA: NO se compra para CENTRAL.`
     );
   }
   alertas.add(
-    "El ENCARGADO DE COMPRA solo recomienda: el sistema NO genera órdenes de compra ni compra a proveedores."
+    "El DEPARTAMENTO DE COMPRA solo recomienda: el sistema NO genera órdenes de compra ni compra a proveedores."
   );
 
   const modo: PlanCompra["modo"] =

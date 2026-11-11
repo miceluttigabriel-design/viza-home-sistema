@@ -240,7 +240,7 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
       toast.success(
         proveedor
           ? `PDF de ${proveedor} generado`
-          : "PDF del Encargado de Compra generado"
+          : "PDF del Departamento de Compra generado"
       );
     } catch (e) {
       toast.error(`PDF: ${(e as Error).message}`);
@@ -301,7 +301,7 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
             </div>
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-black text-white tracking-tight leading-tight">
-                ENCARGADO DE COMPRA
+                DEPARTAMENTO DE COMPRA
               </h2>
               <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-cyan-200/90">
                 Solo SELECCIONADOS · desde COD 100.000
@@ -478,7 +478,7 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Loader2 className="h-9 w-9 animate-spin text-cyan-600" />
               <p className="text-sm font-bold text-stone-600">
-                El Encargado de Compra está analizando la red…
+                El Departamento de Compra está analizando la red…
               </p>
               <p className="text-[11px] text-stone-400">
                 Leyendo stock por sucursal, CENTRAL, tipo, color y ventas detectadas.
@@ -538,7 +538,7 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
                   <div className="flex items-center gap-1.5 mb-1">
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-700" />
                     <p className="text-[10px] font-black tracking-widest text-amber-800">
-                      AVISOS DEL ENCARGADO DE COMPRA
+                      AVISOS DEL DEPARTAMENTO DE COMPRA
                     </p>
                   </div>
                   <ul className="space-y-1">
@@ -593,7 +593,7 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
                   </p>
                   <p className="text-xs text-emerald-700 mt-1">
                     {sinCompras
-                      ? "La red está cubierta con el stock actual y las transferencias internas."
+                      ? "Las 4 sucursales están cubiertas con el stock actual, CENTRAL y las transferencias internas."
                       : "Probá con otra búsqueda o quitá el filtro de proveedor."}
                   </p>
                 </div>
@@ -799,7 +799,7 @@ export function EncargadoCompra({ open, onClose, modo = "modal" }: EncargadoComp
 
                   <div className="rounded-xl border border-stone-200 bg-white p-4">
                     <p className="text-[9px] font-black tracking-widest text-stone-400 uppercase mb-1">
-                      Resumen del Encargado de Compra
+                      Resumen del Departamento de Compra
                     </p>
                     <p className="text-sm text-stone-700 leading-relaxed">{ia.resumen}</p>
                     {ia.mensaje && (

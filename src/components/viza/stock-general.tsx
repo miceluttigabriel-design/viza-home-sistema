@@ -23,7 +23,7 @@
 // Datos: UN endpoint nuevo (GET /api/stock/general) alimenta TODO
 // (cards + pills + gráfico + tabla) para que nada se desincronice.
 //
-// TASK 160 — ENCARGADO DE DISTRIBUCIÓN (pedido del dueño): el ÚNICO
+// TASK 160 — DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA (pedido del dueño): el ÚNICO
 // acceso a la distribución desde esta pantalla es el botón ENCARGADO DE
 // DISTRIBUCIÓN (solo SUPREMO). Ahí ve el relatorio y exporta el PDF.
 // El antiguo módulo DISTRIBUCIÓN INTELIGENTE se retiró de Stock General.
@@ -476,7 +476,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
     }
   };
 
-  // ═══ ENCARGADO DE DISTRIBUCIÓN (Task 160, pedido del dueño) ═══
+  // ═══ DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA (Task 160, pedido del dueño) ═══
   // Analiza toda la Base + Stock General de las 4 sucursales, respeta el
   // tipo y el color (CORES), detecta bajadas de stock (ventas) y arma el
   // plan + PDF. NO escribe stock: solo recomienda transferencias internas.
@@ -513,7 +513,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
           </div>
           <div className="flex items-center gap-2">
             {/* Task 160 (pedido del dueño): el ÚNICO acceso a la
-                distribución es el ENCARGADO DE DISTRIBUCIÓN y es SOLO para
+                distribución es el DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA y es SOLO para
                 el usuario SUPREMO. Admins y VIPs ven el Orquestador y el
                 Stock, pero este botón no se les muestra. */}
             {esSupremo && (
@@ -528,13 +528,13 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
                   boxShadow:
                     "0 0 14px rgba(233,200,110,0.55), inset 0 1px 0 rgba(255,255,255,0.7)",
                 }}
-                title="ENCARGADO DE DISTRIBUCIÓN con IA: analiza tipo, color y stock de las 4 sucursales y genera el plan + PDF (solo transferencias internas)"
+                title="DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA con IA: analiza tipo, color y stock de las 4 sucursales y genera el plan + PDF (solo transferencias internas)"
               >
-                <span className="hidden sm:inline">ENCARGADO DE DISTRIBUCIÓN</span>
-                <span className="sm:hidden">ENCARGADO</span>
+                <span className="hidden sm:inline">DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA</span>
+                <span className="sm:hidden">LOGÍSTICA</span>
               </button>
             )}
-            {/* Pedido del dueño: el botón ENCARGADO DE COMPRA se sacó de
+            {/* Pedido del dueño: el botón DEPARTAMENTO DE COMPRA se sacó de
                 STOCK GENERAL — ahora se abre desde su propio cuadro del
                 ORQUESTADOR y se trabaja ahí mismo. */}
             {esSupremo && (
@@ -806,7 +806,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
           </div>
           {bienesEmpresa && (
             <p className="mt-3 text-[11px] font-medium text-amber-800 bg-amber-100/70 rounded-xl px-3 py-2">
-              Estos bienes NO entran en el ENCARGADO DE COMPRA ni en el inventario de venta. Para
+              Estos bienes NO entran en el DEPARTAMENTO DE COMPRA ni en el inventario de venta. Para
               volver a los productos de venta, usá VOLVER A PRODUCTOS.
             </p>
           )}
@@ -1075,7 +1075,7 @@ export function StockGeneral({ user, onGoOrquestador, onGoBase, onGoSales }: Sto
         </div>
       </main>
 
-      {/* ═══ MODAL: ENCARGADO DE DISTRIBUCIÓN (Task 160) ═══ */}
+      {/* ═══ MODAL: DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA (Task 160) ═══ */}
       <EncargadoDistribucion
         open={encargadoOpen}
         onClose={() => setEncargadoOpen(false)}
