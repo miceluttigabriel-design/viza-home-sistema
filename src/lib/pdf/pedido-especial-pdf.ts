@@ -371,7 +371,15 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
     } else if (plan === "safra") {
       badge("SAFRA", BLUE, [255, 255, 255]);
       const entrada = Math.max(0, fila.detalle?.safraEntrada || 0);
-      const meses = Math.max(1, Math.floor(fila.detalle?.safraMeses || nCuotas || 1));
+      // Cantidad de refuerzos REALES del cronograma con fecha (el plan
+      // SAFRA del panel cuenta cada pago, no un número fijo de meses).
+      const refuerzosReales = cronograma.filter(
+        (f) => f.mes >= 1 && (f.pago > 0 || f.pagoMostrado > 0)
+      ).length;
+      const meses = Math.max(
+        1,
+        refuerzosReales || Math.floor(fila.detalle?.safraMeses || nCuotas || 1)
+      );
       textoCuotas =
         entrada > 0
           ? `ENTRADA + ${meses} ${plural(meses, "REFUERZO", "REFUERZOS")}`
@@ -519,7 +527,11 @@ export function buildPedidoEspecialPdf(fila: FilaPedidoEspecialPdf): jsPDF {
           doc.setFont("helvetica", "normal");
           doc.setFontSize(8.5);
           doc.setTextColor(120, 113, 108);
-          doc.text(formatDateEs(fechaMes(emision, f.mes)), cp, y + 16);
+          doc.text(
+            f.fecha ? formatDateEs(f.fecha) : formatDateEs(fechaMes(emision, f.mes)),
+            cp,
+            y + 16
+          );
           cp += cColFecha;
           // PAGO / INTERÉS / SALDO — las mismas columnas del panel.
           doc.setFont("helvetica", "bold");

@@ -3,7 +3,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createUserScopedStorage } from "@/lib/user-scoped-storage";
-import type { PlanPedidoEspecial } from "@/lib/pedido-especial-calc";
+import {
+  generarFechasRefuerzos,
+  MAX_MESES_SAFRA,
+  sumarMesesISO,
+  type PlanPedidoEspecial,
+} from "@/lib/pedido-especial-calc";
 
 // === PEDIDO ESPECIAL (Task 113, pedido del dueño) ===
 // Estado del FORMULARIO del vendedor (lo que escribe: costo, proveedor,
@@ -58,8 +63,13 @@ export interface PedidoEspecialState {
   fechaInicioPago: string;
 
   // === SAFRA ===
+  // Mismo formato del plan SAFRA del panel: entrada opcional + lista de
+  // REFUERZOS / PAGOS EXTRA con su FECHA de pago (ISO YYYY-MM-DD).
+  // `safraMeses` queda como respaldo (estados viejos): si no hay fechas,
+  // se generan refuerzos mensuales desde la emisión.
   safraEntradaStr: string; // texto crudo de la entrada en Gs ("" = 0)
-  safraMeses: number; // refuerzos mensuales 1-18
+  safraFechas: string[]; // fechas de cada refuerzo (ISO YYYY-MM-DD)
+  safraMeses: number; // respaldo: cantidad de refuerzos mensuales
 
   // === CHEQUE ===
   chequesCantidad: number; // 1-20
@@ -81,10 +91,22 @@ export interface PedidoEspecialState {
   setFechaInicioPago: (f: string) => void;
   setSafraEntradaStr: (s: string) => void;
   setSafraMeses: (n: number) => void;
+  setSafraFechas: (fechas: string[]) => void;
+  setFechaRefuerzo: (index: number, fecha: string) => void;
+  addSafraRefuerzo: () => void;
+  removeSafraRefuerzo: (index: number) => void;
   setChequesCantidad: (n: number) => void;
   setChequesFechas: (fechas: string[]) => void;
   setFechaCheque: (index: number, fecha: string) => void;
   clear: () => void;
+}
+
+// Fecha de HOY en ISO local (YYYY-MM-DD): el vendedor está en Paraguay y el
+// servidor en UTC — mismas fechas que ve la pantalla (hoyISO del panel).
+function hoyLocalISO(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 const initial = {
@@ -103,6 +125,9 @@ const initial = {
   entregaStr: "",
   fechaInicioPago: "",
   safraEntradaStr: "",
+  // Arranque del SAFRA: 6 refuerzos mensuales desde hoy (el vendedor los
+  // edita, agrega o elimina fechas), igual que el plan SAFRA del panel.
+  safraFechas: generarFechasRefuerzos(6, hoyLocalISO()),
   safraMeses: 6,
   chequesCantidad: 3,
   chequesFechas: [] as string[],
@@ -126,6 +151,7 @@ type PedidoEspecialPersistedState = Pick<
   | "entregaStr"
   | "fechaInicioPago"
   | "safraEntradaStr"
+  | "safraFechas"
   | "safraMeses"
   | "chequesCantidad"
   | "chequesFechas"
@@ -143,6 +169,12 @@ function migrarV1(persisted: unknown): PedidoEspecialPersistedState {
   if (typeof p.entregaStr !== "string") p.entregaStr = "";
   if (!p.safraEntradaStr) p.safraEntradaStr = "";
   if (!Number.isFinite(p.safraMeses) || p.safraMeses < 1) p.safraMeses = 6;
+  // v3: SAFRA pasa a FECHAS de refuerzo (mismo formato del plan SAFRA del
+  // panel). Si el estado viejo no tiene fechas, se genera la lista mensual
+  // de 6 refuerzos desde hoy (el vendedor las edita/agrega/elimina).
+  if (!Array.isArray(p.safraFechas)) {
+    p.safraFechas = generarFechasRefuerzos(p.safraMeses || 6, hoyLocalISO());
+  }
   if (!Number.isFinite(p.chequesCantidad) || p.chequesCantidad < 1) p.chequesCantidad = 3;
   if (!Array.isArray(p.chequesFechas)) p.chequesFechas = [];
   // v2: GRUPO + datos del cliente (defaults para no perder nada).
@@ -181,6 +213,34 @@ export const usePedidoEspecialStore = create<PedidoEspecialState>()(
       setFechaInicioPago: (f) => set({ fechaInicioPago: f }),
       setSafraEntradaStr: (s) => set({ safraEntradaStr: s }),
       setSafraMeses: (n) => set({ safraMeses: Math.max(1, Math.min(18, Math.floor(n || 1))) }),
+      setSafraFechas: (fechas) =>
+        set({
+          safraFechas: (Array.isArray(fechas) ? fechas : [])
+            .slice(0, MAX_MESES_SAFRA)
+            .map((f) => String(f || "").slice(0, 10)),
+        }),
+      setFechaRefuerzo: (index, fecha) =>
+        set((state) => {
+          const nuevas = [...state.safraFechas];
+          if (index >= 0 && index < nuevas.length) {
+            nuevas[index] = String(fecha || "").slice(0, 10);
+          }
+          return { safraFechas: nuevas };
+        }),
+      addSafraRefuerzo: () =>
+        set((state) => {
+          if (state.safraFechas.length >= MAX_MESES_SAFRA) return state;
+          const hoy = hoyLocalISO();
+          const ultima = state.safraFechas[state.safraFechas.length - 1];
+          // La nueva fecha cae un mes después de la última; si la lista está
+          // vacía, arranca un mes después de hoy.
+          const nueva = sumarMesesISO(ultima || hoy, 1);
+          return { safraFechas: [...state.safraFechas, nueva] };
+        }),
+      removeSafraRefuerzo: (index) =>
+        set((state) => ({
+          safraFechas: state.safraFechas.filter((_, i) => i !== index),
+        })),
       setChequesCantidad: (n) =>
         set({ chequesCantidad: Math.max(1, Math.min(20, Math.floor(n || 1))) }),
       setChequesFechas: (fechas) =>
@@ -196,7 +256,7 @@ export const usePedidoEspecialStore = create<PedidoEspecialState>()(
     {
       name: "viza-pedido-especial",
       storage: createUserScopedStorage<PedidoEspecialPersistedState>(),
-      version: 2,
+      version: 3,
       migrate: migrarV1,
       partialize: (state) => ({
         modoCosto: state.modoCosto,
@@ -214,6 +274,7 @@ export const usePedidoEspecialStore = create<PedidoEspecialState>()(
         entregaStr: state.entregaStr,
         fechaInicioPago: state.fechaInicioPago,
         safraEntradaStr: state.safraEntradaStr,
+        safraFechas: state.safraFechas,
         safraMeses: state.safraMeses,
         chequesCantidad: state.chequesCantidad,
         chequesFechas: state.chequesFechas,

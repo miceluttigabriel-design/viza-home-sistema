@@ -26,9 +26,13 @@ import {
   calcularPedidoEspecial,
   esTipoMoto,
   generarFechasCheques,
+  generarFechasRefuerzos,
   diasDesdeEmision,
   diasHastaFecha,
   formatearMontoInput,
+  MAX_MESES_SAFRA,
+  refuerzoFueraDePlazo,
+  sumarMesesISO,
   NOMBRE_PLAN,
   type PlanPedidoEspecial,
 } from "@/lib/pedido-especial-calc";
@@ -183,6 +187,7 @@ const AZUL = "#155789";
 const AZUL_OSCURO = "#0d3d5e";
 const DORADO = "#D9B86B";
 const DORADO_CLARO = "#e5cb8a";
+const CREMA = "#faf6ed";
 
 interface CombinacionApi {
   id: string;
@@ -368,6 +373,7 @@ export function PlanEspecial({
     entregaStr,
     fechaInicioPago,
     safraEntradaStr,
+    safraFechas,
     safraMeses,
     chequesCantidad,
     chequesFechas,
@@ -386,7 +392,10 @@ export function PlanEspecial({
     setEntregaStr,
     setFechaInicioPago,
     setSafraEntradaStr,
-    setSafraMeses,
+    setSafraFechas,
+    setFechaRefuerzo,
+    addSafraRefuerzo,
+    removeSafraRefuerzo,
     setChequesCantidad,
     setChequesFechas,
     setFechaCheque,
@@ -577,6 +586,7 @@ export function PlanEspecial({
           fechaInicioPago,
           safraEntrada,
           safraMeses,
+          safraFechas,
           chequesCantidad,
           chequesFechas,
           fechaEmision: hoy,
@@ -899,6 +909,7 @@ export function PlanEspecial({
       diasSinEntrega,
       safraEntrada,
       safraMeses,
+      safraFechas,
       chequesCantidad,
       chequesFechas,
       esMoto,
@@ -915,6 +926,7 @@ export function PlanEspecial({
     diasSinEntrega,
     safraEntrada,
     safraMeses,
+    safraFechas,
     chequesCantidad,
     chequesFechas,
     esMoto,
@@ -943,6 +955,7 @@ export function PlanEspecial({
           diasSinEntrega,
           safraEntrada,
           safraMeses,
+          safraFechas,
           chequesCantidad,
           chequesFechas,
           esMoto,
@@ -955,8 +968,13 @@ export function PlanEspecial({
     if (!resultado) return null;
     if (plan === "cheque" && resultado.cheques.length === 0) return null;
     if (plan === "safra" && resultado.cronograma.length === 0) return null;
+    if (
+      plan === "safra" &&
+      safraFechas.filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f)).length === 0
+    )
+      return null;
     return resultado;
-  }, [resultado, plan]);
+  }, [resultado, plan, safraFechas]);
 
   // Qué falta para poder calcular (hint en pantalla, nada bloqueante).
   const faltantes: string[] = [];
@@ -985,6 +1003,18 @@ export function PlanEspecial({
   if (plan === "safra" && safraEntrada > 0 && resultado && resultado.valorContado > 0 && safraEntrada >= resultado.valorContado) {
     faltantes.push("una ENTRADA menor al valor al contado del plan");
   }
+  if (plan === "safra") {
+    const validas = safraFechas.filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f));
+    if (safraFechas.length === 0) {
+      faltantes.push("al menos un refuerzo con su fecha de pago");
+    } else if (validas.length < safraFechas.length) {
+      faltantes.push("las fechas de todos los refuerzos");
+    } else if (safraFechas.some((f) => refuerzoFueraDePlazo(hoy, f))) {
+      faltantes.push(
+        `fechas de refuerzo dentro de los ${MAX_MESES_SAFRA} meses desde hoy`
+      );
+    }
+  }
   if (plan === "cheque") {
     const validas = chequesFechas.filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f)).length;
     if (validas < chequesCantidad)
@@ -1011,6 +1041,7 @@ export function PlanEspecial({
       !clienteObservaciones &&
       !fechaInicioPago &&
       !safraEntradaStr &&
+      safraFechas.length === 0 &&
       chequesFechas.length === 0 &&
       !resultadoOk
     )
@@ -1736,34 +1767,121 @@ export function PlanEspecial({
           )}
 
           {plan === "safra" && (
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <label className="text-[11px] font-semibold text-stone-500 uppercase whitespace-nowrap flex items-center gap-1">
-                  <Landmark className="h-3 w-3" />
-                  Entrada (Gs):
-                </label>
-                <CampoMonto
-                  value={safraEntradaStr}
-                  onChange={setSafraEntradaStr}
-                  placeholder="0 = sin entrada"
-                  className="w-36 h-10 px-3 rounded-lg border border-stone-300 text-sm font-semibold focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
-                />
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-semibold text-stone-500 uppercase whitespace-nowrap flex items-center gap-1">
+                    <Landmark className="h-3 w-3" />
+                    Entrada / pago inicial (Gs):
+                  </label>
+                  <CampoMonto
+                    value={safraEntradaStr}
+                    onChange={setSafraEntradaStr}
+                    placeholder="0 = sin entrada"
+                    className="w-36 h-10 px-3 rounded-lg border border-stone-300 text-sm font-semibold focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
+                  />
+                </div>
+                {resultado && resultado.valorContado > 0 && (
+                  <p className="text-[11px] text-stone-500 leading-relaxed">
+                    <strong>Entrada actual:</strong> {formatPYG(safraEntrada)} (
+                    {((safraEntrada / resultado.valorContado) * 100).toFixed(1)}% del
+                    total al contado)
+                  </p>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-[11px] font-semibold text-stone-500 uppercase whitespace-nowrap">
-                  Refuerzos (meses):
-                </label>
-                <select
-                  value={safraMeses}
-                  onChange={(e) => setSafraMeses(Number(e.target.value))}
-                  className="h-10 px-3 rounded-lg border border-stone-300 text-sm bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none"
-                >
-                  {Array.from({ length: 18 }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>
-                      {n} {n === 1 ? "mes" : "meses"}
-                    </option>
-                  ))}
-                </select>
+
+              {/* REFUERZOS / PAGOS EXTRA — igual que el plan SAFRA del panel:
+                  cada refuerzo tiene su FECHA de pago (no un número de meses). */}
+              <div className="rounded-xl border border-stone-200 overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-stone-50 border-b border-stone-200">
+                  <p
+                    className="text-[11px] font-bold uppercase tracking-wide flex items-center gap-1.5"
+                    style={{ color: AZUL }}
+                  >
+                    <Calendar className="h-3.5 w-3.5" />
+                    REFUERZOS / PAGOS EXTRA ({safraFechas.length})
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {safraFechas.length === 0 && (
+                      <button
+                        onClick={() => setSafraFechas(generarFechasRefuerzos(6, hoy))}
+                        className="h-8 px-3 rounded-lg font-bold text-[11px] flex items-center gap-1.5 border border-stone-300 bg-white text-stone-600 hover:bg-stone-100 transition-colors"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        GENERAR 6 MENSUALES
+                      </button>
+                    )}
+                    <button
+                      onClick={addSafraRefuerzo}
+                      disabled={safraFechas.length >= MAX_MESES_SAFRA}
+                      className="h-8 px-3 rounded-lg font-bold text-[11px] flex items-center gap-1.5 border transition-colors hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{
+                        backgroundColor: DORADO_CLARO,
+                        color: AZUL_OSCURO,
+                        borderColor: DORADO,
+                      }}
+                    >
+                      <Plus className="h-3 w-3" />
+                      AGREGAR REFUERZO
+                    </button>
+                  </div>
+                </div>
+                <p className="px-3 pt-2 text-[11px] text-stone-500 leading-relaxed">
+                  El Plan Safra dura <b>{MAX_MESES_SAFRA} meses</b>. Empieza el{" "}
+                  <b>{fechaCorta(hoy)}</b> y el último día de pago es el{" "}
+                  <b>{fechaCorta(sumarMesesISO(hoy, MAX_MESES_SAFRA))}</b>. Cargá
+                  las fechas de pago hasta ese día.
+                </p>
+                {safraFechas.length === 0 ? (
+                  <p className="px-3 py-3 text-sm font-medium text-stone-500">
+                    No hay refuerzos cargados. Usá AGREGAR REFUERZO.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-stone-100 mt-1">
+                    {safraFechas.map((fechaRefuerzo, i) => {
+                      const fuera = refuerzoFueraDePlazo(hoy, fechaRefuerzo);
+                      return (
+                        <li
+                          key={i}
+                          className="flex items-end justify-between gap-3 px-3 py-2"
+                        >
+                          <label className="block min-w-0">
+                            <span className="block text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-1">
+                              Fecha de pago
+                            </span>
+                            <input
+                              type="date"
+                              value={fechaRefuerzo}
+                              min={hoy}
+                              onChange={(e) => setFechaRefuerzo(i, e.target.value)}
+                              className={`h-10 px-3 rounded-lg border text-sm font-semibold outline-none ${
+                                fuera
+                                  ? "border-red-300 bg-red-50 text-red-700"
+                                  : "border-stone-300 bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                              }`}
+                            />
+                            {fuera && (
+                              <span className="block mt-1 text-[11px] font-bold text-red-600">
+                                Fuera de los {MAX_MESES_SAFRA} meses
+                              </span>
+                            )}
+                          </label>
+                          <button
+                            onClick={() => removeSafraRefuerzo(i)}
+                            title="Eliminar refuerzo"
+                            className="mb-0.5 h-9 w-9 rounded-lg flex items-center justify-center text-stone-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <p className="px-3 pb-3 text-[11px] text-stone-400 mt-2 leading-relaxed">
+                  El sistema calcula automáticamente los intereses sobre el saldo
+                  restante en cada pago.
+                </p>
               </div>
             </div>
           )}
@@ -1864,7 +1982,7 @@ export function PlanEspecial({
                   </>
                 )}
                 {plan === "mayorista" && "TOTAL MAYORISTA (VALOR TÉCNICO)"}
-                {plan === "safra" && "TOTAL DEL PLAN SAFRA"}
+                {plan === "safra" && "RESULTADO DEL PLAN SAFRA"}
                 {plan === "cheque" && (
                   <>VALOR DE CADA CHEQUE ({resultadoOk.cheques.length})</>
                 )}
@@ -1914,8 +2032,7 @@ export function PlanEspecial({
                 <p className="text-sm font-semibold mt-2" style={{ color: AZUL }}>
                   Intereses totales: {formatPYG(resultadoOk.totalIntereses)}
                   {safraEntrada > 0 && <> · Entrada: {formatPYG(safraEntrada)}</>} ·{" "}
-                  {safraMeses} refuerzo{safraMeses === 1 ? "" : "s"} mensual
-                  {safraMeses === 1 ? "" : "es"}
+                  {resultadoOk.cuotas} refuerzo{resultadoOk.cuotas === 1 ? "" : "s"}
                 </p>
               )}
               {plan === "cheque" && (
@@ -1926,51 +2043,74 @@ export function PlanEspecial({
               )}
             </div>
 
-            {/* Tabla del cronograma SAFRA (misma estructura del plan real) */}
-            {plan === "safra" && resultadoOk.cronograma.length > 0 && (
-              <div className="rounded-xl border border-stone-200 overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-stone-100 text-stone-600 uppercase text-[10px]">
-                      <th className="text-center px-3 py-2 font-bold">MES</th>
-                      <th className="text-left px-3 py-2 font-bold">CONCEPTO</th>
-                      <th className="text-right px-3 py-2 font-bold">PAGO</th>
-                      <th className="text-right px-3 py-2 font-bold">INTERÉS DEL MES</th>
-                      <th className="text-right px-3 py-2 font-bold">SALDO</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {resultadoOk.cronograma.map((f, i) => (
-                      <tr key={i} className={"hover:bg-stone-50 " + (i === resultadoOk.cronograma.length - 1 ? "bg-amber-50/60" : "")}>
-                        <td className="px-3 py-2 text-center font-bold text-stone-700">{f.mes}</td>
-                        <td className="px-3 py-2 font-semibold text-stone-800">{f.concepto}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-bold text-stone-900">
-                          {formatPYG(f.pagoMostrado)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-amber-700">
-                          {formatPYG(f.interes)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-stone-600">
-                          {formatPYG(Math.max(0, f.saldoFinal))}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="bg-stone-100 border-t-2 border-stone-300">
-                      <td colSpan={2} className="px-3 py-2 text-right font-bold uppercase text-[10px] text-stone-600">
-                        Total del plan:
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums font-extrabold" style={{ color: AZUL }}>
-                        {formatPYG(resultadoOk.total)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-[10px] text-stone-500">
-                        + {formatPYG(resultadoOk.totalIntereses)} interés
-                      </td>
-                      <td />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {/* RESULTADO DEL PLAN SAFRA — MISMO formato del panel:
+                filas con círculo del mes, CONCEPTO, FECHA y valor; el
+                último es el PAGO FINAL (con los intereses incluidos) y
+                abajo el TOTAL DEL PLAN. */}
+            {plan === "safra" &&
+              resultadoOk.cronograma.filter(
+                (f) => f.pago > 0 || f.pagoMostrado > 0
+              ).length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {resultadoOk.cronograma
+                    .filter((f) => f.pago > 0 || f.pagoMostrado > 0)
+                    .map((f, i, arr) => {
+                      const esEntrada = f.mes === 0;
+                      const esPagoFinal = i === arr.length - 1 && !esEntrada;
+                      const valor =
+                        f.pagoMostrado > 0 ? f.pagoMostrado : f.pago;
+                      return (
+                        <div
+                          key={i}
+                          className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
+                            esEntrada
+                              ? "bg-emerald-50 border-emerald-200"
+                              : esPagoFinal
+                                ? "bg-amber-50 border-amber-200"
+                                : "bg-stone-50 border-stone-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                esEntrada
+                                  ? "bg-emerald-500 text-white"
+                                  : "bg-stone-700 text-white"
+                              }`}
+                            >
+                              {esEntrada ? "0" : f.mes}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-stone-900 truncate">
+                                {esPagoFinal ? "PAGO FINAL" : f.concepto}
+                              </p>
+                              <p className="text-[11px] text-stone-500 tabular-nums">
+                                {f.fecha ? fechaCorta(f.fecha) : "-"}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-sm font-bold text-stone-900 tabular-nums whitespace-nowrap">
+                            {formatPYG(valor)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  <div
+                    className="flex items-center justify-between gap-3 p-3 rounded-lg border-2"
+                    style={{ backgroundColor: CREMA, borderColor: DORADO }}
+                  >
+                    <p className="text-sm font-bold uppercase text-stone-700">
+                      Total del Plan
+                    </p>
+                    <p
+                      className="text-lg font-extrabold tabular-nums"
+                      style={{ color: AZUL }}
+                    >
+                      {formatPYG(resultadoOk.total)}
+                    </p>
+                  </div>
+                </div>
+              )}
 
             {/* Tabla de cheques (misma estructura del plan real) */}
             {plan === "cheque" && resultadoOk.cheques.length > 0 && (

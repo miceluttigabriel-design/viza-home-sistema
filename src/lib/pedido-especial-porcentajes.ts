@@ -36,6 +36,7 @@
 import { db } from "@/lib/db";
 import { listarCombinaciones } from "@/lib/pedido-especial";
 import { listarTiposExtra } from "@/lib/pedido-especial-tipos";
+import { CATALOGO_EXTRA } from "@/lib/pedido-especial-catalogo-extra";
 
 // Los 6 % legibles que usa el cálculo del pedido especial.
 export interface PorcentajesPedidoEspecial {
@@ -55,6 +56,91 @@ const PORCENTAJES_CERO: PorcentajesPedidoEspecial = {
   pctTecnico: 0,
   pctSafra: 0,
 };
+
+// ─── CATÁLOGO EXTRA (lista del dueño) — SOLO PARA COTIZAR ───
+// Los proveedores que vienen en la LISTA VIZA HOME y que la BASE todavía
+// NO tiene. Se usan SOLO dentro del PEDIDO ESPECIAL (nunca se escriben en
+// la tabla Product) y solo mientras el fabricante no exista en la BASE:
+// si la BASE ya tiene ese proveedor, se usa lo de la BASE y se ignora el
+// extra (pedido del dueño: "lo que ya tiene en la Base ni agrega").
+const EXTRA_POR_CLAVE = new Map<string, PorcentajesPedidoEspecial>();
+for (const e of CATALOGO_EXTRA) {
+  const clave = [
+    normalizarClave(e.fabricante),
+    normalizarClave(e.grupo),
+    normalizarClave(e.tipo),
+  ].join("||");
+  if (!EXTRA_POR_CLAVE.has(clave)) {
+    EXTRA_POR_CLAVE.set(clave, {
+      pctContado: Number(e.pctContado) || 0,
+      pct1A6: Number(e.pct1A6) || 0,
+      pct7A13: Number(e.pct7A13) || 0,
+      pct14A30: Number(e.pct14A30) || 0,
+      pctTecnico: Number(e.pctTecnico) || 0,
+      pctSafra: Number(e.pctSafra) || 0,
+    });
+  }
+}
+
+// Combinaciones del catálogo extra que la BASE NO tiene (por fabricante).
+// `fabricantesDeLaBase` puede venir con cualquier capitalización.
+export interface ComboCatalogoExtra {
+  fabricante: string;
+  grupo: string;
+  tipo: string;
+}
+
+export function combosDelCatalogoExtra(
+  fabricantesDeLaBase: Iterable<string>
+): ComboCatalogoExtra[] {
+  const base = new Set<string>();
+  for (const f of fabricantesDeLaBase) base.add(normalizarClave(f));
+  const salida: ComboCatalogoExtra[] = [];
+  const vistos = new Set<string>();
+  for (const e of CATALOGO_EXTRA) {
+    const fab = normalizarClave(e.fabricante);
+    if (!fab || base.has(fab)) continue;
+    const clave = [fab, normalizarClave(e.grupo), normalizarClave(e.tipo)].join("||");
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    salida.push({ fabricante: e.fabricante, grupo: e.grupo, tipo: e.tipo });
+  }
+  return salida;
+}
+
+// % del catálogo extra para una combinación (cascada exacta → fab+grupo →
+// fab+tipo → fab, igual que la BASE). Devuelve null si el fabricante no
+// está en el extra. Los valores YA son legibles (10 = 10 %).
+export function porcentajesDelExtra(
+  fabricante: string,
+  grupo: string,
+  tipo: string
+): PorcentajesPedidoEspecial | null {
+  const fab = normalizarClave(fabricante);
+  if (!fab) return null;
+  const grp = normalizarClave(grupo);
+  const tip = normalizarClave(tipo);
+  const candidatos: [string, string, string][] = [
+    [fab, grp, tip],
+    [fab, grp, ""],
+    [fab, "", tip],
+    [fab, "", ""],
+  ];
+  for (const c of candidatos) {
+    const hit = EXTRA_POR_CLAVE.get(c.join("||"));
+    if (hit) return { ...hit };
+  }
+  return null;
+}
+
+function fabricantesDeLaBase(filas: FilaPorcentajeProducto[]): Set<string> {
+  const set = new Set<string>();
+  for (const f of filas) {
+    const fab = normalizarClave(f.fabricante);
+    if (fab) set.add(fab);
+  }
+  return set;
+}
 
 // Misma normalización que la casa (normalizeKey de import-margins):
 // mayúsculas, sin espacios de más — para agrupar sin cullos por typos.
@@ -322,13 +408,20 @@ export async function porcentajesDeLaBase(
         safra: true,
       },
     });
+    const base = fabricantesDeLaBase(filas);
+    // Proveedor que la BASE NO tiene: manda el catálogo EXTRA (lista del
+    // dueño), SOLO para cotizar; nunca se escribe en Product. Si la BASE
+    // ya tiene el proveedor, se usa la BASE (lo extra se ignora).
+    if (!base.has(normalizarClave(fabricante))) {
+      const extra = porcentajesDelExtra(fabricante, grupo, tipo);
+      if (extra) return extra;
+    }
     return resolverGrupo(calcularPromediosPorcentajes(filas), fabricante, grupo, tipo, respaldo);
   } catch (error) {
     console.error("porcentajesDeLaBase:", error);
     return { ...PORCENTAJES_CERO, ...(respaldo || {}) };
   }
 }
-
 // Un par del catálogo con sus % ya resueltos (lo que consume la pantalla).
 // `grupo` es el GRUPO de la BASE (categoria) y `tipo` el TIPO (puede venir
 // vacío: el dueño pidió GRUPO como selector principal y TIPO opcional).
@@ -426,16 +519,31 @@ export async function mapaPorcentajesDeLaBase(): Promise<ParConPorcentajes[]> {
       }
     }
 
+    // CATÁLOGO EXTRA (pedido del dueño): proveedores de la lista que la
+    // BASE todavía NO tiene. Se agregan SOLO acá, para cotizar en el
+    // PEDIDO ESPECIAL; nunca se escriben en Product. Si la BASE ya tiene
+    // el fabricante, TODO lo suyo sale de la BASE (el extra se ignora).
+    const fabricantesBase = fabricantesDeLaBase(filas);
+    for (const c of combosDelCatalogoExtra(fabricantesBase)) {
+      agregar(c.fabricante, c.grupo, c.tipo);
+    }
+
     const salida: ParConPorcentajes[] = [];
     for (const [, par] of pares) {
       const claveRespaldo = `${normalizarClave(par.fabricante)}||${normalizarClave(par.tipo)}`;
-      const resueltos = resolverGrupo(
-        mapa,
-        par.fabricante,
-        par.grupo,
-        par.tipo,
-        respaldoPorClave.get(claveRespaldo)
-      );
+      // Fabricante que no está en la BASE → % del catálogo EXTRA.
+      const extra = fabricantesBase.has(normalizarClave(par.fabricante))
+        ? null
+        : porcentajesDelExtra(par.fabricante, par.grupo, par.tipo);
+      const resueltos =
+        extra ||
+        resolverGrupo(
+          mapa,
+          par.fabricante,
+          par.grupo,
+          par.tipo,
+          respaldoPorClave.get(claveRespaldo)
+        );
       salida.push({
         fabricante: par.fabricante,
         grupo: par.grupo,

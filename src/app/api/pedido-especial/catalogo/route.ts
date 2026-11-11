@@ -39,6 +39,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { mapaPorcentajesDeLaBase } from "@/lib/pedido-especial-porcentajes";
+import { combosDelCatalogoExtra } from "@/lib/pedido-especial-porcentajes";
 import {
   listarTiposExtra,
   crearTipoExtra,
@@ -96,6 +97,32 @@ export async function GET() {
         tipos.add(tip);
       }
     }
+    // CATÁLOGO EXTRA (pedido del dueño): proveedores de la LISTA VIZA HOME
+    // que la BASE todavía NO tiene. Se ofrecen SOLO dentro del PEDIDO
+    // ESPECIAL para cotizar; NUNCA se escriben en la BASE (tabla Product).
+    // Si el fabricante ya existe en la BASE, no se agrega nada: lo que la
+    // BASE tiene manda.
+    for (const c of combosDelCatalogoExtra(proveedores)) {
+      const fab = String(c.fabricante || "").trim();
+      if (!fab) continue;
+      if (!tiposPorProveedor[fab]) {
+        tiposPorProveedor[fab] = [];
+        gruposPorProveedor[fab] = [];
+        proveedores.push(fab);
+      }
+      const grp = String(c.grupo || "").trim();
+      const tip = String(c.tipo || "").trim();
+      if (grp) {
+        if (!gruposPorProveedor[fab].includes(grp)) gruposPorProveedor[fab].push(grp);
+        grupos.add(grp);
+      }
+      if (tip) {
+        if (!tiposPorProveedor[fab].includes(tip)) tiposPorProveedor[fab].push(tip);
+        tipos.add(tip);
+      }
+    }
+    proveedores.sort((a, b) => a.localeCompare(b));
+
     // Los tipos creados entran en TODAS las listas (global + por
     // proveedor): si no están catalogados en la BASE, todavía así el
     // vendedor puede elegirlos para cualquier proveedor.

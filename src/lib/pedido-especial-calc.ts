@@ -88,6 +88,53 @@ export function redondeoComercial(v: number): number {
   return Math.ceil(Math.max(0, v) / 1000) * 1000;
 }
 
+// ─── SAFRA: horizonte y fechas (MISMO plan SAFRA del panel) ───
+// El panel SAFRA es de hasta 18 meses desde la EMISIÓN; el vendedor carga
+// las FECHAS de cada refuerzo (no un número de meses). El mes de cada pago
+// sale SIEMPRE de su fecha.
+export const MAX_MESES_SAFRA = 18;
+
+// Suma N meses a una fecha ISO (YYYY-MM-DD). Devuelve YYYY-MM-DD.
+export function sumarMesesISO(isoDate: string, months: number): string {
+  if (!isoDate) return "";
+  const d = new Date(isoDate + "T00:00:00");
+  if (isNaN(d.getTime())) return "";
+  d.setMonth(d.getMonth() + months);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Mes de una fecha contado desde la emisión (misma regla del plan SAFRA:
+// diferencia de meses de calendario, sin ajuste por día).
+export function mesDeFecha(emisionISO: string, fecha?: string | null): number | null {
+  if (!fecha) return null;
+  const dBase = new Date(emisionISO + "T00:00:00");
+  const dRef = new Date(fecha + "T00:00:00");
+  if (isNaN(dBase.getTime()) || isNaN(dRef.getTime())) return null;
+  return (
+    (dRef.getFullYear() - dBase.getFullYear()) * 12 +
+    (dRef.getMonth() - dBase.getMonth())
+  );
+}
+
+// Genera N fechas de refuerzo mensuales (emisión + 1 … emisión + N): es el
+// arranque por defecto del SAFRA (después el vendedor agrega/edita fechas).
+export function generarFechasRefuerzos(cantidad: number, emisionISO: string): string[] {
+  const n = Math.max(1, Math.min(MAX_MESES_SAFRA, Math.floor(cantidad || 1)));
+  const base = emisionISO || new Date().toISOString().slice(0, 10);
+  const salida: string[] = [];
+  for (let i = 1; i <= n; i++) salida.push(sumarMesesISO(base, i));
+  return salida;
+}
+
+// ¿La fecha del refuerzo queda fuera del plazo del plan (mes 1..18)?
+export function refuerzoFueraDePlazo(emisionISO: string, fecha: string): boolean {
+  const mes = mesDeFecha(emisionISO, fecha);
+  return mes === null || mes < 1 || mes > MAX_MESES_SAFRA;
+}
+
 // ─── Márgenes de cuotas (misma regla de tramos de la BASE) ───
 
 // Margen (%) de la cuota N con la misma regla de tramos de la BASE:
@@ -149,10 +196,13 @@ export interface ParamsPedidoEspecial {
   // cuotas_sin_entrega: días entre HOY y la 1ª cuota (0-60). La pantalla
   // lo calcula con la fecha elegida; null = fecha inválida/ausente.
   diasSinEntrega: number | null;
-  // SAFRA: entrada inicial en Gs (0 = sin entrada) y cantidad de
-  // refuerzos mensuales (1-18, uno por mes).
+  // SAFRA: entrada inicial en Gs (0 = sin entrada) y FECHAS de los
+  // refuerzos (ISO "YYYY-MM-DD"), igual que el plan SAFRA del panel.
+  // `safraMeses` queda como respaldo para estados viejos: si no hay
+  // fechas, se generan refuerzos mensuales desde la emisión.
   safraEntrada: number;
   safraMeses: number;
+  safraFechas?: string[];
   // CHEQUE: cantidad (1-20) y fechas de vencimiento ISO "YYYY-MM-DD"
   // (la pantalla las genera a 30 días y deja editarlas).
   chequesCantidad: number;
@@ -166,6 +216,9 @@ export interface ParamsPedidoEspecial {
 // Fila del cronograma SAFRA (misma estructura que el plan SAFRA real).
 export interface FilaCronogramaEspecial {
   mes: number;
+  // Fecha del pago (ISO "YYYY-MM-DD"): en SAFRA cada refuerzo tiene su
+  // fecha real, igual que el plan SAFRA del panel.
+  fecha?: string;
   concepto: string; // "ENTRADA" · "Refuerzo" · "PAGO FINAL"
   saldoInicial: number;
   pago: number;
@@ -224,25 +277,28 @@ export interface ResultadoPedidoEspecial {
   plazoPromedioMeses: number;
 }
 
-// ═══ SAFRA: cronograma mes a mes (puerto EXACTO de plan-safra.ts) ═══
-// La MISMA lógica del plan SAFRA del panel, reducida a UN producto:
-//   · interés mensual = saldo al inicio del mes × (tasa %/100) — se muestra
-//     por mes y se cobra ENTERO con el PAGO FINAL (igual que el plan real:
-//     el saldo/cuadre interno es de CAPITAL, el interés se suma al final).
-//   · 1 refuerzo por mes (máx. 18). Todos los refuerzos valen lo mismo
-//     (redondeo comercial al millar superior) MENOS el último, que paga el
-//     capital restante (redondeoComercial(saldo)): así el saldo llega VIVO
-//     al último mes y el plan SIEMPRE cierra con TODOS los refuerzos.
+// ═══ SAFRA: cronograma con FECHAS (puerto EXACTO de plan-safra.ts) ═══
+// Misma lógica del plan SAFRA del panel, reducida a UN producto:
+//   · cada REFUERZO tiene su FECHA; el mes sale de la fecha (emisión + N
+//     meses de calendario) y el plan dura hasta el mes del ÚLTIMO refuerzo
+//     (máx. 18 meses desde la emisión).
+//   · interés MENSUAL = saldo al inicio del mes × (tasa %/100), también en
+//     los meses sin pago (el saldo sigue financiado). El interés acumulado
+//     se cobra ENTERO con el PAGO FINAL (igual que el panel).
+//   · el capital se reparte entre TODOS los refuerzos (todos valen lo mismo,
+//     redondeo comercial al millar superior) MENOS el último, que paga el
+//     capital restante (redondeoComercial(saldo)): el plan SIEMPRE cierra
+//     con todos los refuerzos cargados.
 //   · la estimación usa la MITAD del peor caso y baja la cuota de a 1.000
-//     mientras (N-1)·cuota >= saldo (garantía del panel: ningún refuerzo
-//     desaparece antes del último mes).
+//     mientras (N-1)·cuota >= saldo (garantía del panel).
 //   · PAGO FINAL COMERCIAL = capital del último pago + intereses, al millar
 //     superior (idéntico al panel).
 function calcularSafraInterna(
   baseContado: number,
   pctSafraMensual: number,
   entrada: number,
-  meses: number
+  fechasRefuerzos: string[],
+  fechaEmisionISO: string
 ): {
   cronograma: FilaCronogramaEspecial[];
   totalIntereses: number;
@@ -250,8 +306,28 @@ function calcularSafraInterna(
   totalPlan: number;
 } {
   const tasa = Math.max(0, pctSafraMensual) / 100;
-  const nRefuerzos = Math.max(1, Math.min(18, Math.floor(meses || 1)));
   const entradaValor = Math.max(0, Math.round(entrada || 0));
+  const emision = fechaEmisionISO || new Date().toISOString().slice(0, 10);
+
+  // REFUERZOS: el mes sale SIEMPRE de la FECHA (la fecha es la verdad).
+  // Los que caen fuera del plan (mes 1..18) no entran al cálculo; la
+  // pantalla ya los marca en rojo y bloquea el guardado.
+  const refuerzos: { fecha: string; mes: number; valor: number }[] = (
+    Array.isArray(fechasRefuerzos) ? fechasRefuerzos : []
+  )
+    .map((fecha) => ({
+      fecha: String(fecha || ""),
+      mes: mesDeFecha(emision, fecha),
+      valor: 0,
+    }))
+    .filter(
+      (r): r is { fecha: string; mes: number; valor: number } =>
+        r.mes !== null && r.mes >= 1 && r.mes <= MAX_MESES_SAFRA
+    )
+    .sort((a, b) => a.mes - b.mes);
+
+  const nRefuerzos = refuerzos.length;
+  const maxMes = nRefuerzos > 0 ? refuerzos[nRefuerzos - 1].mes : 0;
 
   let saldo = baseContado;
   let intereses = 0;
@@ -265,6 +341,7 @@ function calcularSafraInterna(
     pagado += entradaValor;
     filas.push({
       mes: 0,
+      fecha: emision,
       concepto: "ENTRADA",
       saldoInicial: Math.round(saldoInicialMes0),
       pago: entradaValor,
@@ -274,11 +351,10 @@ function calcularSafraInterna(
     });
   }
 
-  // REFUERZOS: uno por mes (1..N). El ÚLTIMO no fija valor: paga el saldo
-  // restante al cerrar el plan (igual que el panel).
-  const refuerzos: number[] = new Array(nRefuerzos).fill(0);
-  if (saldo > 0) {
-    const interesEstimado = saldo * tasa * nRefuerzos * 0.5;
+  // REFUERZOS: reparto del capital, igual que el panel. La estimación usa
+  // el mes del ÚLTIMO refuerzo (maxMes), no la cantidad.
+  if (nRefuerzos > 0 && saldo > 0) {
+    const interesEstimado = saldo * tasa * maxMes * 0.5;
     const totalAPagar = saldo + interesEstimado;
     let valorPorRefuerzo = redondeoComercial(totalAPagar / nRefuerzos);
     while (
@@ -289,41 +365,59 @@ function calcularSafraInterna(
       valorPorRefuerzo -= 1000;
     }
     if (valorPorRefuerzo < 1000) valorPorRefuerzo = 0;
-    for (let i = 0; i < nRefuerzos; i++) {
-      refuerzos[i] = i === nRefuerzos - 1 ? 0 : valorPorRefuerzo;
-    }
+    refuerzos.forEach((r, idx) => {
+      // El último NO se fija acá: su valor se calcula al cerrar el plan.
+      r.valor = idx === nRefuerzos - 1 ? 0 : valorPorRefuerzo;
+    });
   }
 
-  // ITERACIÓN MES A MES (1..N): interés sobre el saldo restante; el último
-  // refuerzo paga TODO el capital que queda (redondeoComercial(saldo)).
-  for (let mes = 1; mes <= nRefuerzos; mes++) {
+  // ITERACIÓN MES A MES (1..maxMes): interés sobre el saldo restante. En
+  // los meses sin refuerzo queda una fila "Solo interés (sin pago)" (la
+  // pantalla muestra solo las filas con pago, como el panel).
+  for (let mes = 1; mes <= maxMes; mes++) {
     if (saldo <= 0) break;
     const saldoInicialMes = saldo;
     const interesMes = saldo * tasa;
     intereses += interesMes;
-    const esUltimo = mes === nRefuerzos;
-    const pago = esUltimo ? redondeoComercial(saldo) : refuerzos[mes - 1] || 0;
-    saldo -= pago;
-    pagado += pago;
-    filas.push({
-      mes,
-      concepto: esUltimo ? "PAGO FINAL" : "Refuerzo",
-      saldoInicial: Math.round(saldoInicialMes),
-      pago,
-      interes: Math.round(interesMes),
-      saldoFinal: Math.round(saldo),
-      pagoMostrado: pago,
-    });
+    const refuerzosEnMes = refuerzos.filter((r) => r.mes === mes);
+    if (refuerzosEnMes.length > 0) {
+      refuerzosEnMes.forEach((r) => {
+        const esUltimo = r === refuerzos[nRefuerzos - 1];
+        const pago = esUltimo ? redondeoComercial(saldo) : r.valor || 0;
+        saldo -= pago;
+        pagado += pago;
+        filas.push({
+          mes,
+          fecha: r.fecha || sumarMesesISO(emision, mes),
+          concepto: esUltimo ? "PAGO FINAL" : "Refuerzo",
+          saldoInicial: Math.round(saldoInicialMes),
+          pago,
+          interes: Math.round(interesMes),
+          saldoFinal: Math.round(saldo),
+          pagoMostrado: pago,
+        });
+      });
+    } else {
+      filas.push({
+        mes,
+        fecha: sumarMesesISO(emision, mes),
+        concepto: "Solo interés (sin pago)",
+        saldoInicial: Math.round(saldoInicialMes),
+        pago: 0,
+        interes: Math.round(interesMes),
+        saldoFinal: Math.round(saldo),
+        pagoMostrado: 0,
+      });
+    }
   }
 
   // ─── PAGO FINAL COMERCIAL (igual que el plan SAFRA del sistema) ───
   // El interés acumulado del plan se cobra con el ÚLTIMO pago: PAGO FINAL
-  // = capital + intereses, redondeado al millar superior. La ENTRADA no se
-  // toca (valor cargado por el vendedor, exacto). Si la única fila con
-  // pago es la ENTRADA (sin refuerzos pagados), se muestra sin tocar.
+  // = capital + intereses, al millar superior. La ENTRADA no se toca.
   const interesesRedondeados = Math.round(intereses);
   const filasConPago = filas.filter((f) => f.pago > 0);
-  const ultimaFilaPago = filasConPago.length > 0 ? filasConPago[filasConPago.length - 1] : null;
+  const ultimaFilaPago =
+    filasConPago.length > 0 ? filasConPago[filasConPago.length - 1] : null;
   const esEntradaUnica =
     filasConPago.length === 1 && ultimaFilaPago?.mes === 0;
   const aplicaRedondeoFinal = !!ultimaFilaPago && !esEntradaUnica;
@@ -334,15 +428,19 @@ function calcularSafraInterna(
   for (const f of filas) {
     if (aplicaRedondeoFinal && f === ultimaFilaPago) f.pagoMostrado = pagoFinalComercial;
     else f.pagoMostrado = f.pago;
+    // Normalización del rótulo (Task 94b del panel): SOLO la última fila
+    // con pago que no sea la ENTRADA lleva "PAGO FINAL"; ninguna otra.
+    if (f.mes !== 0 && f.pago > 0) {
+      f.concepto = aplicaRedondeoFinal && f === ultimaFilaPago ? "PAGO FINAL" : "Refuerzo";
+    }
   }
 
   return {
     cronograma: filas,
     totalIntereses: interesesRedondeados,
     totalPagado: pagado,
-    // Total del Plan = suma de las filas COMERCIALES mostradas (igual que
-    // el plan real: totalPagos → capital del último + PAGO FINAL comercial;
-    // sin última fila comercial: al menos base + intereses).
+    // Total del Plan = suma de las filas COMERCIALES mostradas (entrada +
+    // refuerzos + PAGO FINAL con interés, al millar superior).
     totalPlan: Math.round(
       aplicaRedondeoFinal
         ? pagado - pagoFinalCapital + pagoFinalComercial
@@ -526,17 +624,36 @@ export function calcularPedidoEspecial(
 
   // ═══ SAFRA ═══
   // Base financiable = VALOR AL CONTADO (como el plan SAFRA real financia
-  // el priceContado). Entrada opcional + refuerzos mensuales; interés
-  // MENSUAL sobre el saldo restante con la tasa de la combinación.
+  // el priceContado). Entrada opcional + REFUERZOS CON FECHA (mismo formato
+  // del plan SAFRA del panel); interés MENSUAL sobre el saldo restante con
+  // la tasa de la combinación.
   if (p.plan === "safra") {
     if (valorContado <= 0) return null;
     const entrada = Math.max(0, Number(p.safraEntrada) || 0);
     if (entrada >= valorContado) return null; // la entrada no puede pagar todo
-    const meses = Number(p.safraMeses) || 1;
-    const safra = calcularSafraInterna(valorContado, Number(p.pctSafra) || 0, entrada, meses);
+    const emision = p.fechaEmision || new Date().toISOString().slice(0, 10);
+    // FECHAS de los refuerzos (plan SAFRA del panel). Respaldo: estados
+    // viejos sin fechas → refuerzos mensuales desde la emisión.
+    const fechas =
+      Array.isArray(p.safraFechas) && p.safraFechas.length > 0
+        ? p.safraFechas
+        : generarFechasRefuerzos(Number(p.safraMeses) || 6, emision);
+    const safra = calcularSafraInterna(
+      valorContado,
+      Number(p.pctSafra) || 0,
+      entrada,
+      fechas,
+      emision
+    );
+    const refuerzosPagados = safra.cronograma.filter(
+      (f) => f.pago > 0 && f.mes > 0
+    ).length;
+    // Sin refuerzos válidos no hay plan (la pantalla pide la primera fecha).
+    if (refuerzosPagados === 0) return null;
     return {
       ...base,
       margenAplicado: pctContado,
+      cuotas: refuerzosPagados,
       cronograma: safra.cronograma,
       totalIntereses: safra.totalIntereses,
       total: safra.totalPlan,

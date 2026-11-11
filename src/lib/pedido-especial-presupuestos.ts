@@ -216,6 +216,7 @@ export interface DetallePresupuesto {
   fechaInicioPago?: string;
   safraEntrada?: number;
   safraMeses?: number;
+  safraFechas?: string[];
   esMoto?: boolean;
   tasaChequePct?: number;
   plazoPromedioMeses?: number;
@@ -436,6 +437,7 @@ export interface DatosPresupuestoEntrada {
   fechaInicioPago: string;
   safraEntrada: number;
   safraMeses: number;
+  safraFechas: string[];
   chequesCantidad: number;
   chequesFechas: string[];
   fechaEmision: string; // "hoy" del dispositivo del vendedor (ISO)
@@ -474,6 +476,15 @@ export function validarDatosPresupuesto(body: any): DatosPresupuestoEntrada | nu
     : "";
   const safraEntrada = Math.max(0, Number(body?.safraEntrada) || 0);
   const safraMeses = Math.max(1, Math.min(18, Math.floor(Number(body?.safraMeses) || 1)));
+  // FECHAS de los refuerzos del SAFRA (formato del plan SAFRA del panel):
+  // ISO YYYY-MM-DD, máximo 18. Si el plan es SAFRA, se exige al menos una.
+  const safraFechas = Array.isArray(body?.safraFechas)
+    ? (body.safraFechas as unknown[])
+        .map((f) => String(f || "").slice(0, 10))
+        .filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f))
+        .slice(0, 18)
+    : [];
+  if (plan === "safra" && safraFechas.length === 0) return null;
   const chequesCantidad = Math.max(1, Math.min(20, Math.floor(Number(body?.chequesCantidad) || 1)));
   const chequesFechas = Array.isArray(body?.chequesFechas)
     ? (body.chequesFechas as unknown[])
@@ -502,6 +513,7 @@ export function validarDatosPresupuesto(body: any): DatosPresupuestoEntrada | nu
     fechaInicioPago,
     safraEntrada,
     safraMeses,
+    safraFechas,
     chequesCantidad,
     chequesFechas,
     fechaEmision,
@@ -601,6 +613,7 @@ export async function crearPresupuesto(
       diasSinEntrega,
       safraEntrada: datos.safraEntrada,
       safraMeses: datos.safraMeses,
+      safraFechas: datos.safraFechas,
       chequesCantidad: datos.chequesCantidad,
       chequesFechas: datos.chequesFechas,
       esMoto: esTipoMoto(datos.tipoProducto),
@@ -637,6 +650,7 @@ export async function crearPresupuesto(
       fechaInicioPago: datos.plan === "cuotas_sin_entrega" ? datos.fechaInicioPago : "",
       safraEntrada: datos.plan === "safra" ? datos.safraEntrada : 0,
       safraMeses: datos.plan === "safra" ? datos.safraMeses : 0,
+      safraFechas: datos.plan === "safra" ? datos.safraFechas : [],
       esMoto: esTipoMoto(datos.tipoProducto),
       tasaChequePct: resultado.tasaChequePct,
       plazoPromedioMeses: resultado.plazoPromedioMeses,
