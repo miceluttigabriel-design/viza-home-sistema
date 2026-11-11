@@ -18,16 +18,15 @@
 //
 // GET /api/pedido-especial/catalogo
 //   Cualquier usuario logueado. Devuelve:
-//     · proveedores       → DISTINCT fabricante de la BASE (orden alfabético)
-//       + los de la LISTA EXCEL (hoja base: FABRICANTE / CATEGORIA /
-//       DIVISION) que la BASE no tiene — los repetidos se eliminan.
+//     · proveedores       → DISTINCT fabricante (orden alfabético)
 //     · tiposPorProveedor → { fabricante: [tipos…] } (+ tipos creados)
-//     · tipos             → DISTINCT DIVISION (BASE y Excel) + creados
+//     · tipos             → DISTINCT tipo (orden alfabético) + creados
 //     · tiposExtra        → los nombres de los tipos CREADOS (v6)
-//     · porcentajes       → un registro por combinación (fabricante, GRUPO,
-//       tipo): promedios de la BASE cuando la combinación está en la BASE,
-//       o promedios de la LISTA EXCEL cuando no está. NUNCA se escribe
-//       nada en Product (la BASE no se toca).
+//     · porcentajes       → Task 113 v4: un registro por par (fabricante,
+//       tipo) con los % resueltos DE LA BASE (cascada par → proveedor →
+//       tipo → general; respaldo: los % del panel del admin si algún
+//       campo no aparece en la BASE). Para los tipos CREADOS salen con
+//       el promedio GENERAL (no hay productos de ese tipo todavía).
 //   Si la consulta falla devuelve listas vacías — NUNCA rompe la app.
 //
 // POST /api/pedido-especial/catalogo  { tipo: "..." }
@@ -40,7 +39,6 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { esEmailSoloLectura } from "@/lib/usuarios-consulta";
 import { mapaPorcentajesDeLaBase } from "@/lib/pedido-especial-porcentajes";
-import { combosDelCatalogoExtra } from "@/lib/pedido-especial-porcentajes";
 import {
   listarTiposExtra,
   crearTipoExtra,
@@ -77,68 +75,34 @@ export async function GET() {
     const proveedores: string[] = [];
     const tiposPorProveedor: Record<string, string[]> = {};
     const gruposPorProveedor: Record<string, string[]> = {};
-    const grupos = new Set<string>();
     const tipos = new Set<string>();
-    const provKeys = new Set<string>();
-    const grupoKeys = new Set<string>();
-    const tipoKeys = new Set<string>();
-    const norm = (v: string) => String(v || "").trim().toUpperCase();
-
-    // Un solo agregador para la BASE y la LISTA EXCEL: dedupe por clave
-    // normalizada (los repetidos se eliminan y manda lo primero que entra,
-    // que es la BASE -> si BASE y Excel tienen la misma combinación, gana
-    // la BASE).
-    const agregar = (fabRaw: string, grpRaw: string, tipRaw: string) => {
-      const fab = String(fabRaw || "").trim();
-      if (!fab) return;
-      const fabKey = norm(fab);
-      if (!provKeys.has(fabKey)) {
-        provKeys.add(fabKey);
+    const grupos = new Set<string>();
+    for (const p of pares) {
+      const fab = String(p.fabricante || "").trim();
+      if (!fab) continue;
+      const grp = String(p.grupo || "").trim();
+      const tip = String(p.tipo || "").trim();
+      if (!tiposPorProveedor[fab]) {
         tiposPorProveedor[fab] = [];
         gruposPorProveedor[fab] = [];
         proveedores.push(fab);
       }
-      const grp = String(grpRaw || "").trim();
-      const tip = String(tipRaw || "").trim();
       if (grp) {
-        const grpKey = norm(grp);
-        if (!grupoKeys.has(grpKey)) {
-          grupoKeys.add(grpKey);
-          grupos.add(grp);
-        }
-        if (!gruposPorProveedor[fab].some((v) => norm(v) === grpKey))
-          gruposPorProveedor[fab].push(grp);
+        if (!gruposPorProveedor[fab].includes(grp)) gruposPorProveedor[fab].push(grp);
+        grupos.add(grp);
       }
       if (tip) {
-        const tipKey = norm(tip);
-        if (!tipoKeys.has(tipKey)) {
-          tipoKeys.add(tipKey);
-          tipos.add(tip);
-        }
-        if (!tiposPorProveedor[fab].some((v) => norm(v) === tipKey))
-          tiposPorProveedor[fab].push(tip);
+        if (!tiposPorProveedor[fab].includes(tip)) tiposPorProveedor[fab].push(tip);
+        tipos.add(tip);
       }
-    };
-
-    // 1) TODO lo de la BASE (fabricante + GRUPO + TIPO).
-    for (const p of pares) agregar(p.fabricante, p.grupo, p.tipo);
-    // 2) TODO lo de la LISTA EXCEL (FABRICANTE + CATEGORIA + DIVISION), sin
-    //    repetir lo que ya tiene la BASE.
-    for (const c of combosDelCatalogoExtra()) agregar(c.fabricante, c.grupo, c.tipo);
-    proveedores.sort((a, b) => a.localeCompare(b));
-
+    }
     // Los tipos creados entran en TODAS las listas (global + por
     // proveedor): si no están catalogados en la BASE, todavía así el
     // vendedor puede elegirlos para cualquier proveedor.
     for (const t of extraSet) {
-      const tKey = norm(t);
-      if (!tipoKeys.has(tKey)) {
-        tipoKeys.add(tKey);
-        tipos.add(t);
-      }
+      tipos.add(t);
       for (const fab of proveedores) {
-        if (!tiposPorProveedor[fab].some((v) => norm(v) === tKey))
-          tiposPorProveedor[fab].push(t);
+        if (!tiposPorProveedor[fab].includes(t)) tiposPorProveedor[fab].push(t);
       }
     }
 

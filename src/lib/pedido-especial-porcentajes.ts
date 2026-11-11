@@ -36,7 +36,6 @@
 import { db } from "@/lib/db";
 import { listarCombinaciones } from "@/lib/pedido-especial";
 import { listarTiposExtra } from "@/lib/pedido-especial-tipos";
-import { CATALOGO_EXTRA } from "@/lib/pedido-especial-catalogo-extra";
 
 // Los 6 % legibles que usa el cálculo del pedido especial.
 export interface PorcentajesPedidoEspecial {
@@ -56,130 +55,6 @@ const PORCENTAJES_CERO: PorcentajesPedidoEspecial = {
   pctTecnico: 0,
   pctSafra: 0,
 };
-
-// ─── CATÁLOGO EXTRA (LISTA VIZA 16.10.2.026, hoja "base") — SOLO COTIZAR ───
-// Lo que la LISTA EXCEL aporta al buscador del PEDIDO ESPECIAL:
-//   · PROVEEDOR → FABRICANTE · GRUPO → CATEGORIA · TIPO → DIVISION
-// Se usa SOLO dentro del PEDIDO ESPECIAL (nunca se escribe en la tabla
-// Product). Las combinaciones EXACTAS que ya existen en la BASE se
-// descartan y gana la BASE (pedido del dueño: "los repetidos los
-// eliminás"). Lo que la BASE no tiene, sale del Excel.
-const EXTRA_POR_CLAVE = new Map<string, PorcentajesPedidoEspecial>();
-for (const e of CATALOGO_EXTRA) {
-  const clave = [
-    normalizarClave(e.fabricante),
-    normalizarClave(e.grupo),
-    normalizarClave(e.tipo),
-  ].join("||");
-  if (!EXTRA_POR_CLAVE.has(clave)) {
-    EXTRA_POR_CLAVE.set(clave, {
-      pctContado: Number(e.pctContado) || 0,
-      pct1A6: Number(e.pct1A6) || 0,
-      pct7A13: Number(e.pct7A13) || 0,
-      pct14A30: Number(e.pct14A30) || 0,
-      pctTecnico: Number(e.pctTecnico) || 0,
-      pctSafra: Number(e.pctSafra) || 0,
-    });
-  }
-}
-
-// Combinaciones del catálogo EXTRA de la LISTA VIZA para buscar en el
-// PEDIDO ESPECIAL (pedido del dueño: "quiero que ponga tanto de la BASE
-// como del Excel… los que están repetidos se eliminan"). El filtro contra
-// las repeticiones EXACTAS lo hace el catálogo común (mapaPorcentajesDeLaBase
-// y la ruta /api/pedido-especial/catalogo), que dedupe por clave
-// normalizada: si la BASE ya tiene la combinación, gana la de la BASE.
-export interface ComboCatalogoExtra {
-  fabricante: string;
-  grupo: string;
-  tipo: string;
-}
-
-export function combosDelCatalogoExtra(): ComboCatalogoExtra[] {
-  const salida: ComboCatalogoExtra[] = [];
-  const vistos = new Set<string>();
-  for (const e of CATALOGO_EXTRA) {
-    const clave = [
-      normalizarClave(e.fabricante),
-      normalizarClave(e.grupo),
-      normalizarClave(e.tipo),
-    ].join("||");
-    if (!normalizarClave(e.fabricante) || vistos.has(clave)) continue;
-    vistos.add(clave);
-    salida.push({ fabricante: e.fabricante, grupo: e.grupo, tipo: e.tipo });
-  }
-  return salida;
-}
-
-// Claves normalizadas de la BASE para saber si una combinación YA existe:
-// contra esa respuesta el catálogo común decide si repetirla o no.
-interface ClavesBase {
-  fabs: Set<string>;
-  fabGrps: Set<string>;
-  fabTips: Set<string>;
-  exact: Set<string>;
-}
-
-function clavesDeLaBase(filas: FilaPorcentajeProducto[]): ClavesBase {
-  const fabs = new Set<string>();
-  const fabGrps = new Set<string>();
-  const fabTips = new Set<string>();
-  const exact = new Set<string>();
-  for (const f of filas) {
-    const fab = normalizarClave(f.fabricante);
-    if (!fab) continue;
-    const grp = normalizarClave(f.categoria);
-    const tip = normalizarClave(f.tipo);
-    fabs.add(fab);
-    if (grp) fabGrps.add(`${fab}||${grp}`);
-    if (tip) fabTips.add(`${fab}||${tip}`);
-    exact.add(`${fab}||${grp}||${tip}`);
-  }
-  return { fabs, fabGrps, fabTips, exact };
-}
-
-function comboEstaEnLaBase(
-  keys: ClavesBase,
-  fabricante: string,
-  grupo: string,
-  tipo: string
-): boolean {
-  const fab = normalizarClave(fabricante);
-  if (!fab) return false;
-  const grp = normalizarClave(grupo);
-  const tip = normalizarClave(tipo);
-  if (grp && tip) return keys.exact.has(`${fab}||${grp}||${tip}`);
-  if (grp) return keys.fabGrps.has(`${fab}||${grp}`);
-  if (tip) return keys.fabTips.has(`${fab}||${tip}`);
-  return keys.fabs.has(fab);
-}
-
-// % del catálogo extra para una combinación (cascada exacta → fab+grupo →
-// fab+tipo → fab, igual que la BASE). Devuelve null si el fabricante no
-// está en el extra. Los valores YA son legibles (10 = 10 %).
-export function porcentajesDelExtra(
-  fabricante: string,
-  grupo: string,
-  tipo: string
-): PorcentajesPedidoEspecial | null {
-  const fab = normalizarClave(fabricante);
-  if (!fab) return null;
-  const grp = normalizarClave(grupo);
-  const tip = normalizarClave(tipo);
-  const candidatos: [string, string, string][] = [
-    [fab, grp, tip],
-    [fab, grp, ""],
-    [fab, "", tip],
-    [fab, "", ""],
-  ];
-  for (const c of candidatos) {
-    const hit = EXTRA_POR_CLAVE.get(c.join("||"));
-    if (hit) return { ...hit };
-  }
-  return null;
-}
-
-
 
 // Misma normalización que la casa (normalizeKey de import-margins):
 // mayúsculas, sin espacios de más — para agrupar sin cullos por typos.
@@ -447,19 +322,13 @@ export async function porcentajesDeLaBase(
         safra: true,
       },
     });
-    // Combinación que la BASE NO tiene: manda la LISTA EXCEL (catálogo
-    // extra), SOLO para cotizar; NUNCA se escribe en Product. Si la BASE
-    // ya tiene la combinación, manda la BASE.
-    if (!comboEstaEnLaBase(clavesDeLaBase(filas), fabricante, grupo, tipo)) {
-      const extra = porcentajesDelExtra(fabricante, grupo, tipo);
-      if (extra) return extra;
-    }
     return resolverGrupo(calcularPromediosPorcentajes(filas), fabricante, grupo, tipo, respaldo);
   } catch (error) {
     console.error("porcentajesDeLaBase:", error);
     return { ...PORCENTAJES_CERO, ...(respaldo || {}) };
   }
 }
+
 // Un par del catálogo con sus % ya resueltos (lo que consume la pantalla).
 // `grupo` es el GRUPO de la BASE (categoria) y `tipo` el TIPO (puede venir
 // vacío: el dueño pidió GRUPO como selector principal y TIPO opcional).
@@ -469,12 +338,9 @@ export interface ParConPorcentajes extends PorcentajesPedidoEspecial {
   tipo: string;
 }
 
-// Mapa COMPLETO para la pantalla (BASE + LISTA VIZA): un registro por cada
+// Mapa COMPLETO de la BASE para la pantalla: un registro por cada
 // combinación (fabricante, GRUPO, tipo) con los % ya resueltos
-// (promedio de la BASE cuando el combo está en la BASE, o de la LISTA
-// EXCEL cuando no está; respaldo del panel del admin). NUNCA lanza.
-// El dueño pidió: tanto de la BASE como del Excel, sin repetidos — lo que
-// sea idéntico en ambos solo sale una vez (manda la BASE).
+// (promedio de la BASE + respaldo del panel del admin). NUNCA lanza.
 // El dueño pidió GRUPO como selector principal y TIPO opcional:
 //   · (FAB, GRUPO, TIPO) → combo más específico
 //   · (FAB, GRUPO, "")   → solo grupo
@@ -560,36 +426,16 @@ export async function mapaPorcentajesDeLaBase(): Promise<ParConPorcentajes[]> {
       }
     }
 
-    // LISTA EXCEL (pedido del dueño: "quiero que ponga tanto de la BASE
-    // como del Excel"): se agregan TODAS las combinaciones del Excel que
-    // no repite la BASE. Lo que sea exactamente igual ya existe en `pares`
-    // (misma clave normalizada) → se ignora. NUNCA se escribe en Product.
-    const clavesBase = clavesDeLaBase(filas);
-    for (const c of combosDelCatalogoExtra()) {
-      agregar(c.fabricante, c.grupo, c.tipo);
-    }
-
     const salida: ParConPorcentajes[] = [];
     for (const [, par] of pares) {
       const claveRespaldo = `${normalizarClave(par.fabricante)}||${normalizarClave(par.tipo)}`;
-      // Combinación que la BASE tiene → sus %; si no, los de la LISTA EXCEL.
-      const extra = comboEstaEnLaBase(
-        clavesBase,
+      const resueltos = resolverGrupo(
+        mapa,
         par.fabricante,
         par.grupo,
-        par.tipo
-      )
-        ? null
-        : porcentajesDelExtra(par.fabricante, par.grupo, par.tipo);
-      const resueltos =
-        extra ||
-        resolverGrupo(
-          mapa,
-          par.fabricante,
-          par.grupo,
-          par.tipo,
-          respaldoPorClave.get(claveRespaldo)
-        );
+        par.tipo,
+        respaldoPorClave.get(claveRespaldo)
+      );
       salida.push({
         fabricante: par.fabricante,
         grupo: par.grupo,

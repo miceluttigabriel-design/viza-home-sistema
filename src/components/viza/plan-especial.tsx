@@ -44,15 +44,11 @@ import { formatPYG } from "@/lib/format";
 // Pantalla del VENDEDOR dentro del panel del cotizador:
 //   1. Pone el COSTO (en US$ o en Gs — el US$ se convierte con la tasa
 //      activa de la Base).
-//   2. Selecciona el PROVEEDOR — lista de TODO LO QUE HAY EN LA BASE
-//      (columna FABRICANTE) MÁS TODO LO DE LA LISTA EXCEL (columna
-//      FABRICANTE de la hoja "base" de LISTA VIZA HOME), sin repetidos.
-//   3. Selecciona el GRUPO — lista de TODO LO QUE HAY EN LA BASE
-//      (columna CATEGORIA) MÁS TODO LO DE LA LISTA EXCEL (columna
-//      CATEGORIA de la hoja "base"), sin repetidos.
-//   3b. Selecciona el TIPO DE PRODUCTO (opcional) — lista de TODO LO QUE
-//      HAY EN LA BASE (columna TIPO) MÁS TODO LO DE LA LISTA EXCEL
-//      (columna DIVISION de la hoja "base"), sin repetidos.
+//   2. Selecciona el PROVEEDOR — lista ESTIRADA de la BASE (columna
+//      FABRICANTE = "PROVEEDORES").
+//   3. Selecciona el GRUPO — lista ESTIRADA de la BASE (columna CATEGORIA).
+//   3b. Selecciona el TIPO DE PRODUCTO (opcional) — lista ESTIRADA de la
+//      BASE (columna TIPO), filtrada por el proveedor.
 //   4. Escribe la DESCRIPCIÓN del producto.
 //   5. Elige el TIPO DE PLAN: TODOS los planes de VIZA (Task 113 v2,
 //      pedido del dueño: "hay que agregar todos los planes que tenemos
@@ -61,8 +57,7 @@ import { formatPYG } from "@/lib/format";
 //        CONTADO · CUOTAS CON ENTREGA · CUOTAS SIN ENTREGA ·
 //        MAYORISTA · SAFRA · CHEQUE.
 //      Cada uno calcula con LA MISMA lógica que ya usa el sistema
-//      (márgenes por tramos de la BASE — o de la LISTA EXCEL cuando la
-//      combinación no está en la BASE —, recargo 3% sin entrega 31-60
+//      (márgenes por tramos de la BASE, recargo 3% sin entrega 31-60
 //      días, valor técnico del MAYORISTA, interés mensual sobre saldo
 //      del SAFRA, tasa 1.5%/3% mensual del CHEQUE).
 // Task 113 v3 (pedido del dueño): además de calcular en pantalla, el
@@ -427,9 +422,8 @@ export function PlanEspecial({
       const resCfg = await fetch("/api/pedido-especial/config");
       const dataCfg = await resCfg.json().catch(() => ({}));
       setCombinaciones(Array.isArray(dataCfg.combinaciones) ? dataCfg.combinaciones : []);
-      // Catálogo de búsqueda: TODO LO QUE HAY EN LA BASE (FABRICANTE /
-      // CATEGORIA / TIPO) MÁS TODO LO DE LA LISTA EXCEL (FABRICANTE /
-      // CATEGORIA / DIVISION), sin repetidos — pedido del dueño (v2+lista).
+      // Catálogo de la BASE: TODOS los proveedores (FABRICANTE) y tipos
+      // (TIPO) que existen en los productos — pedido del dueño (v2).
       const resCat = await fetch("/api/pedido-especial/catalogo");
       const dataCat = await resCat.json().catch(() => ({}));
       setCatalogo({
@@ -797,28 +791,24 @@ export function PlanEspecial({
     }
   };
 
-  // === Listas de PROVEEDOR, GRUPO y TIPO — BASE + LISTA VIZA ===
-  // Si el catálogo (BASE + Excel) todavía no cargó (o falla), respaldo con
-  // las combinaciones que ya tienen % (así la pantalla NUNCA queda inutilizable).
+  // === Listas de PROVEEDOR, GRUPO y TIPO — ESTIRADAS DE LA BASE ===
+  // Si el catálogo de la BASE todavía no cargó (o falla), respaldo con las
+  // combinaciones que ya tienen % (así la pantalla NUNCA queda inutilizable).
   const proveedores = useMemo(() => {
     if (catalogo.proveedores.length > 0) return catalogo.proveedores;
     return Array.from(new Set(combinaciones.map((c) => c.proveedor)));
   }, [catalogo, combinaciones]);
 
-  // GRUPO (selector PRINCIPAL, pedido del dueño: "tiene que estar TODO lo
-  // de la columna GRUPO de la BASE del sistema y TODO lo de CATEGORIA del
-  // Excel"). El dueño pidió que sea TODO el universo (no filtrado por el
-  // proveedor elegido): mostramos la lista completa (BASE + lista VIZA,
-  // sin repetidos). Respaldo: los grupos del proveedor y los del catálogo.
+  // GRUPO (columna CATEGORIA) del proveedor elegido — selector PRINCIPAL.
   const gruposDelProveedor = useMemo(() => {
-    if (catalogo.grupos.length > 0) return catalogo.grupos;
     if (proveedor && catalogo.gruposPorProveedor[proveedor]?.length) {
       return catalogo.gruposPorProveedor[proveedor];
     }
+    if (catalogo.grupos.length > 0) return catalogo.grupos;
     return Array.from(
       new Set(
         catalogo.porcentajes
-          .filter((p) => p.grupo)
+          .filter((p) => p.fabricante === proveedor && p.grupo)
           .map((p) => p.grupo)
       )
     );
@@ -1070,7 +1060,7 @@ export function PlanEspecial({
 
   // CALCULAR (igual que el plan SAFRA del panel: el vendedor aprieta y
   // recalcula). El plan RECALCULA EN VIVO solo con cada dato que cambiás;
-  // el botón sirve para refrescar los % vigentes (BASE + lista VIZA) por
+  // el botón sirve para refrescar los % vigentes (BASE) por
   // si el admin los cambió mientras cotizabas.
   const handleCalcular = async () => {
     if (calculando) return;
@@ -1480,7 +1470,7 @@ export function PlanEspecial({
             onClick={cargarConfig}
             disabled={cargandoConfig}
             className="text-[11px] font-semibold text-stone-500 hover:text-sky-700 transition-colors flex items-center gap-1 disabled:opacity-50"
-            title="Recargar proveedores, tipos y % (BASE + lista VIZA)"
+            title="Recargar proveedores, tipos y % desde la BASE"
           >
             <RefreshCw className={`h-3 w-3 ${cargandoConfig ? "animate-spin" : ""}`} />
             Actualizar
@@ -1543,7 +1533,7 @@ export function PlanEspecial({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           <div>
             <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
-              Proveedor * <span className="normal-case text-stone-400">(BASE + lista VIZA)</span>
+              Proveedor * <span className="normal-case text-stone-400">(de la BASE)</span>
             </label>
             <select
               value={proveedor}
@@ -1563,7 +1553,7 @@ export function PlanEspecial({
           </div>
           <div>
             <label className="text-[11px] font-semibold text-stone-500 uppercase block mb-1">
-              Grupo * <span className="normal-case text-stone-400">(BASE + lista VIZA)</span>
+              Grupo * <span className="normal-case text-stone-400">(de la BASE)</span>
             </label>
             <select
               value={grupo}
@@ -2222,7 +2212,7 @@ export function PlanEspecial({
                   color: AZUL_OSCURO,
                   borderColor: DORADO,
                 }}
-                title="Recalcular el plan con los % vigentes (BASE + lista VIZA)"
+                title="Recalcular el plan con los % vigentes (BASE)"
               >
                 <Calculator
                   className={`h-4 w-4 ${calculando ? "animate-pulse" : ""}`}
