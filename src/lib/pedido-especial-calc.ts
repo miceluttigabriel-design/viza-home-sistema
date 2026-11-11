@@ -224,16 +224,20 @@ export interface ResultadoPedidoEspecial {
   plazoPromedioMeses: number;
 }
 
-// ─── SAFRA: cronograma mes a mes (puerto de plan-safra.ts) ───
-// La MISMA lógica del plan SAFRA del sistema, reducida a UN producto:
+// ═══ SAFRA: cronograma mes a mes (puerto EXACTO de plan-safra.ts) ═══
+// La MISMA lógica del plan SAFRA del panel, reducida a UN producto:
 //   · interés mensual = saldo al inicio del mes × (tasa %/100) — se muestra
 //     por mes y se cobra ENTERO con el PAGO FINAL (igual que el plan real:
 //     el saldo/cuadre interno es de CAPITAL, el interés se suma al final).
-//   · refuerzos mensuales AUTO-CALCULADOS con dos pasadas para que el plan
-//     SIEMPRE cuadre (saldo final = 0): pasada 1 estima con la mitad del
-//     peor caso, pasada 2 ajusta el último refuerzo.
-//   · refuerzos con redondeo comercial al millar superior y el PAGO FINAL
-//     comercial (capital + intereses) también al millar superior.
+//   · 1 refuerzo por mes (máx. 18). Todos los refuerzos valen lo mismo
+//     (redondeo comercial al millar superior) MENOS el último, que paga el
+//     capital restante (redondeoComercial(saldo)): así el saldo llega VIVO
+//     al último mes y el plan SIEMPRE cierra con TODOS los refuerzos.
+//   · la estimación usa la MITAD del peor caso y baja la cuota de a 1.000
+//     mientras (N-1)·cuota >= saldo (garantía del panel: ningún refuerzo
+//     desaparece antes del último mes).
+//   · PAGO FINAL COMERCIAL = capital del último pago + intereses, al millar
+//     superior (idéntico al panel).
 function calcularSafraInterna(
   baseContado: number,
   pctSafraMensual: number,
@@ -249,92 +253,75 @@ function calcularSafraInterna(
   const nRefuerzos = Math.max(1, Math.min(18, Math.floor(meses || 1)));
   const entradaValor = Math.max(0, Math.round(entrada || 0));
 
-  // Una pasada completa del cronograma con unos valores de refuerzo dados
-  // (o auto-estimados si refuerzosPrevia es null).
-  const ejecutar = (
-    refuerzosPrevia: number[] | null
-  ): { filas: FilaCronogramaEspecial[]; intereses: number; pagado: number; saldoFinal: number; refuerzos: number[] } => {
-    let saldo = baseContado;
-    let intereses = 0;
-    let pagado = 0;
-    const filas: FilaCronogramaEspecial[] = [];
-    const refuerzos: number[] = new Array(nRefuerzos).fill(0);
+  let saldo = baseContado;
+  let intereses = 0;
+  let pagado = 0;
+  const filas: FilaCronogramaEspecial[] = [];
 
-    // ENTRADA (mes 0): se descuenta del saldo ANTES de calcular intereses.
-    if (entradaValor > 0 && entradaValor < baseContado) {
-      const saldoInicialMes0 = saldo;
-      saldo -= entradaValor;
-      pagado += entradaValor;
-      filas.push({
-        mes: 0,
-        concepto: "ENTRADA",
-        saldoInicial: Math.round(saldoInicialMes0),
-        pago: entradaValor,
-        interes: 0,
-        saldoFinal: Math.round(saldo),
-        pagoMostrado: entradaValor,
-      });
-    }
-
-    // Valores de los refuerzos: pasada 1 AUTO-ESTIMA con la mitad del peor
-    // caso (interés estimado = saldo × tasa × meses × 0.5), mismo criterio
-    // del plan SAFRA; el ÚLTIMO refuerzo absorbe el resto.
-    if (saldo > 0) {
-      if (refuerzosPrevia) {
-        for (let i = 0; i < nRefuerzos; i++) refuerzos[i] = refuerzosPrevia[i] || 0;
-      } else {
-        const interesEstimado = saldo * tasa * nRefuerzos * 0.5;
-        const totalAPagar = saldo + interesEstimado;
-        const valorPorRefuerzo = redondeoComercial(totalAPagar / nRefuerzos);
-        for (let i = 0; i < nRefuerzos; i++) {
-          if (i === nRefuerzos - 1) {
-            const sumaOtros = valorPorRefuerzo * (nRefuerzos - 1);
-            refuerzos[i] = redondeoComercial(totalAPagar - sumaOtros);
-          } else {
-            refuerzos[i] = valorPorRefuerzo;
-          }
-        }
-      }
-    }
-
-    // Iteración mes a mes (1..N): interés mensual sobre el saldo RESTANTE.
-    for (let mes = 1; mes <= nRefuerzos; mes++) {
-      if (saldo <= 0) break;
-      const saldoInicialMes = saldo;
-      const interesMes = saldo * tasa;
-      intereses += interesMes;
-      const pago = refuerzos[mes - 1] || 0;
-      saldo -= pago;
-      pagado += pago;
-      filas.push({
-        mes,
-        concepto: mes === nRefuerzos ? "PAGO FINAL" : "Refuerzo",
-        saldoInicial: Math.round(saldoInicialMes),
-        pago,
-        interes: Math.round(interesMes),
-        saldoFinal: Math.round(saldo),
-        pagoMostrado: pago,
-      });
-    }
-    return { filas, intereses, pagado, saldoFinal: saldo, refuerzos };
-  };
-
-  // PASADA 1 y (si hace falta) PASADA 2 para cuadrar el plan a saldo 0.
-  let r = ejecutar(null);
-  if (Math.abs(r.saldoFinal) > 1) {
-    const ajuste = Math.round(r.saldoFinal);
-    const corregidos = [...r.refuerzos];
-    corregidos[nRefuerzos - 1] = redondeoComercial(corregidos[nRefuerzos - 1] + ajuste);
-    r = ejecutar(corregidos);
+  // ENTRADA (mes 0): se descuenta del saldo ANTES de calcular intereses.
+  if (entradaValor > 0) {
+    const saldoInicialMes0 = saldo;
+    saldo -= entradaValor;
+    pagado += entradaValor;
+    filas.push({
+      mes: 0,
+      concepto: "ENTRADA",
+      saldoInicial: Math.round(saldoInicialMes0),
+      pago: entradaValor,
+      interes: 0,
+      saldoFinal: Math.round(saldo),
+      pagoMostrado: entradaValor,
+    });
   }
 
-  // ── PAGO FINAL COMERCIAL (igual que el plan SAFRA del sistema) ──
+  // REFUERZOS: uno por mes (1..N). El ÚLTIMO no fija valor: paga el saldo
+  // restante al cerrar el plan (igual que el panel).
+  const refuerzos: number[] = new Array(nRefuerzos).fill(0);
+  if (saldo > 0) {
+    const interesEstimado = saldo * tasa * nRefuerzos * 0.5;
+    const totalAPagar = saldo + interesEstimado;
+    let valorPorRefuerzo = redondeoComercial(totalAPagar / nRefuerzos);
+    while (
+      nRefuerzos > 1 &&
+      valorPorRefuerzo > 0 &&
+      (nRefuerzos - 1) * valorPorRefuerzo >= saldo
+    ) {
+      valorPorRefuerzo -= 1000;
+    }
+    if (valorPorRefuerzo < 1000) valorPorRefuerzo = 0;
+    for (let i = 0; i < nRefuerzos; i++) {
+      refuerzos[i] = i === nRefuerzos - 1 ? 0 : valorPorRefuerzo;
+    }
+  }
+
+  // ITERACIÓN MES A MES (1..N): interés sobre el saldo restante; el último
+  // refuerzo paga TODO el capital que queda (redondeoComercial(saldo)).
+  for (let mes = 1; mes <= nRefuerzos; mes++) {
+    if (saldo <= 0) break;
+    const saldoInicialMes = saldo;
+    const interesMes = saldo * tasa;
+    intereses += interesMes;
+    const esUltimo = mes === nRefuerzos;
+    const pago = esUltimo ? redondeoComercial(saldo) : refuerzos[mes - 1] || 0;
+    saldo -= pago;
+    pagado += pago;
+    filas.push({
+      mes,
+      concepto: esUltimo ? "PAGO FINAL" : "Refuerzo",
+      saldoInicial: Math.round(saldoInicialMes),
+      pago,
+      interes: Math.round(interesMes),
+      saldoFinal: Math.round(saldo),
+      pagoMostrado: pago,
+    });
+  }
+
+  // ─── PAGO FINAL COMERCIAL (igual que el plan SAFRA del sistema) ───
   // El interés acumulado del plan se cobra con el ÚLTIMO pago: PAGO FINAL
   // = capital + intereses, redondeado al millar superior. La ENTRADA no se
   // toca (valor cargado por el vendedor, exacto). Si la única fila con
   // pago es la ENTRADA (sin refuerzos pagados), se muestra sin tocar.
-  const filas = r.filas;
-  const interesesRedondeados = Math.round(r.intereses);
+  const interesesRedondeados = Math.round(intereses);
   const filasConPago = filas.filter((f) => f.pago > 0);
   const ultimaFilaPago = filasConPago.length > 0 ? filasConPago[filasConPago.length - 1] : null;
   const esEntradaUnica =
@@ -352,14 +339,14 @@ function calcularSafraInterna(
   return {
     cronograma: filas,
     totalIntereses: interesesRedondeados,
-    totalPagado: r.pagado,
+    totalPagado: pagado,
     // Total del Plan = suma de las filas COMERCIALES mostradas (igual que
-    // el plan real: totalPagos − capital del último + PAGO FINAL comercial;
+    // el plan real: totalPagos → capital del último + PAGO FINAL comercial;
     // sin última fila comercial: al menos base + intereses).
     totalPlan: Math.round(
       aplicaRedondeoFinal
-        ? r.pagado - pagoFinalCapital + pagoFinalComercial
-        : Math.max(baseContado + interesesRedondeados, r.pagado)
+        ? pagado - pagoFinalCapital + pagoFinalComercial
+        : Math.max(baseContado + interesesRedondeados, pagado)
     ),
   };
 }
