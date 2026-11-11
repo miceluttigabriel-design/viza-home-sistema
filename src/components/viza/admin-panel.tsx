@@ -24,7 +24,6 @@ import {
   Tag,
   Pencil,
   KeyRound,
-  Percent,
   Coins,
   BarChart3,
   Warehouse,
@@ -42,7 +41,6 @@ import { puedeEditarTasaCambio } from "@/lib/permisos-cambio";
 // INSTANTE en STOCK GENERAL (columnas de la Base, STOCK/SALDO y el registro
 // de última edición) — misma pestaña y otras pestañas.
 import { avisarProductoEditado } from "@/lib/replicacion-productos";
-import { ModalPedidoEspecialConfig } from "./pedido-especial-config";
 import { CambiarContrasena } from "@/components/viza/cambiar-contrasena";
 // Task 107 (pedido del dueño): el mini cuadrito de última actualización de stock
 // (el mismo del panel de ventas, Task 105) también DENTRO DE LA BASE.
@@ -602,10 +600,8 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   // Si la lectura falla, quedan las de siempre y nada se rompe.
   const [tasasCambio, setTasasCambio] = useState<{ cambioRS: number; cambioUS: number }>(TASAS_FRONT_DEFAULT);
   const [modalTasaOpen, setModalTasaOpen] = useState(false);
-  // Modal: PEDIDO ESPECIAL (Task 113) — config de proveedores + tipos de
-  // producto + % de la Base. Botón visible SOLO para admin/supremo (igual
-  // que toda escritura de la Base; la API re-valida la misma regla).
-  const [modalPedidoEspecialOpen, setModalPedidoEspecialOpen] = useState(false);
+  // (El modal de configuracion de % del PEDIDO ESPECIAL se elimino: los %
+  // ahora salen solos de la BASE.)
   useEffect(() => {
     let vivo = true;
     (async () => {
@@ -1266,13 +1262,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
         />
       )}
 
-      {/* Modal: PEDIDO ESPECIAL (Task 113, pedido del dueño) — montado SOLO
-          cuando está abierto, así arranca limpio en cada apertura. Acá el
-          admin carga las combinaciones PROVEEDOR + TIPO DE PRODUCTO con sus
-          % (contado, 1-6, 7-13, 14-30) que usa el cotizador del vendedor. */}
-      {modalPedidoEspecialOpen && (
-        <ModalPedidoEspecialConfig onClose={() => setModalPedidoEspecialOpen(false)} />
-      )}
+      {/* Modal PEDIDO ESPECIAL: ELIMINADO (pedido del duenio). Los % del
+          cotizador ahora se estiran SOLOS de la BASE (margenes de los
+          productos, ver src/lib/pedido-especial-porcentajes.ts), asi que
+          ya no hace falta configurar nada a mano desde aca. */}
 
       <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 pt-6 pb-3 flex flex-col">
         <div className="space-y-4 flex-1 min-h-0 flex flex-col">
@@ -1327,22 +1320,10 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     TASA DE CAMBIO
                   </button>
                 )}
-                {/* Botón PEDIDO ESPECIAL (Task 113, pedido del dueño) — config
-                    de la Base: proveedores + tipos de producto + % por
-                    combinación. Visible SOLO para admin/supremo (la API
-                    re-valida la MISMA regla en toda escritura). */}
-                {(user.role === "admin" || user.role === "supremo_admin") && !esLectura && (
-                  <button
-                    id="btn-pedido-especial"
-                    onClick={() => setModalPedidoEspecialOpen(true)}
-                    className="h-8 px-3 rounded-lg text-white font-bold text-xs flex items-center gap-1.5 hover:brightness-110 transition-colors"
-                    style={{ background: "linear-gradient(135deg, #155789 0%, #1e6ba8 100%)" }}
-                    title="Configurar los proveedores, tipos de producto y % que usa el PEDIDO ESPECIAL del cotizador"
-                  >
-                    <Percent className="h-3.5 w-3.5" />
-                    PEDIDO ESPECIAL
-                  </button>
-                )}
+                {/* Boton PEDIDO ESPECIAL (%): ELIMINADO (pedido del duenio).
+                    El cotizador del vendedor ya estira los % DIRECTO de la
+                    BASE (margenes por proveedor + tipo de producto), asi que
+                    esta configuracion manual ya no se usa. */}
                 {/* Boton EXPORTAR EXCEL — ELIMINADO (pedido del dueño): ya no
                     hace falta. La copia de la base se manda sola por correo
                     con las COPIAS DE SEGURIDAD (08:00 / 14:00 / 23:00) y el
