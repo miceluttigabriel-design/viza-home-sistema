@@ -84,7 +84,7 @@ export async function GET() {
     // Cantidad de presupuestos emitidos por usuario + fecha del último.
     // Quote.userId ya existe desde siempre en el sistema: groupBy sobre
     // tablas existentes, imposible romper nada.
-    const [totales, aprobadas, totalGeneral] = await Promise.all([
+    const [totales, aprobadas, totalGeneralQuotes] = await Promise.all([
       db.quote.groupBy({
         by: ["userId"],
         _count: true,
@@ -98,15 +98,70 @@ export async function GET() {
       db.quote.count(),
     ]);
 
+    // Presupuestos especiales (tabla PedidoEspecialPresupuesto, keyed por
+    // vendedorEmail). Se suman al ranking: cuenta como EMITIDO cada uno,
+    // APROBADO/VERIFICADO cuenta como APROBADA, y el plan se deduce del
+    // campo `plan`. Así los emitidos del PEDIDO ESPECIAL también figuran
+    // en el CRM (ranking por usuario y total general).
+    const [especialesTotales, especialesAprobados, especialesPorPlan, totalEspeciales] =
+      await Promise.all([
+        db.$queryRaw<Array<{ vendedorEmail: string; count: number; ultimo: Date }>>`
+          SELECT "vendedorEmail", COUNT(*)::int as count, MAX("createdAt") as ultimo
+          FROM "PedidoEspecialPresupuesto"
+          GROUP BY "vendedorEmail"
+        `,
+        db.$queryRaw<Array<{ vendedorEmail: string; count: number }>>`
+          SELECT "vendedorEmail", COUNT(*)::int as count
+          FROM "PedidoEspecialPresupuesto"
+          WHERE "estado" IN ('APROBADO', 'VERIFICADO')
+          GROUP BY "vendedorEmail"
+        `,
+        db.$queryRaw<
+          Array<{ vendedorEmail: string; plan: string; count: number }>
+        >`
+          SELECT "vendedorEmail", "plan", COUNT(*)::int as count
+          FROM "PedidoEspecialPresupuesto"
+          GROUP BY "vendedorEmail", "plan"
+        `,
+        db.pedidoEspecialPresupuesto.count(),
+      ]);
+
+    // Mapa email (minúscula) → userId para unir especiales al ranking.
+    const emailToUserId = new Map<string, string>();
+    for (const u of users) {
+      emailToUserId.set(String(u.email || "").trim().toLowerCase(), u.id);
+    }
+
     const totalPorUser = new Map<string, { total: number; ultimo: Date | null }>();
     for (const g of totales) {
       if (!g.userId) continue; // presupuestos sin usuario: no van al ranking por persona
       totalPorUser.set(g.userId, { total: g._count, ultimo: g._max.createdAt ?? null });
     }
+    // Sumar especiales al total por usuario.
+    for (const e of especialesTotales) {
+      const uid = emailToUserId.get(String(e.vendedorEmail || "").trim().toLowerCase());
+      if (!uid) continue;
+      const prev = totalPorUser.get(uid) ?? { total: 0, ultimo: null };
+      const ultimoNuevo = e.ultimo
+        ? prev.ultimo
+          ? prev.ultimo > e.ultimo
+            ? prev.ultimo
+            : e.ultimo
+          : e.ultimo
+        : prev.ultimo;
+      totalPorUser.set(uid, { total: prev.total + Number(e.count), ultimo: ultimoNuevo });
+    }
+
     const aprobadasPorUser = new Map<string, number>();
     for (const g of aprobadas) {
       if (!g.userId) continue;
       aprobadasPorUser.set(g.userId, g._count);
+    }
+    // Sumar especiales aprobados.
+    for (const e of especialesAprobados) {
+      const uid = emailToUserId.get(String(e.vendedorEmail || "").trim().toLowerCase());
+      if (!uid) continue;
+      aprobadasPorUser.set(uid, (aprobadasPorUser.get(uid) ?? 0) + Number(e.count));
     }
 
     // ─── Desglose POR TIPO DE PLAN (Task 78; Task 111 agrega CONTADO) ───
@@ -127,6 +182,14 @@ export async function GET() {
       if (qn.includes("CHEQUE")) return "CHEQUE";
       return "CUOTA"; // PRESUPUESTO-XX y cualquier formato viejo del carrito
     }
+    function planDeEspecial(plan: string): string {
+      const p = (plan || "").toLowerCase();
+      if (p === "contado") return "CONTADO";
+      if (p === "mayorista") return "MAYORISTA";
+      if (p === "safra") return "SAFRA";
+      if (p === "cheque") return "CHEQUE";
+      return "CUOTA"; // cuotas_con_entrega / cuotas_sin_entrega
+    }
     const quotesParaPlan = await db.quote.findMany({
       select: { userId: true, quoteNumber: true, status: true },
     });
@@ -138,6 +201,15 @@ export async function GET() {
         { CUOTA: 0, CONTADO: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 };
       rec[planDeQuote(q.quoteNumber, q.status)]++;
       porPlanPorUser.set(q.userId, rec);
+    }
+    // Sumar especiales al desglose por plan.
+    for (const e of especialesPorPlan) {
+      const uid = emailToUserId.get(String(e.vendedorEmail || "").trim().toLowerCase());
+      if (!uid) continue;
+      const rec =
+        porPlanPorUser.get(uid) ?? { CUOTA: 0, CONTADO: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 };
+      rec[planDeEspecial(e.plan)] = (rec[planDeEspecial(e.plan)] ?? 0) + Number(e.count);
+      porPlanPorUser.set(uid, rec);
     }
     const porPlanVacio = () => ({
       CUOTA: 0,
@@ -226,7 +298,8 @@ export async function GET() {
       // Task 137: la lista del CRM ahora incluye CENTRAL (asignación de
       // usuarios). Las sucursales de STOCK siguen siendo solo las 4 de venta.
       sucursales: SUCURSALES_USUARIO,
-      totalGeneral,
+      // TOTAL EMITIDOS = presupuestos normales (quote) + pedidos especiales.
+      totalGeneral: totalGeneralQuotes + totalEspeciales,
       pedidosEspeciales,
     });
   } catch (error) {
