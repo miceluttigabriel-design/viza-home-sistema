@@ -323,7 +323,7 @@ const R = {
   neBanner: { x: 80, y: 140, w: 300, h: 56 },
   lpBanner: { x: 960, y: 140, w: 300, h: 56 },
   sgBanner: { x: 960, y: 496, w: 300, h: 56 },
-  katueteExtra: { x: 40, y: 290, w: 240, h: 56 },
+  katueteExtra: { x: 440, y: 650, w: 240, h: 56 },
 };
 
 function Escenario({ children }: { children: ReactNode }) {
@@ -445,6 +445,8 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Edificio x={1110} y={270} />
             <Edificio x={1110} y={620} />
             <Edificio x={670} y={360} s={1.4} h={70} central />
+            {/* Katuete (sucursal extra de Central) */}
+            <Edificio x={500} y={560} s={0.9} />
 
             {/* Panel automatización → banner de La Base */}
             <Linea d="M 560 134 L 560 176" t="pedidos" ida={false} />
@@ -466,6 +468,9 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 972 640 C 900 630, 880 530, 800 485" t="pedidos" ida={false} />
             <Linea d="M 975 662 C 900 662, 870 548, 790 500" t="fisico" ida={false} />
             <Linea d="M 982 620 C 910 600, 890 510, 810 470" t="sync" ida={false} />
+
+            {/* Central → Katuete (sucursal extra) */}
+            <Linea d="M 650 440 C 580 480, 540 520, 520 560" t="pedidos" />
 
             {/* La Base → Katuete (sucursal extra) */}
             <Linea d="M 500 216 C 420 216, 340 250, 280 290" t="pedidos" ida={false} />
