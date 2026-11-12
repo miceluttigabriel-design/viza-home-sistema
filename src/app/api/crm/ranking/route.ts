@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
   SUCURSALES_USUARIO,
+  MAPA_SUCURSAL_EXCEL,
   leerMapaSucursales,
   sembrarDesdeExcel,
   migrarCentralKatuete,
@@ -81,10 +82,48 @@ export async function GET() {
       orderBy: [{ active: "desc" }, { name: "asc" }],
     });
 
+    // Sucursal de cada usuario (tabla aparte, auto-creada en el primer uso).
+    // Primera vez: se siembra solo desde la planilla de funcionarios
+    // (FUN.VIZA) coincidiendo el email; lo que no coincide queda
+    // "SIN SUCURSAL" y el admin lo asigna a mano desde el panel.
+    // Ajuste del CRM (una sola vez, best-effort): "CENTRAL/KATUETE" dejó de
+    // existir como filtro → sus usuarios pasan a "KATUETE". (Task 77: la
+    // parte que sacaba a cobranza.katuete@ de KATUETE quedó revertida —
+    // vuelve a KATUETE por la siembra del mapa.)
+    await migrarCentralKatuete();
+    // Task 137 (pedido del dueño): los usuarios de la oficina central que
+    // estaban en KATUETE pasan a SU sucursal CENTRAL (una sola pasada en la
+    // vida de la base; después manda lo que el admin ajuste a mano).
+    await migrarCentral();
+
+    let mapaSuc = await leerMapaSucursales();
+    const sinSucursal = users.filter(
+      (u) => !mapaSuc.has(u.email.trim().toLowerCase())
+    );
+    if (sinSucursal.length > 0) {
+      await sembrarDesdeExcel(sinSucursal.map((u) => u.email));
+      mapaSuc = await leerMapaSucursales();
+    }
+
+    // Resuelve la sucursal con la MISMA prioridad de siempre: primero la
+    // asignación guardada (editable en el CRM/GDA) y, si todavía no hay fila,
+    // la planilla oficial. Así el filtro de CENTRAL funciona incluso antes
+    // de que la tabla UsuarioSucursal exista.
+    const sucursalDe = (email: string): string => {
+      const key = String(email || "").trim().toLowerCase();
+      return mapaSuc.get(key) || MAPA_SUCURSAL_EXCEL[key] || "SIN SUCURSAL";
+    };
+
+    // ─── Task 168 (pedido del dueño) ───
+    // Los usuarios de CENTRAL quedan FUERA del CRM: no aparecen en el
+    // ranking, no suman en el total general y sus pedidos especiales tampoco
+    // se listan. El resto de los usuarios sigue igual que siempre.
+    const usersCrm = users.filter((u) => sucursalDe(u.email) !== "CENTRAL");
+
     // Cantidad de presupuestos emitidos por usuario + fecha del último.
     // Quote.userId ya existe desde siempre en el sistema: groupBy sobre
     // tablas existentes, imposible romper nada.
-    const [totales, aprobadas, totalGeneralQuotes] = await Promise.all([
+    const [totales, aprobadas] = await Promise.all([
       db.quote.groupBy({
         by: ["userId"],
         _count: true,
@@ -95,7 +134,6 @@ export async function GET() {
         _count: true,
         where: { status: "aprobada" },
       }),
-      db.quote.count(),
     ]);
 
     // Presupuestos especiales (tabla PedidoEspecialPresupuesto, keyed por
@@ -103,7 +141,7 @@ export async function GET() {
     // APROBADO/VERIFICADO cuenta como APROBADA, y el plan se deduce del
     // campo `plan`. Así los emitidos del PEDIDO ESPECIAL también figuran
     // en el CRM (ranking por usuario y total general).
-    const [especialesTotales, especialesAprobados, especialesPorPlan, totalEspeciales] =
+    const [especialesTotales, especialesAprobados, especialesPorPlan] =
       await Promise.all([
         db.$queryRaw<Array<{ vendedorEmail: string; count: number; ultimo: Date }>>`
           SELECT "vendedorEmail", COUNT(*)::int as count, MAX("createdAt") as ultimo
@@ -123,12 +161,12 @@ export async function GET() {
           FROM "PedidoEspecialPresupuesto"
           GROUP BY "vendedorEmail", "plan"
         `,
-        db.pedidoEspecialPresupuesto.count(),
       ]);
 
     // Mapa email (minúscula) → userId para unir especiales al ranking.
+    // Solo usuarios que entran al CRM (CENTRAL ya quedó afuera).
     const emailToUserId = new Map<string, string>();
-    for (const u of users) {
+    for (const u of usersCrm) {
       emailToUserId.set(String(u.email || "").trim().toLowerCase(), u.id);
     }
 
@@ -219,30 +257,7 @@ export async function GET() {
       CHEQUE: 0,
     });
 
-    // Sucursal de cada usuario (tabla aparte, auto-creada en el primer uso).
-    // Primera vez: se siembra solo desde la planilla de funcionarios
-    // (FUN.VIZA) coincidiendo el email; lo que no coincide queda
-    // "SIN SUCURSAL" y el admin lo asigna a mano desde el panel.
-    // Ajuste del CRM (una sola vez, best-effort): "CENTRAL/KATUETE" dejó de
-    // existir como filtro → sus usuarios pasan a "KATUETE". (Task 77: la
-    // parte que sacaba a cobranza.katuete@ de KATUETE quedó revertida —
-    // vuelve a KATUETE por la siembra del mapa.)
-    await migrarCentralKatuete();
-    // Task 137 (pedido del dueño): los usuarios de la oficina central que
-    // estaban en KATUETE pasan a SU sucursal CENTRAL (una sola pasada en la
-    // vida de la base; después manda lo que el admin ajuste a mano).
-    await migrarCentral();
-
-    let mapaSuc = await leerMapaSucursales();
-    const sinSucursal = users.filter(
-      (u) => !mapaSuc.has(u.email.trim().toLowerCase())
-    );
-    if (sinSucursal.length > 0) {
-      await sembrarDesdeExcel(sinSucursal.map((u) => u.email));
-      mapaSuc = await leerMapaSucursales();
-    }
-
-    const ranking = users
+    const ranking = usersCrm
       .map((u) => {
         const t = totalPorUser.get(u.id);
         return {
@@ -251,7 +266,7 @@ export async function GET() {
           email: u.email,
           role: u.role,
           active: u.active,
-          sucursal: mapaSuc.get(u.email.trim().toLowerCase()) || "SIN SUCURSAL",
+          sucursal: sucursalDe(u.email),
           total: t?.total ?? 0,
           aprobadas: aprobadasPorUser.get(u.id) ?? 0,
           porPlan: porPlanPorUser.get(u.id) ?? porPlanVacio(),
@@ -269,9 +284,12 @@ export async function GET() {
     // "en el CRM tiene que salir también los PEDIDOS ESPECIALES que se
     // emitirán… de todos": admin/consulta ven TODOS; el encargado ve los
     // de SU sucursal (mismo alcance del ranking). NUNCA lanza.
-    const pedidosEspeciales = await listarPresupuestosCrm({
-      sucursal: sucursalEncargado || null,
-    });
+    // Task 168: los pedidos de usuarios de CENTRAL tampoco se listan.
+    const pedidosEspeciales = (
+      await listarPresupuestosCrm({
+        sucursal: sucursalEncargado || null,
+      })
+    ).filter((p) => sucursalDe(p.vendedorEmail) !== "CENTRAL");
 
     // ─── Vista ENCARGADO: solo SU sucursal, sin datos de las demás ───
     // Mismo ranking ya calculado, recortado a su sucursal. El total que ve
@@ -295,11 +313,13 @@ export async function GET() {
 
     return NextResponse.json({
       ranking,
-      // Task 137: la lista del CRM ahora incluye CENTRAL (asignación de
-      // usuarios). Las sucursales de STOCK siguen siendo solo las 4 de venta.
+      // Task 137: la lista del CRM incluye CENTRAL para la ASIGNACIÓN de
+      // usuarios (el select de la tabla). Task 168: CENTRAL no entra al
+      // ranking ni al total, y el front lo saca de las pills de filtro.
       sucursales: SUCURSALES_USUARIO,
-      // TOTAL EMITIDOS = presupuestos normales (quote) + pedidos especiales.
-      totalGeneral: totalGeneralQuotes + totalEspeciales,
+      // TOTAL EMITIDOS = presupuestos normales (quote) + pedidos especiales
+      // de los usuarios que SÍ entran al CRM (Central queda afuera).
+      totalGeneral: ranking.reduce((acc, r) => acc + r.total, 0),
       pedidosEspeciales,
     });
   } catch (error) {

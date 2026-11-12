@@ -559,6 +559,7 @@ export async function POST(req: NextRequest) {
       plan: "SAFRA",
       quoteNumber: quoteNumberSafra,
       userId: (session.user as any)?.id,
+      userEmail: session.user?.email,
       customerName: body.cliente?.nombre,
       customerPhone: body.cliente?.telefono,
       notes: body.cliente?.observaciones,

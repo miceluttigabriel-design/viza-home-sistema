@@ -3,6 +3,10 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { nextSequentialQuoteNumber } from "@/lib/quote-number";
+import {
+  crearQuoteConNumeroUnico,
+  resolverUserIdEmision,
+} from "@/lib/guardar-quote";
 
 // POST /api/quotes/save - guarda el presupuesto en la BD
 export async function POST(req: NextRequest) {
@@ -11,7 +15,10 @@ export async function POST(req: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
-    const userId = (session.user as any)?.id;
+    const userId = await resolverUserIdEmision(
+      (session.user as any)?.id,
+      session.user?.email
+    );
 
     const body = await req.json();
     const {
@@ -45,44 +52,48 @@ export async function POST(req: NextRequest) {
     // Número de presupuesto SECUENCIAL por usuario: PRESUPUESTO-01, 02 ...
     const quoteNumber = await nextSequentialQuoteNumber("PRESUPUESTO", userId);
 
-    const quote = await db.quote.create({
-      data: {
-        quoteNumber,
-        customerName,
-        customerPhone: customerPhone || null,
-        customerEmail: customerEmail || null,
-        customerAddress: customerAddress || null,
-        vendorName: vendorName || "Vendedor VIZA",
-        notes: notes || null,
-        subtotal,
-        discount: Number(discount) || 0,
-        taxRate: Number(taxRate) || 0,
-        total,
-        userId,
-        items: {
-          create: items.map(
-            (it: {
-              productId: string;
-              productName: string;
-              productSku: string;
-              quantity: number;
-              unitPrice: number;
-              subtotal: number;
-            }) => ({
-              productId: it.productId,
-              productName: it.productName,
-              productSku: it.productSku,
-              quantity: Number(it.quantity),
-              unitPrice: Number(it.unitPrice),
-              subtotal: Number(it.subtotal),
-            })
-          ),
+    const quote = await crearQuoteConNumeroUnico(quoteNumber, userId, (numero) =>
+      db.quote.create({
+        data: {
+          quoteNumber: numero,
+          customerName,
+          customerPhone: customerPhone || null,
+          customerEmail: customerEmail || null,
+          customerAddress: customerAddress || null,
+          vendorName: vendorName || "Vendedor VIZA",
+          notes: notes || null,
+          subtotal,
+          discount: Number(discount) || 0,
+          taxRate: Number(taxRate) || 0,
+          total,
+          userId,
+          items: {
+            create: items.map(
+              (it: {
+                productId: string;
+                productName: string;
+                productSku: string;
+                quantity: number;
+                unitPrice: number;
+                subtotal: number;
+              }) => ({
+                productId: it.productId,
+                productName: it.productName,
+                productSku: it.productSku,
+                quantity: Number(it.quantity),
+                unitPrice: Number(it.unitPrice),
+                subtotal: Number(it.subtotal),
+              })
+            ),
+          },
         },
-      },
-      include: { items: true },
-    });
+        include: { items: true },
+      })
+    );
 
-    return NextResponse.json({ ok: true, quote });
+    // El número VISIBLE sigue siendo el secuencial (sin el sufijo interno
+    // que se usa solo cuando otro usuario ya ocupó ese quoteNumber).
+    return NextResponse.json({ ok: true, quote: { ...quote, quoteNumber } });
   } catch (error) {
     console.error("Error al guardar presupuesto:", error);
     return NextResponse.json({ error: "Error al guardar el presupuesto" }, { status: 500 });

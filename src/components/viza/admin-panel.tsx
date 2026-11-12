@@ -803,12 +803,12 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
   const [crmPlan, setCrmPlan] = useState<string>("TODOS");
   const [crmGuardandoSuc, setCrmGuardandoSuc] = useState<string | null>(null); // email en guardado
 
-  // Abre el modal CRM y trae el ranking completo (una sola llamada).
-  const abrirCrm = useCallback(async () => {
-    setCrmOpen(true);
-    setCrmLoading(true);
+  // Trae el ranking completo. `silent` = refresco automático: no muestra
+  // el spinner ni repite el toast de error para no molestar al usuario.
+  const cargarCrm = useCallback(async (silent = false) => {
+    if (!silent) setCrmLoading(true);
     try {
-      const res = await fetch("/api/crm/ranking");
+      const res = await fetch("/api/crm/ranking", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Error HTTP ${res.status}`);
       setCrmRanking(Array.isArray(data.ranking) ? data.ranking : []);
@@ -819,11 +819,36 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
       setCrmTotalGeneral(Number(data.totalGeneral) || 0);
     } catch (error) {
       console.error("Error CRM:", error);
-      toast.error(`CRM: ${(error as Error).message}`);
+      if (!silent) toast.error(`CRM: ${(error as Error).message}`);
     } finally {
-      setCrmLoading(false);
+      if (!silent) setCrmLoading(false);
     }
   }, []);
+
+  // Abre el modal CRM y trae el ranking completo.
+  const abrirCrm = useCallback(async () => {
+    setCrmOpen(true);
+    await cargarCrm(false);
+  }, [cargarCrm]);
+
+  // Task 168 (pedido del dueño): con el CRM abierto, el ranking se refresca
+  // SOLO cada 5 segundos. Así el presupuesto que emite cualquier vendedor
+  // aparece de inmediato, sin cerrar y volver a abrir el modal. Durante el
+  // guardado de una sucursal se pausa para no pisar la edición.
+  useEffect(() => {
+    if (!crmOpen) return;
+    const intervalo = window.setInterval(() => {
+      if (!crmGuardandoSuc) void cargarCrm(true);
+    }, 5000);
+    const alVolverALaVentana = () => {
+      if (!crmGuardandoSuc) void cargarCrm(true);
+    };
+    window.addEventListener("focus", alVolverALaVentana);
+    return () => {
+      window.clearInterval(intervalo);
+      window.removeEventListener("focus", alVolverALaVentana);
+    };
+  }, [crmOpen, crmGuardandoSuc, cargarCrm]);
 
   // Guarda la sucursal asignada a un usuario (select del CRM). "" = sin sucursal.
   const guardarSucursalCrm = useCallback(async (email: string, sucursal: string) => {
@@ -2407,7 +2432,10 @@ tr.fila-etiquetada-${e.id}:hover td {
         // "CENTRAL/KATUETE" y "SIN SUCURSAL" fueron eliminados a pedido del
         // admin: las sucursales válidas vienen de la API y ya no incluyen
         // CENTRAL/KATUETE; quienes no tienen sucursal solo se ven en GENERAL.)
-        const filtros = ["GENERAL", ...crmSucursales];
+        // Task 168: CENTRAL queda fuera del ranking y del total, así que no
+        // se muestra como pill de filtro. El select de asignación de la tabla
+        // SIGUE ofreciendo CENTRAL (usa crmSucursales sin este filtro).
+        const filtros = ["GENERAL", ...crmSucursales.filter((s) => s !== "CENTRAL")];
         // Valor de cada fila según el PLAN elegido (Task 78): con TODOS es el
         // total de siempre; con un plan, la cantidad de ESE plan.
         const totalDeFila = (f: CrmFila): number =>
