@@ -8,14 +8,18 @@
 // PÁGINA COMPLETA y tiene TRES alcances, siempre definidos por el servidor:
 //
 //   · "general"  → SUPREMO / ADMIN / VIP:
-//       ranking de todas las sucursales, filtros por sucursal y por plan,
-//       pedidos especiales. Solo SUPREMO/ADMIN pueden asignar sucursal.
+//       ranking de todas las sucursales, filtros por sucursal, por plan
+//       (incluye PEDIDO ESPECIAL) y por período.
 //   · "sucursal" → ESPECIAL (los 4 encargados):
 //       ranking SOLO de SU sucursal, solo lectura.
 //   · "personal" → COMÚN:
-//       SOLO lo que él mismo emitió (total, aprobados, por plan y pedidos
-//       especiales propios). El servidor recorta los datos: aunque alguien
-//       fuerce la vista, nunca recibe datos de otro usuario.
+//       SOLO lo que él mismo emitió (total, aprobados y por plan). El
+//       servidor recorta los datos: aunque alguien fuerce la vista, nunca
+//       recibe datos de otro usuario.
+//
+// Task 170 (pedido del dueño): el CRM se consulta por PERÍODO (por defecto el
+// MES PASADO) y el historial de pedidos especiales que estaba debajo del
+// ranking se reemplazó por el filtro PEDIDO ESPECIAL.
 //
 // El ranking se refresca solo cada 5 segundos y al volver a la ventana,
 // igual que el CRM del panel (Task 168): el presupuesto emitido aparece de
@@ -62,27 +66,10 @@ interface CrmFila {
     MAYORISTA: number;
     SAFRA: number;
     CHEQUE: number;
+    // Task 170: cantidad de PEDIDOS ESPECIALES del usuario en el período.
+    ESPECIAL: number;
   };
   ultimo: string | null;
-}
-
-interface CrmPedidoEspecial {
-  id: string;
-  numero: string;
-  vendedorEmail: string;
-  vendedorNombre: string;
-  sucursal: string;
-  proveedor: string;
-  grupo?: string;
-  tipoProducto?: string;
-  descripcion: string;
-  clienteNombre?: string;
-  plan: string;
-  total: number;
-  estado: string;
-  ordenGenerada?: boolean;
-  ordenNumero?: string;
-  createdAt: string;
 }
 
 interface CrmPanelProps {
@@ -93,7 +80,34 @@ interface CrmPanelProps {
   onVolver: () => void;
 }
 
-const CRM_PLANES = ["TODOS", "CUOTA", "CONTADO", "MAYORISTA", "SAFRA", "CHEQUE"] as const;
+const CRM_PLANES = [
+  "TODOS",
+  "CUOTA",
+  "CONTADO",
+  "MAYORISTA",
+  "SAFRA",
+  "CHEQUE",
+  "ESPECIAL",
+] as const;
+
+// ─── Período de consulta (Task 170) ───
+// El CRM arranca mostrando el MES PASADO (pedido del dueño) y permite elegir
+// cualquier rango de fechas. Las fechas viajan como YYYY-MM-DD.
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const fechaInput = (d: Date) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const rangoMes = (offset: number): { desde: string; hasta: string } => {
+  const hoy = new Date();
+  const ini = new Date(hoy.getFullYear(), hoy.getMonth() + offset, 1);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + offset + 1, 0);
+  return { desde: fechaInput(ini), hasta: fechaInput(fin) };
+};
+const fmtFechaInput = (iso: string | null): string => {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return "—";
+  return `${d}/${m}/${y.slice(2)}`;
+};
 
 const fmtFechaCorta = (iso: string | null): string => {
   if (!iso) return "—";
@@ -117,6 +131,10 @@ function ValorPlan(fila: CrmFila, plan: string): number {
     ? fila.total
     : (fila.porPlan?.[plan as keyof NonNullable<CrmFila["porPlan"]>] ?? 0);
 }
+
+// Etiqueta visible del filtro: el valor interno "ESPECIAL" se muestra como
+// "PEDIDO ESPECIAL" (pedido del dueño).
+const labelPlan = (p: string) => (p === "ESPECIAL" ? "PEDIDO ESPECIAL" : p);
 
 function Chip({
   activo,
@@ -157,23 +175,33 @@ export function CrmPanel({
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
   const [ranking, setRanking] = useState<CrmFila[]>([]);
-  const [pedidos, setPedidos] = useState<CrmPedidoEspecial[]>([]);
   const [sucursales, setSucursales] = useState<string[]>([]);
   const [totalGeneral, setTotalGeneral] = useState(0);
   const [vistaSucursal, setVistaSucursal] = useState<string>("");
   const [filtro, setFiltro] = useState<string>("GENERAL");
   const [plan, setPlan] = useState<string>("TODOS");
   const [guardandoSuc, setGuardandoSuc] = useState<string | null>(null);
+  // Task 170: período de consulta. Por defecto, el MES PASADO.
+  const [fechas, setFechas] = useState(() => rangoMes(-1));
+  const [preset, setPreset] = useState<"MES_PASADO" | "MES_ACTUAL" | "TODO" | "OTRO">(
+    "MES_PASADO"
+  );
+  const { desde, hasta } = fechas;
 
   const cargar = useCallback(async (silent = false) => {
     if (silent) setRefrescando(true);
     else setCargando(true);
     try {
-      const res = await fetch("/api/crm/ranking", { cache: "no-store" });
+      const params = new URLSearchParams();
+      if (desde) params.set("desde", desde);
+      if (hasta) params.set("hasta", hasta);
+      const qs = params.toString();
+      const res = await fetch(`/api/crm/ranking${qs ? `?${qs}` : ""}`, {
+        cache: "no-store",
+      });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || `Error HTTP ${res.status}`);
       setRanking(Array.isArray(data?.ranking) ? data.ranking : []);
-      setPedidos(Array.isArray(data?.pedidosEspeciales) ? data.pedidosEspeciales : []);
       setSucursales(Array.isArray(data?.sucursales) ? data.sucursales : []);
       setTotalGeneral(Number(data?.totalGeneral) || 0);
       setVistaSucursal(
@@ -185,7 +213,20 @@ export function CrmPanel({
       setCargando(false);
       setRefrescando(false);
     }
-  }, []);
+  }, [desde, hasta]);
+
+  // Cambia el período con los atajos (mes pasado / mes actual / todo).
+  const aplicarPreset = useCallback(
+    (nuevo: "MES_PASADO" | "MES_ACTUAL" | "TODO") => {
+      setPreset(nuevo);
+      setFechas(
+        nuevo === "TODO"
+          ? { desde: "", hasta: "" }
+          : rangoMes(nuevo === "MES_PASADO" ? -1 : 0)
+      );
+    },
+    []
+  );
 
   // Carga inicial.
   useEffect(() => {
@@ -254,14 +295,6 @@ export function CrmPanel({
       );
   }, [ranking, modo, filtro, plan]);
 
-  const pedidosVista = useMemo(
-    () =>
-      modo === "general"
-        ? pedidos.filter((p) => filtro === "GENERAL" || p.sucursal === filtro)
-        : pedidos,
-    [pedidos, modo, filtro]
-  );
-
   const sumaVista = filas.reduce((acc, f) => acc + ValorPlan(f, plan), 0);
   const aprobadasVista = filas.reduce((acc, f) => acc + f.aprobadas, 0);
   const totalHeader =
@@ -279,6 +312,10 @@ export function CrmPanel({
       : modo === "sucursal"
         ? vistaSucursal || miFila?.sucursal || "MI SUCURSAL"
         : "MI ACTIVIDAD";
+  const etiquetaPeriodo =
+    !desde && !hasta
+      ? "TODO EL HISTÓRICO"
+      : `${fmtFechaInput(desde)} al ${fmtFechaInput(hasta)}`;
 
   return (
     <div className="min-h-screen bg-stone-100">
@@ -313,6 +350,8 @@ export function CrmPanel({
                   : modo === "sucursal"
                     ? "Ranking de mi sucursal"
                     : "Solo mis presupuestos"}
+                {" · "}
+                {etiquetaPeriodo}
               </p>
             </div>
           </div>
@@ -320,7 +359,7 @@ export function CrmPanel({
           <div className="flex items-center gap-2">
             <span className="px-3 py-1 rounded-full bg-white/15 text-white text-xs font-bold whitespace-nowrap">
               TOTAL EMITIDOS: {totalHeader}
-              {plan !== "TODOS" ? ` · ${plan}` : ""}
+              {plan !== "TODOS" ? ` · ${labelPlan(plan)}` : ""}
             </span>
             <button
               onClick={() => void cargar(true)}
@@ -370,6 +409,58 @@ export function CrmPanel({
           </div>
         )}
 
+        {/* ─── Filtro por PERÍODO (Task 170, pedido del dueño) ─── */}
+        {/* Arranca en el MES PASADO y permite cualquier rango de fechas para
+            consultar cuántos presupuestos se emitieron en cada mes. */}
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm px-4 py-3 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-stone-400 mr-1">
+            PERÍODO:
+          </span>
+          <Chip
+            activo={preset === "MES_PASADO"}
+            onClick={() => aplicarPreset("MES_PASADO")}
+          >
+            MES PASADO
+          </Chip>
+          <Chip
+            activo={preset === "MES_ACTUAL"}
+            onClick={() => aplicarPreset("MES_ACTUAL")}
+          >
+            MES ACTUAL
+          </Chip>
+          <Chip activo={preset === "TODO"} onClick={() => aplicarPreset("TODO")}>
+            TODO
+          </Chip>
+          <span className="mx-1 hidden sm:block h-5 w-px bg-stone-200" aria-hidden="true" />
+          <label className="flex items-center gap-1.5 text-[11px] font-bold text-stone-500">
+            DESDE
+            <input
+              type="date"
+              value={desde}
+              onChange={(e) => {
+                setPreset("OTRO");
+                setFechas((f) => ({ ...f, desde: e.target.value }));
+              }}
+              className="h-7 px-2 rounded-lg border border-stone-300 bg-white text-xs font-medium text-stone-700 focus:border-[#1e6ba8] focus:ring-2 focus:ring-blue-100 outline-none"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] font-bold text-stone-500">
+            HASTA
+            <input
+              type="date"
+              value={hasta}
+              onChange={(e) => {
+                setPreset("OTRO");
+                setFechas((f) => ({ ...f, hasta: e.target.value }));
+              }}
+              className="h-7 px-2 rounded-lg border border-stone-300 bg-white text-xs font-medium text-stone-700 focus:border-[#1e6ba8] focus:ring-2 focus:ring-blue-100 outline-none"
+            />
+          </label>
+          <span className="text-[11px] font-bold text-stone-500 ml-auto">
+            TOTAL DEL PERÍODO: {totalGeneral}
+          </span>
+        </div>
+
         {/* ─── Filtro por tipo de plan ─── */}
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm px-4 py-3 flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] font-bold uppercase tracking-wide text-stone-400 mr-1">
@@ -377,7 +468,7 @@ export function CrmPanel({
           </span>
           {CRM_PLANES.map((pl) => (
             <Chip key={pl} activo={plan === pl} onClick={() => setPlan(pl)}>
-              {pl}
+              {labelPlan(pl)}
             </Chip>
           ))}
         </div>
@@ -407,7 +498,7 @@ export function CrmPanel({
                       {miFila ? ValorPlan(miFila, plan) : 0}
                     </p>
                     <p className="text-[11px] text-stone-500 mt-1">
-                      {plan === "TODOS" ? "Todos los planes" : `Plan ${plan}`}
+                      {plan === "TODOS" ? "Todos los planes" : `Plan ${labelPlan(plan)}`}
                     </p>
                   </div>
                   <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
@@ -434,8 +525,8 @@ export function CrmPanel({
                   <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-2">
                     Desglose por plan
                   </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    {(["CUOTA", "CONTADO", "MAYORISTA", "SAFRA", "CHEQUE"] as const).map(
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                    {(["CUOTA", "CONTADO", "MAYORISTA", "SAFRA", "CHEQUE", "ESPECIAL"] as const).map(
                       (p) => (
                         <div
                           key={p}
@@ -591,96 +682,13 @@ export function CrmPanel({
           </section>
         )}
 
-        {/* ─── Pedidos especiales (mismo alcance que el ranking) ─── */}
-        <section className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 flex items-center justify-between bg-stone-50 border-b border-stone-200">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-stone-500">
-              PEDIDOS ESPECIALES EMITIDOS
-            </span>
-            <span className="text-xs font-bold text-stone-600">{pedidosVista.length}</span>
-          </div>
-          <div className="max-h-[320px] overflow-auto">
-            {pedidosVista.length === 0 ? (
-              <p className="px-5 py-4 text-xs text-stone-400">
-                Todavía no hay pedidos especiales
-                {modo === "general" && filtro !== "GENERAL" ? ` en ${filtro}` : ""}.
-              </p>
-            ) : (
-              <table className="w-full text-xs">
-                <thead className="bg-white sticky top-0 border-b border-stone-200">
-                  <tr className="text-[10px] uppercase tracking-wide text-stone-500">
-                    <th className="px-3 py-1.5 text-left">N°</th>
-                    <th className="px-3 py-1.5 text-left">Vendedor</th>
-                    <th className="px-3 py-1.5 text-left">Cliente</th>
-                    <th className="px-3 py-1.5 text-left">Grupo · Tipo</th>
-                    <th className="px-3 py-1.5 text-left">Plan</th>
-                    <th className="px-3 py-1.5 text-right">Total</th>
-                    <th className="px-3 py-1.5 text-center">Situación</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pedidosVista.map((p, i) => (
-                    <tr key={p.id} className={i % 2 === 0 ? "bg-white" : "bg-stone-50"}>
-                      <td className="px-3 py-1.5 font-bold whitespace-nowrap" style={{ color: "#155789" }}>
-                        {p.numero}
-                      </td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">
-                        <div className="font-semibold text-stone-700 truncate max-w-[140px]">
-                          {p.vendedorNombre || p.vendedorEmail}
-                        </div>
-                        <div className="text-[10px] text-stone-400">{p.sucursal || "—"}</div>
-                      </td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">
-                        {p.clienteNombre || "—"}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <div className="text-stone-600">
-                          {[p.grupo, p.tipoProducto].filter(Boolean).join(" · ") || "—"}
-                        </div>
-                        <div
-                          className="text-[10px] text-stone-400 truncate max-w-[180px]"
-                          title={p.descripcion}
-                        >
-                          {p.descripcion}
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5 whitespace-nowrap font-semibold text-stone-600">
-                        {p.plan}
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-bold text-stone-800 whitespace-nowrap">
-                        {new Intl.NumberFormat("es-PY").format(Math.round(p.total || 0))}
-                      </td>
-                      <td className="px-3 py-1.5 text-center whitespace-nowrap">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            p.estado === "VERIFICADO"
-                              ? "bg-sky-100 text-sky-800"
-                              : p.estado === "APROBADO"
-                                ? "bg-green-100 text-green-800"
-                                : "bg-stone-100 text-stone-600"
-                          }`}
-                        >
-                          {p.estado}
-                        </span>
-                        {p.ordenGenerada && (
-                          <div className="text-[10px] text-yellow-700 font-bold">
-                            {p.ordenNumero || "ORDEN"}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-
         {/* ─── Pie: resumen de la vista ─── */}
         <div className="px-1 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
           <span className="font-bold text-stone-700">
             {sucursalTitulo}
-            {plan !== "TODOS" ? ` · Plan ${plan}` : ""}
+            {" · "}
+            {etiquetaPeriodo}
+            {plan !== "TODOS" ? ` · Plan ${labelPlan(plan)}` : ""}
           </span>
           <span className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1">

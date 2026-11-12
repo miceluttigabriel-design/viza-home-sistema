@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -21,7 +22,11 @@ import { listarPresupuestosCrm } from "@/lib/pedido-especial-presupuestos";
 //   · ENCARGADO de sucursal (lista ENCARGADOS_SUCURSAL, ver
 //     src/lib/encargados-sucursal.ts) → SOLO el ranking de SU sucursal,
 //     sin datos de las demás y con el total recortado a su sucursal.
-//   · cualquier otro usuario → 403 (no ve el CRM).
+//   · COMÚN → SOLO su propia fila (Task 169).
+//
+// Task 170 (pedido del dueño): acepta ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD y
+// calcula TODOS los totales dentro de ese período (o de todo el histórico si
+// no se manda nada). El filtro de plan incluye PEDIDO ESPECIAL.
 //
 // Task 78 (pedido del dueño): cada fila del ranking trae también el
 // DESGLOSE POR TIPO DE PLAN (CUOTA / CONTADO / MAYORISTA / SAFRA /
@@ -40,12 +45,46 @@ import { listarPresupuestosCrm } from "@/lib/pedido-especial-presupuestos";
 // productos. La única escritura posible es la SIEMBRA automática de la
 // sucursal desde la planilla de funcionarios (tabla aparte
 // "UsuarioSucursal", best-effort: si falla, todo queda "SIN SUCURSAL").
-export async function GET() {
+// Task 170 (pedido del dueño): el CRM se puede consultar POR FECHA. El front
+// manda ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD (ambos opcionales) y TODOS los
+// totales del ranking se calculan dentro de ese período. Sin fechas = todo el
+// histórico, como antes. Las fechas se interpretan en hora de Paraguay
+// (America/Asuncion = UTC-3 fijo).
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+
+    // ─── Período de consulta (Task 170) ───
+    // Acepta SOLO el formato YYYY-MM-DD; cualquier otra cosa se ignora para
+    // no romper la consulta. "hasta" incluye el día completo (23:59:59.999).
+    const soloFecha = /^\d{4}-\d{2}-\d{2}$/;
+    const desdeTxt = (req.nextUrl.searchParams.get("desde") || "").trim();
+    const hastaTxt = (req.nextUrl.searchParams.get("hasta") || "").trim();
+    const desdeFecha = soloFecha.test(desdeTxt)
+      ? new Date(`${desdeTxt}T00:00:00.000-03:00`)
+      : null;
+    const hastaFecha = soloFecha.test(hastaTxt)
+      ? new Date(`${hastaTxt}T23:59:59.999-03:00`)
+      : null;
+    const hayPeriodo = !!(desdeFecha || hastaFecha);
+    const filtroFecha = hayPeriodo
+      ? {
+          createdAt: {
+            ...(desdeFecha ? { gte: desdeFecha } : {}),
+            ...(hastaFecha ? { lte: hastaFecha } : {}),
+          },
+        }
+      : {};
+    // Fragmento SQL equivalente para las tablas crudas del PEDIDO ESPECIAL.
+    const filtroFechaSql = hayPeriodo
+      ? Prisma.sql`${desdeFecha ? Prisma.sql`AND "createdAt" >= ${desdeFecha}` : Prisma.empty} ${
+          hastaFecha ? Prisma.sql`AND "createdAt" <= ${hastaFecha}` : Prisma.empty
+        }`
+      : Prisma.empty;
+
     const role = (session.user as any)?.role;
     const isAdmin = role === "admin" || role === "supremo_admin";
     // Encargado de sucursal (panel de ventas): entra con el CRM de SU
@@ -133,13 +172,14 @@ export async function GET() {
     const [totales, aprobadas] = await Promise.all([
       db.quote.groupBy({
         by: ["userId"],
+        where: filtroFecha,
         _count: true,
         _max: { createdAt: true },
       }),
       db.quote.groupBy({
         by: ["userId"],
+        where: { status: "aprobada", ...filtroFecha },
         _count: true,
-        where: { status: "aprobada" },
       }),
     ]);
 
@@ -153,12 +193,13 @@ export async function GET() {
         db.$queryRaw<Array<{ vendedorEmail: string; count: number; ultimo: Date }>>`
           SELECT "vendedorEmail", COUNT(*)::int as count, MAX("createdAt") as ultimo
           FROM "PedidoEspecialPresupuesto"
+          WHERE 1=1 ${filtroFechaSql}
           GROUP BY "vendedorEmail"
         `,
         db.$queryRaw<Array<{ vendedorEmail: string; count: number }>>`
           SELECT "vendedorEmail", COUNT(*)::int as count
           FROM "PedidoEspecialPresupuesto"
-          WHERE "estado" IN ('APROBADO', 'VERIFICADO')
+          WHERE "estado" IN ('APROBADO', 'VERIFICADO') ${filtroFechaSql}
           GROUP BY "vendedorEmail"
         `,
         db.$queryRaw<
@@ -166,6 +207,7 @@ export async function GET() {
         >`
           SELECT "vendedorEmail", "plan", COUNT(*)::int as count
           FROM "PedidoEspecialPresupuesto"
+          WHERE 1=1 ${filtroFechaSql}
           GROUP BY "vendedorEmail", "plan"
         `,
       ]);
@@ -235,15 +277,26 @@ export async function GET() {
       if (p === "cheque") return "CHEQUE";
       return "CUOTA"; // cuotas_con_entrega / cuotas_sin_entrega
     }
+    // Desglose por TIPO DE PLAN. Task 170 (pedido del dueño): se agrega
+    // "ESPECIAL" como filtro propio del CRM, con la cantidad de PEDIDOS
+    // ESPECIALES emitidos por cada usuario en el período. Los pedidos siguen
+    // sumando además a su plan de origen (CUOTA/CONTADO/etc.) y al total.
+    const porPlanVacio = () => ({
+      CUOTA: 0,
+      CONTADO: 0,
+      MAYORISTA: 0,
+      SAFRA: 0,
+      CHEQUE: 0,
+      ESPECIAL: 0,
+    });
     const quotesParaPlan = await db.quote.findMany({
+      where: filtroFecha,
       select: { userId: true, quoteNumber: true, status: true },
     });
     const porPlanPorUser = new Map<string, Record<string, number>>();
     for (const q of quotesParaPlan) {
       if (!q.userId) continue;
-      const rec =
-        porPlanPorUser.get(q.userId) ??
-        { CUOTA: 0, CONTADO: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 };
+      const rec = porPlanPorUser.get(q.userId) ?? porPlanVacio();
       rec[planDeQuote(q.quoteNumber, q.status)]++;
       porPlanPorUser.set(q.userId, rec);
     }
@@ -251,18 +304,19 @@ export async function GET() {
     for (const e of especialesPorPlan) {
       const uid = emailToUserId.get(String(e.vendedorEmail || "").trim().toLowerCase());
       if (!uid) continue;
-      const rec =
-        porPlanPorUser.get(uid) ?? { CUOTA: 0, CONTADO: 0, MAYORISTA: 0, SAFRA: 0, CHEQUE: 0 };
+      const rec = porPlanPorUser.get(uid) ?? porPlanVacio();
       rec[planDeEspecial(e.plan)] = (rec[planDeEspecial(e.plan)] ?? 0) + Number(e.count);
       porPlanPorUser.set(uid, rec);
     }
-    const porPlanVacio = () => ({
-      CUOTA: 0,
-      CONTADO: 0,
-      MAYORISTA: 0,
-      SAFRA: 0,
-      CHEQUE: 0,
-    });
+    // Filtro "PEDIDO ESPECIAL": cantidad total de pedidos especiales del
+    // usuario en el período (independiente del plan elegido en cada pedido).
+    for (const e of especialesTotales) {
+      const uid = emailToUserId.get(String(e.vendedorEmail || "").trim().toLowerCase());
+      if (!uid) continue;
+      const rec = porPlanPorUser.get(uid) ?? porPlanVacio();
+      rec.ESPECIAL = Number(e.count);
+      porPlanPorUser.set(uid, rec);
+    }
 
     const ranking = usersCrm
       .map((u) => {
@@ -292,8 +346,19 @@ export async function GET() {
     // emitirán… de todos": admin/consulta ven TODOS; el encargado ve los
     // de SU sucursal (mismo alcance del ranking). NUNCA lanza.
     // Task 168: los pedidos de usuarios de CENTRAL tampoco se listan.
-    const todosPedidosEspeciales = await listarPresupuestosCrm({
-      sucursal: sucursalEncargado || null,
+    // Task 170: si hay período, también se recortan por fecha (coherente con
+    // todos los demás totales del CRM).
+    const todosPedidosEspeciales = (
+      await listarPresupuestosCrm({
+        sucursal: sucursalEncargado || null,
+      })
+    ).filter((p) => {
+      if (!hayPeriodo) return true;
+      const t = new Date(p.createdAt).getTime();
+      if (Number.isNaN(t)) return true;
+      if (desdeFecha && t < desdeFecha.getTime()) return false;
+      if (hastaFecha && t > hastaFecha.getTime()) return false;
+      return true;
     });
     const pedidosEspeciales = todosPedidosEspeciales.filter(
       (p) => sucursalDe(p.vendedorEmail) !== "CENTRAL"

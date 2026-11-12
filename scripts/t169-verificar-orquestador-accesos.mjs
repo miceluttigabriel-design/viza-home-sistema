@@ -115,7 +115,8 @@ console.log("\n[4] crm-panel.tsx: módulo de página completa");
 check("tiene botón ORQUESTADOR para volver", /ORQUESTADOR/.test(crm) && /onVolver/.test(crm));
 check("tres alcances: general / sucursal / personal",
   /"general" \| "sucursal" \| "personal"/.test(crm));
-check("pide el ranking a la API sin caché", /fetch\("\/api\/crm\/ranking", \{ cache: "no-store" \}\)/.test(crm));
+check("pide el ranking a la API sin caché",
+  /fetch\(`\/api\/crm\/ranking\$\{qs \? `\?\$\{qs\}` : ""\}`,\s*\{\s*cache: "no-store"/.test(crm));
 check("refresca cada 5 s y al volver a la ventana",
   /setInterval\([\s\S]*?5000\)/.test(crm) && /addEventListener\("focus"/.test(crm));
 check("el modo personal muestra solo el conteo propio", /Mis presupuestos emitidos/.test(crm));
