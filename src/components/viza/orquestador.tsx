@@ -110,8 +110,16 @@ function Tarjeta({
         <h3 className="text-[12px] font-black text-white leading-tight tracking-tight">{titulo}</h3>
         <p className="mt-1 text-[9.5px] font-black tracking-widest">
           {onClick ? (
-            <span className="inline-flex items-center gap-1" style={{ color: c }}>
-              ABRIR <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
+            // Pedido del dueño: la opción ABRIR va en DORADO VIZA con letra
+            // NEGRA, como botón, dentro de cada cuadro del Orquestador.
+            <span
+              className="inline-flex items-center gap-1 rounded-md px-2 py-[3px] text-[9px] font-black tracking-widest shadow-sm transition-transform group-hover:translate-x-0.5"
+              style={{
+                background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)",
+                color: "#000000",
+              }}
+            >
+              ABRIR <ArrowRight className="h-3 w-3" />
             </span>
           ) : bloqueado ? (
             <span className="inline-flex items-center gap-1 text-slate-400">
