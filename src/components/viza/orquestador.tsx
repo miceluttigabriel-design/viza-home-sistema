@@ -46,7 +46,10 @@ interface AppUser {
 interface OrquestadorProps {
   user: AppUser;
   onGoBase?: () => void;
-  onGoStock: () => void;
+  // Task 171 (pedido del dueño): STOCK GENERAL no está disponible para
+  // usuarios COMUNES. page.tsx solo pasa esta prop con permiso; sin ella el
+  // cuadro se dibuja BLOQUEADO (no se rompe la vista).
+  onGoStock?: () => void;
   onGoSales: () => void;
   onGoCrm: () => void;
   onGoGestion?: () => void;
@@ -148,19 +151,26 @@ function BaseCard({ onClick }: { onClick?: () => void }) {
     />
   );
 }
-function StockCard({ onClick }: { onClick: () => void }) {
+function StockCard({ onClick }: { onClick?: () => void }) {
   return (
     <Tarjeta
       c={C_STOCK}
       icon={<Boxes className="h-5 w-5" style={{ color: C_STOCK }} />}
       titulo="STOCK GENERAL"
       badge={
-        <Pill c="#4ade80">
-          <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-          SYSTEM ONLINE
-        </Pill>
+        onClick ? (
+          <Pill c="#4ade80">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+            SYSTEM ONLINE
+          </Pill>
+        ) : (
+          <Pill c="#94a3b8">RESTRINGIDO</Pill>
+        )
       }
       onClick={onClick}
+      // Task 171: sin permiso (usuario COMÚN) se ve igual, pero bloqueado.
+      bloqueado={!onClick}
+      hint="abrir Stock General"
     />
   );
 }
@@ -368,14 +378,6 @@ function Conector({ color = DORADO }: { color?: string }) {
   return <div className="mx-auto h-7 w-0.5 rounded" style={{ background: `linear-gradient(${color}, ${color}55)`, boxShadow: `0 0 10px ${color}66` }} />;
 }
 
-const LEYENDA: { t: Estilo; txt: string }[] = [
-  { t: "pedidos", txt: "Flujo de pedidos" },
-  { t: "fisico", txt: "Flujo físico de mercadería" },
-  { t: "sync", txt: "Sincronización automática" },
-  { t: "pagos", txt: "Pagos y facturación" },
-  { t: "post", txt: "Postventa" },
-];
-
 export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onGoGestion, onGoCompra, onGoDistribucion }: OrquestadorProps) {
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
   const accesos = accesosDeUsuario(user);
@@ -495,18 +497,6 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 412 540 C 470 540, 490 500, 545 470" t="pedidos" ida={false} />
             <Linea d="M 412 566 C 480 575, 500 525, 556 484" t="pagos" ida={false} />
             <Linea d="M 412 592 C 490 600, 510 545, 570 500" t="post" ida={false} />
-
-            {/* Leyenda */}
-            <g>
-              <rect x="470" y="620" width="400" height="142" rx="12" fill="rgba(7,25,60,0.8)" stroke="rgba(56,160,255,0.55)" strokeWidth="1.5" />
-              <text x="490" y="644" fontSize="10" fontWeight="900" letterSpacing="3" fill={DORADO} fontFamily={FONT}>REFERENCIAS</text>
-              {LEYENDA.map((l, i) => (
-                <g key={l.t} transform={`translate(490 ${660 + i * 20})`}>
-                  <line x1="0" y1="0" x2="80" y2="0" stroke={COLORES[l.t]} strokeWidth="2.5" strokeDasharray={DASH[l.t]} markerEnd={`url(#f-${l.t})`} />
-                  <text x="96" y="4" fontSize="11" fontWeight="700" fill="#e2e8f0" fontFamily={FONT}>{l.txt}</text>
-                </g>
-              ))}
-            </g>
           </svg>
 
           {/* Panel superior: automatización / integración */}
@@ -533,13 +523,6 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
           <div style={place(R.stock)}><StockCard onClick={onGoStock} /></div>
           <div style={place(R.cotiz)}><CotizadorCard onClick={onGoSales} /></div>
           <div style={place(R.crm)}><CrmCard onClick={onGoCrm} /></div>
-
-          {/* Lema */}
-          <p style={{ position: "absolute", left: 960, top: 700, width: 360 }} className="text-[12px] font-bold tracking-widest text-sky-300 leading-snug">
-            MÁS QUE UNA TIENDA,
-            <br />
-            <span className="text-[15px] font-black text-white">UN ECOSISTEMA <span className="text-sky-300 font-bold">QUE TE CONECTA.</span></span>
-          </p>
         </Escenario>
 
         {/* ═══ CELULAR / TABLET ═══ */}

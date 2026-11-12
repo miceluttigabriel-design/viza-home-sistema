@@ -66,19 +66,20 @@ check("usa la matriz compartida accesosDeUsuario()",
   /import \{ accesosDeUsuario \} from "@\/lib\/acceso-modulos"/.test(orq));
 check("prop onGoCrm obligatoria", /onGoCrm: \(\) => void/.test(orq));
 check("existe CrmCard", /function CrmCard/.test(orq));
-check("el CRM está justo debajo del COTIZADOR en el lienzo",
-  /crm: \{ x: 0, y: 480, w: 360, h: 130 \}/.test(orq) &&
-    /cotizador: \{ x: 0, y: 320, w: 360, h: 130 \}/.test(orq));
-check("el lienzo crece para que entre el CRM", /const H = 640/.test(orq));
-check("hay flecha COTIZADOR → CRM", /FLUJO_COTIZ_CRM/.test(orq) && /flecha-crm/.test(orq));
-check("el CRM se renderiza en el diagrama", /place\(POS\.crm\)[\s\S]*?CrmCard/.test(orq));
+check("el CRM está debajo del COTIZADOR en el panel de módulos",
+  /crm: \{ x: 36, y: 590, w: 358, h: 76 \}/.test(orq) &&
+    /cotiz: \{ x: 222, y: 498, w: 172, h: 76 \}/.test(orq));
+check("el lienzo crece para que entre el CRM", /const H = 780/.test(orq));
+check("los módulos se conectan con el núcleo (flujo Módulos ↔ Central)",
+  /Módulos ↔ Central/.test(orq) && /place\(R\.crm\)/.test(orq));
+check("el CRM se renderiza en el diagrama", /place\(R\.crm\)[\s\S]{0,80}CrmCard/.test(orq));
 check("el CRM se renderiza también en celular/tablet",
   /lg:hidden[\s\S]*?<CrmCard onClick=\{onGoCrm\}/.test(orq));
 check("DISTRIBUCIÓN usa onGoDistribucion (sin caer a Stock para todos)",
-  /AgenteDistribucionCard onClick=\{onGoDistribucion\}/.test(orq) &&
-    !/AgenteDistribucionCard onClick=\{onGoStock\}/.test(orq));
+  /DistriCard onClick=\{onGoDistribucion\}/.test(orq) &&
+    !/DistriCard onClick=\{onGoStock\}/.test(orq));
 check("COMPRA usa onGoCompra (sin caer a Stock)",
-  /AgenteCompraCard[\s\S]{0,80}onClick=\{onGoCompra\}/.test(orq) &&
+  /CompraCard[\s\S]{0,120}onClick=\{onGoCompra\}/.test(orq) &&
     !/onGoCompra \|\| onGoStock/.test(orq));
 check("las tarjetas bloqueadas se ven pero no se abren (SIN ACCESO)",
   /bloqueado\?: boolean/.test(orq) &&

@@ -57,7 +57,7 @@ check("StockCard se muestra BLOQUEADO sin permiso",
 check("el cuadro bloqueado avisa RESTRINGIDO en vez de SYSTEM ONLINE",
   /RESTRINGIDO/.test(orq) && /onClick \?[\s\S]*?SYSTEM ONLINE[\s\S]*?: \(/.test(orq));
 check("se renderiza igual en el diagrama y en celular (sin permiso no rompe)",
-  /place\(POS\.stock\)[\s\S]*?<StockCard onClick=\{onGoStock\}/.test(orq) &&
+  /place\(R\.stock\)[\s\S]*?<StockCard onClick=\{onGoStock\}/.test(orq) &&
     /lg:hidden[\s\S]*?<StockCard onClick=\{onGoStock\}/.test(orq));
 
 // ── 3. Servidor: /api/stock/general rechaza al COMÚN ──
