@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Database, Boxes, Calculator, Network, ShoppingCart, ArrowRight, BarChart3, Lock, MapPin } from "lucide-react";
+import { Database, Boxes, Calculator, Network, ShoppingCart, BarChart3, Lock, MapPin } from "lucide-react";
 import { accesosDeUsuario } from "@/lib/acceso-modulos";
 
 const SUCURSALES_CUADROS = ["NUEVA ESPERANZA", "KATUETE", "LA PALOMA", "SALTOS DEL GUAIRA"] as const;
@@ -63,20 +63,23 @@ const GLASS: CSSProperties = {
   boxShadow: "0 0 26px rgba(56,160,255,0.28), inset 0 0 18px rgba(56,160,255,0.12)",
 };
 
-function Pill({ c, children }: { c: string; children: ReactNode }) {
+function Pill({ children }: { children: ReactNode }) {
   return (
     <span
-      className="shrink-0 text-[9px] font-black tracking-widest px-2 py-1 rounded-full flex items-center gap-1.5"
-      style={{ background: `${c}22`, color: c, border: `1px solid ${c}55` }}
+      className="shrink-0 text-[8px] font-black tracking-widest px-1.5 py-[3px] rounded-full flex items-center gap-1"
+      style={{ background: "rgba(0,0,0,0.10)", color: "#000000", border: "1px solid rgba(0,0,0,0.35)" }}
     >
       {children}
     </span>
   );
 }
 
-// ─── Tarjeta de módulo / departamento (cristal con brillo) ───
+// ─── Tarjeta de módulo / departamento (DORADO VIZA con letra NEGRA) ───
+// Pedido del dueño: los cuadros del Orquestador (La Base, Stock General,
+// Cotizador, CRM y los Departamentos) van en el DORADO de VIZA y con la
+// escritura en NEGRO. El botón de la opción ya no hace falta: el cuadro
+// entero es el botón.
 function Tarjeta({
-  c,
   icon,
   titulo,
   badge,
@@ -84,7 +87,6 @@ function Tarjeta({
   bloqueado = false,
   hint,
 }: {
-  c: string;
   icon: ReactNode;
   titulo: string;
   badge: ReactNode;
@@ -93,42 +95,32 @@ function Tarjeta({
   hint?: string;
 }) {
   const estilo: CSSProperties = {
-    ...GLASS,
-    border: `1.5px solid ${c}99`,
-    boxShadow: `0 0 22px ${c}44, inset 0 0 16px ${c}1f`,
+    background: "linear-gradient(135deg, #b89853 0%, #D9B86B 55%, #efd89d 100%)",
+    border: "1.5px solid #8a6d2f",
+    boxShadow: "0 0 22px rgba(217,184,107,0.40), inset 0 0 18px rgba(255,255,255,0.30)",
   };
   const cuerpo = (
     <>
-      <span className="absolute inset-x-0 top-0 h-[3px]" style={{ background: `linear-gradient(90deg, transparent, ${c}, transparent)` }} />
+      <span className="absolute inset-x-0 top-0 h-[3px]" style={{ background: "rgba(0,0,0,0.22)" }} />
       <div
         className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center"
-        style={{ background: `${c}22`, border: `1px solid ${c}77`, boxShadow: `0 0 16px ${c}55` }}
+        style={{ background: "rgba(0,0,0,0.10)", border: "1px solid rgba(0,0,0,0.35)" }}
       >
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="text-[12px] font-black text-white leading-tight tracking-tight">{titulo}</h3>
-        <p className="mt-1 text-[9.5px] font-black tracking-widest">
-          {onClick ? (
-            // Pedido del dueño: la opción ABRIR va en DORADO VIZA con letra
-            // NEGRA, como botón, dentro de cada cuadro del Orquestador.
-            <span
-              className="inline-flex items-center gap-1 rounded-md px-2 py-[3px] text-[9px] font-black tracking-widest shadow-sm transition-transform group-hover:translate-x-0.5"
-              style={{
-                background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)",
-                color: "#000000",
-              }}
-            >
-              ABRIR <ArrowRight className="h-3 w-3" />
-            </span>
-          ) : bloqueado ? (
-            <span className="inline-flex items-center gap-1 text-slate-400">
-              <Lock className="h-3 w-3" /> SIN ACCESO
-            </span>
-          ) : (
-            <span className="text-slate-500">EN DESARROLLO</span>
-          )}
-        </p>
+        <h3 className="text-[12px] font-black text-black leading-tight tracking-tight">{titulo}</h3>
+        {!onClick && (
+          <p className="mt-1 text-[9.5px] font-black tracking-widest">
+            {bloqueado ? (
+              <span className="inline-flex items-center gap-1 text-black/70">
+                <Lock className="h-3 w-3" /> SIN ACCESO
+              </span>
+            ) : (
+              <span className="text-black/60">EN DESARROLLO</span>
+            )}
+          </p>
+        )}
       </div>
       {badge}
     </>
@@ -136,7 +128,7 @@ function Tarjeta({
   const base = "relative overflow-hidden h-full w-full rounded-xl px-3 flex items-center gap-2.5 text-left";
   const title = bloqueado ? "Sin acceso para tu tipo de usuario" : hint;
   return onClick ? (
-    <button type="button" onClick={onClick} title={title} className={`group ${base} cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:brightness-125`} style={estilo}>
+    <button type="button" onClick={onClick} title={title} className={`group ${base} cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110`} style={estilo}>
       {cuerpo}
     </button>
   ) : (
@@ -149,10 +141,9 @@ function Tarjeta({
 function BaseCard({ onClick }: { onClick?: () => void }) {
   return (
     <Tarjeta
-      c={DORADO}
-      icon={<Database className="h-5 w-5" style={{ color: DORADO }} />}
+      icon={<Database className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="LA BASE · CENTRAL KATUETÉ"
-      badge={<Pill c={DORADO}>NÚCLEO</Pill>}
+      badge={<Pill>NÚCLEO</Pill>}
       onClick={onClick}
       bloqueado={!onClick}
       hint="abrir La Base"
@@ -162,17 +153,16 @@ function BaseCard({ onClick }: { onClick?: () => void }) {
 function StockCard({ onClick }: { onClick?: () => void }) {
   return (
     <Tarjeta
-      c={C_STOCK}
-      icon={<Boxes className="h-5 w-5" style={{ color: C_STOCK }} />}
+      icon={<Boxes className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="STOCK GENERAL"
       badge={
         onClick ? (
-          <Pill c="#4ade80">
-            <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-            SYSTEM ONLINE
+          <Pill>
+            <span className="h-1.5 w-1.5 rounded-full bg-green-700 animate-pulse" />
+            ONLINE
           </Pill>
         ) : (
-          <Pill c="#94a3b8">RESTRINGIDO</Pill>
+          <Pill>RESTRINGIDO</Pill>
         )
       }
       onClick={onClick}
@@ -185,10 +175,9 @@ function StockCard({ onClick }: { onClick?: () => void }) {
 function CotizadorCard({ onClick }: { onClick: () => void }) {
   return (
     <Tarjeta
-      c={C_COTIZ}
-      icon={<Calculator className="h-5 w-5" style={{ color: C_COTIZ }} />}
+      icon={<Calculator className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="COTIZADOR"
-      badge={<Pill c={C_COTIZ}>4 PLANES</Pill>}
+      badge={<Pill>4 PLANES</Pill>}
       onClick={onClick}
     />
   );
@@ -196,10 +185,9 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
 function CrmCard({ onClick }: { onClick: () => void }) {
   return (
     <Tarjeta
-      c={C_CRM}
-      icon={<BarChart3 className="h-5 w-5" style={{ color: C_CRM }} />}
+      icon={<BarChart3 className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="CRM"
-      badge={<Pill c={C_CRM}>RANKING</Pill>}
+      badge={<Pill>RANKING</Pill>}
       onClick={onClick}
     />
   );
@@ -208,10 +196,9 @@ function DistriCard({ onClick }: { onClick?: () => void }) {
   const b = !onClick;
   return (
     <Tarjeta
-      c={C_DISTRI}
-      icon={<Network className="h-5 w-5" style={{ color: C_DISTRI }} />}
+      icon={<Network className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA"
-      badge={<Pill c={b ? "#94a3b8" : C_DISTRI}>{b ? "SIN ACCESO" : "ACTIVO"}</Pill>}
+      badge={<Pill>{b ? "SIN ACCESO" : "ACTIVO"}</Pill>}
       onClick={onClick}
       bloqueado={b}
       hint="abrir Stock General"
@@ -222,10 +209,9 @@ function CompraCard({ onClick, hint }: { onClick?: () => void; hint?: string }) 
   const b = !onClick;
   return (
     <Tarjeta
-      c={C_COMPRA}
-      icon={<ShoppingCart className="h-5 w-5" style={{ color: C_COMPRA }} />}
+      icon={<ShoppingCart className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="DEPARTAMENTO DE COMPRA"
-      badge={<Pill c={b ? "#94a3b8" : C_COMPRA}>{b ? "SIN ACCESO" : "ACTIVO"}</Pill>}
+      badge={<Pill>{b ? "SIN ACCESO" : "ACTIVO"}</Pill>}
       onClick={onClick}
       bloqueado={b}
       hint={hint}
