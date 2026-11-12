@@ -63,17 +63,6 @@ const GLASS: CSSProperties = {
   boxShadow: "0 0 26px rgba(56,160,255,0.28), inset 0 0 18px rgba(56,160,255,0.12)",
 };
 
-function Pill({ children }: { children: ReactNode }) {
-  return (
-    <span
-      className="shrink-0 text-[8px] font-black tracking-widest px-1.5 py-[3px] rounded-full flex items-center gap-1"
-      style={{ background: "rgba(0,0,0,0.10)", color: "#000000", border: "1px solid rgba(0,0,0,0.35)" }}
-    >
-      {children}
-    </span>
-  );
-}
-
 // ─── Tarjeta de módulo / departamento (DORADO VIZA con letra NEGRA) ───
 // Pedido del dueño: los cuadros del Orquestador (La Base, Stock General,
 // Cotizador, CRM y los Departamentos) van en el DORADO de VIZA y con la
@@ -82,14 +71,12 @@ function Pill({ children }: { children: ReactNode }) {
 function Tarjeta({
   icon,
   titulo,
-  badge,
   onClick,
   bloqueado = false,
   hint,
 }: {
   icon: ReactNode;
   titulo: string;
-  badge: ReactNode;
   onClick?: () => void;
   bloqueado?: boolean;
   hint?: string;
@@ -122,7 +109,6 @@ function Tarjeta({
           </p>
         )}
       </div>
-      {badge}
     </>
   );
   const base = "relative overflow-hidden h-full w-full rounded-xl px-3 flex items-center gap-2.5 text-left";
@@ -143,7 +129,6 @@ function BaseCard({ onClick }: { onClick?: () => void }) {
     <Tarjeta
       icon={<Database className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="LA BASE · CENTRAL KATUETÉ"
-      badge={<Pill>NÚCLEO</Pill>}
       onClick={onClick}
       bloqueado={!onClick}
       hint="abrir La Base"
@@ -155,16 +140,6 @@ function StockCard({ onClick }: { onClick?: () => void }) {
     <Tarjeta
       icon={<Boxes className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="STOCK GENERAL"
-      badge={
-        onClick ? (
-          <Pill>
-            <span className="h-1.5 w-1.5 rounded-full bg-green-700 animate-pulse" />
-            ONLINE
-          </Pill>
-        ) : (
-          <Pill>RESTRINGIDO</Pill>
-        )
-      }
       onClick={onClick}
       // Task 171: sin permiso (usuario COMÚN) se ve igual, pero bloqueado.
       bloqueado={!onClick}
@@ -177,7 +152,6 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
     <Tarjeta
       icon={<Calculator className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="COTIZADOR"
-      badge={<Pill>4 PLANES</Pill>}
       onClick={onClick}
     />
   );
@@ -187,7 +161,6 @@ function CrmCard({ onClick }: { onClick: () => void }) {
     <Tarjeta
       icon={<BarChart3 className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="CRM"
-      badge={<Pill>RANKING</Pill>}
       onClick={onClick}
     />
   );
@@ -198,7 +171,6 @@ function DistriCard({ onClick }: { onClick?: () => void }) {
     <Tarjeta
       icon={<Network className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA"
-      badge={<Pill>{b ? "SIN ACCESO" : "ACTIVO"}</Pill>}
       onClick={onClick}
       bloqueado={b}
       hint="abrir Stock General"
@@ -211,7 +183,6 @@ function CompraCard({ onClick, hint }: { onClick?: () => void; hint?: string }) 
     <Tarjeta
       icon={<ShoppingCart className="h-5 w-5" style={{ color: "#000" }} />}
       titulo="DEPARTAMENTO DE COMPRA"
-      badge={<Pill>{b ? "SIN ACCESO" : "ACTIVO"}</Pill>}
       onClick={onClick}
       bloqueado={b}
       hint={hint}
@@ -421,7 +392,6 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
                 VIZA HOME
               </span>
             </h1>
-            <p className="mt-1 text-[10px] font-bold tracking-widest text-sky-300">UN SOLO ECOSISTEMA, TODOS LOS CANALES.</p>
           </div>
           <span className="hidden md:block h-7 w-px bg-white/15" aria-hidden="true" />
           <div className="flex items-center gap-3">
