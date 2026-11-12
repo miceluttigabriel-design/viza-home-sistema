@@ -32,6 +32,11 @@
 // haya cargado en el panel PEDIDO ESPECIAL (tabla PedidoEspecialConfig,
 // respaldo) → 0. Así lo que ve el vendedor y lo que recalcula el
 // servidor al guardar es SIEMPRE lo mismo.
+//
+// REVERT (pedido del dueño, regla de la casa): "dentro de la BASE del
+// sistema no se puede modificar". El catálogo EXCEL de la LISTA VIZA que
+// se había agregado a los buscadores fue REVERTIDO (commit 49d7fe6): los
+// buscadores de PROVEEDOR / GRUPO / TIPO y los % salen SOLO de la BASE.
 // ============================================================
 import { db } from "@/lib/db";
 import { listarCombinaciones } from "@/lib/pedido-especial";
