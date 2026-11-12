@@ -76,7 +76,7 @@ function Tarjeta({
   hint,
 }: {
   icon: ReactNode;
-  titulo: string;
+  titulo: ReactNode;
   onClick?: () => void;
   bloqueado?: boolean;
   hint?: string;
@@ -96,7 +96,7 @@ function Tarjeta({
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="text-[12px] font-black text-black leading-tight tracking-tight">{titulo}</h3>
+        <div className="text-[12px] font-black text-black leading-tight tracking-tight">{titulo}</div>
         {!onClick && (
           <p className="mt-1 text-[9.5px] font-black tracking-widest">
             {bloqueado ? (
@@ -128,7 +128,15 @@ function BaseCard({ onClick }: { onClick?: () => void }) {
   return (
     <Tarjeta
       icon={<Database className="h-5 w-5" style={{ color: "#000" }} />}
-      titulo="LA BASE · CENTRAL KATUETÉ"
+      titulo={
+        <>
+          <div className="text-[11px] font-black text-black leading-none">LA BASE</div>
+          <div className="mt-0.5 flex flex-col gap-0.5">
+            <span className="text-[10px] font-black uppercase tracking-tight">CENTRAL</span>
+            <span className="text-[8px] font-bold tracking-widest opacity-85">KATUETE · SUCURSAL EXTRA</span>
+          </div>
+        </>
+      }
       onClick={onClick}
       bloqueado={!onClick}
       hint="abrir La Base"
@@ -315,6 +323,7 @@ const R = {
   neBanner: { x: 80, y: 140, w: 300, h: 56 },
   lpBanner: { x: 960, y: 140, w: 300, h: 56 },
   sgBanner: { x: 960, y: 496, w: 300, h: 56 },
+  katueteExtra: { x: 40, y: 290, w: 240, h: 56 },
 };
 
 function Escenario({ children }: { children: ReactNode }) {
@@ -457,6 +466,9 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 972 640 C 900 630, 880 530, 800 485" t="pedidos" ida={false} />
             <Linea d="M 975 662 C 900 662, 870 548, 790 500" t="fisico" ida={false} />
             <Linea d="M 982 620 C 910 600, 890 510, 810 470" t="sync" ida={false} />
+
+            {/* La Base → Katuete (sucursal extra) */}
+            <Linea d="M 500 216 C 420 216, 340 250, 280 290" t="pedidos" ida={false} />
             {/* Módulos ↔ Central */}
             <Linea d="M 412 540 C 470 540, 490 500, 545 470" t="pedidos" ida={false} />
             <Linea d="M 412 566 C 480 575, 500 525, 556 484" t="pagos" ida={false} />
@@ -478,6 +490,8 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
           <div style={place(R.neBanner)}><SucursalBanner nombre="NUEVA ESPERANZA" /></div>
           <div style={place(R.lpBanner)}><SucursalBanner nombre="LA PALOMA" /></div>
           <div style={place(R.sgBanner)}><SucursalBanner nombre="SALTOS DEL GUAIRA" /></div>
+          {/* Sucursal extra: Katuete (de La Base / Central) */}
+          <div style={place(R.katueteExtra)}><SucursalBanner nombre="KATUETE" /></div>
 
           {/* Panel de módulos */}
           <div className="rounded-3xl" style={{ ...place(R.panelMod), ...GLASS }} />
