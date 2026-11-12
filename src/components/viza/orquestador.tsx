@@ -1,42 +1,41 @@
 "use client";
 
 // ═══════════════════════════════════════════════════════════════════
-// SISTEMA ORQUESTADOR DE VIZA HOME — cara INFOGRÁFICA "LA CASA VIZA"
+// SISTEMA ORQUESTADOR DE VIZA HOME — cara "ECOSISTEMA ISOMÉTRICO"
 //
-// Idea: el sistema ES la casa de la logo (la "A" con las 4 ventanas doradas):
-//   · TECHO (la "A" de la logo)  → LA BASE, el núcleo que sostiene todo.
-//   · VENTANAS de la casa        → STOCK GENERAL, COTIZADOR, CRM y los
-//                                   DEPARTAMENTOS (Distribución/Logística y Compra).
-//   · PUERTA                     → sale hacia la RED DE SUCURSALES (casitas).
+//   · CENTRO: CENTRAL / KATUETÉ (CD central) = LA BASE (núcleo)
+//   · ARRIBA: panel AUTOMATIZACIÓN / INTEGRACIÓN = los 2 Departamentos
+//   · ALREDEDOR: edificios 3D de las sucursales + líneas de flujo
+//   · ABAJO-IZQUIERDA: MÓDULOS (Stock General, Cotizador, CRM)
 //
-// SOLO VISUAL: mismas props, mismos permisos, mismos callbacks y mismos
-// textos que el orquestador anterior. No toca datos, APIs ni base.
-// Marca: azul #155789 · dorado #D9B86B
+// SOLO VISUAL: mismas props, permisos y callbacks que el orquestador
+// anterior. Para usarlo, reemplazar src/components/viza/orquestador.tsx
+// (el export sigue siendo `Orquestador`).
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Database, Boxes, Calculator, Network, ShoppingCart, ArrowRight, BarChart3, Lock } from "lucide-react";
+import { Database, Boxes, Calculator, Network, ShoppingCart, ArrowRight, BarChart3, Lock, MapPin } from "lucide-react";
 import { accesosDeUsuario } from "@/lib/acceso-modulos";
 
-const SUCURSALES_CUADROS = [
-  "NUEVA ESPERANZA",
-  "KATUETE",
-  "LA PALOMA",
-  "SALTOS DEL GUAIRA",
-] as const;
+const SUCURSALES_CUADROS = ["NUEVA ESPERANZA", "KATUETE", "LA PALOMA", "SALTOS DEL GUAIRA"] as const;
 
-// ─── Paleta ───
 const AZUL = "#155789";
 const AZUL_OSC = "#0d3d5e";
 const DORADO = "#D9B86B";
 const C_STOCK = "#4aa8f0";
-const C_BASE = DORADO;
 const C_COTIZ = "#34d399";
 const C_CRM = "#f59e0b";
 const C_DISTRI = "#a78bfa";
 const C_COMPRA = "#22d3ee";
 const FONT = "'Montserrat', sans-serif";
+
+// Colores de las líneas (leyenda)
+const L_PEDIDOS = "#38bdf8";
+const L_FISICO = "#fb923c";
+const L_SYNC = "#4ade80";
+const L_PAGOS = "#a78bfa";
+const L_POST = "#94a3b8";
 
 interface AppUser {
   email: string;
@@ -55,85 +54,11 @@ interface OrquestadorProps {
   onGoDistribucion?: () => void;
 }
 
-// ─── Dibujitos de cada módulo (infografía) ───
-function Dibujo({ tipo, c }: { tipo: "stock" | "base" | "cotiz" | "crm" | "compra" | "distri"; c: string }) {
-  const s = { fill: "none", stroke: c, strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  return (
-    <svg viewBox="0 0 64 48" className="pointer-events-none absolute bottom-2 right-3 h-11 w-14 opacity-90" aria-hidden="true">
-      {tipo === "stock" && (
-        <g {...s}>
-          <rect x="4" y="28" width="18" height="16" fill={`${c}33`} />
-          <rect x="24" y="28" width="18" height="16" fill={`${c}33`} />
-          <rect x="14" y="10" width="18" height="16" fill={`${c}55`} />
-          <path d="M44 44h16M48 36h12" />
-        </g>
-      )}
-      {tipo === "base" && (
-        <g {...s}>
-          <ellipse cx="32" cy="10" rx="18" ry="6" fill={`${c}44`} />
-          <path d="M14 10v26c0 3.3 8 6 18 6s18-2.7 18-6V10" />
-          <path d="M14 23c0 3.3 8 6 18 6s18-2.7 18-6" />
-        </g>
-      )}
-      {tipo === "cotiz" && (
-        <g {...s}>
-          <rect x="16" y="4" width="32" height="40" rx="4" fill={`${c}22`} />
-          <rect x="21" y="9" width="22" height="9" rx="1.5" fill={`${c}55`} />
-          <path d="M23 26h2M31 26h2M39 26h2M23 33h2M31 33h2M39 33h2M23 40h2M31 40h2" />
-        </g>
-      )}
-      {tipo === "crm" && (
-        <g {...s}>
-          <rect x="6" y="28" width="9" height="16" fill={`${c}55`} />
-          <rect x="21" y="20" width="9" height="24" fill={`${c}55`} />
-          <rect x="36" y="12" width="9" height="32" fill={`${c}55`} />
-          <path d="M6 18l16-8 14 4 22-10M50 4h8v8" />
-        </g>
-      )}
-      {tipo === "compra" && (
-        <g {...s}>
-          <path d="M4 6h8l6 24h28l6-18H14" fill={`${c}22`} />
-          <circle cx="22" cy="40" r="3.5" fill={c} />
-          <circle cx="42" cy="40" r="3.5" fill={c} />
-        </g>
-      )}
-      {tipo === "distri" && (
-        <g {...s}>
-          <rect x="2" y="12" width="30" height="24" fill={`${c}33`} />
-          <path d="M32 20h14l10 10v6H32z" fill={`${c}22`} />
-          <circle cx="14" cy="38" r="4" fill="#0b1b2b" />
-          <circle cx="46" cy="38" r="4" fill="#0b1b2b" />
-        </g>
-      )}
-    </svg>
-  );
-}
-
-// Mini casita (sucursales) con las 2 ventanas doradas de la logo
-function MiniCasa() {
-  return (
-    <svg viewBox="0 0 32 32" className="h-8 w-8 shrink-0" aria-hidden="true">
-      <polygon points="16,3 30,15 2,15" fill={AZUL} stroke={DORADO} strokeWidth="1.5" strokeLinejoin="round" />
-      <rect x="6" y="15" width="20" height="14" fill={`${AZUL}88`} stroke={`${DORADO}99`} strokeWidth="1.2" />
-      <rect x="9" y="18" width="5" height="5" fill={DORADO} />
-      <rect x="18" y="18" width="5" height="5" fill={DORADO} />
-      <rect x="13.5" y="24" width="5" height="5" fill={`${DORADO}55`} />
-    </svg>
-  );
-}
-
-// Marca de la logo (la "A" casita) para el encabezado
-function MarcaA() {
-  return (
-    <svg viewBox="0 0 40 36" className="h-9 w-10 shrink-0" aria-hidden="true">
-      <path d="M20 2 L38 34 H29 L20 17 L11 34 H2 Z" fill={AZUL} stroke={DORADO} strokeWidth="1.5" strokeLinejoin="round" />
-      <rect x="17" y="22" width="3" height="3" fill={DORADO} />
-      <rect x="21" y="22" width="3" height="3" fill={DORADO} />
-      <rect x="17" y="26" width="3" height="3" fill={DORADO} />
-      <rect x="21" y="26" width="3" height="3" fill={DORADO} />
-    </svg>
-  );
-}
+const GLASS: CSSProperties = {
+  background: "linear-gradient(160deg, rgba(20,70,150,0.55), rgba(7,25,60,0.88))",
+  border: "1.5px solid rgba(56,160,255,0.65)",
+  boxShadow: "0 0 26px rgba(56,160,255,0.28), inset 0 0 18px rgba(56,160,255,0.12)",
+};
 
 function Pill({ c, children }: { c: string; children: ReactNode }) {
   return (
@@ -146,94 +71,87 @@ function Pill({ c, children }: { c: string; children: ReactNode }) {
   );
 }
 
-// ─── Ventana (módulo principal) ───
-interface VentanaProps {
+// ─── Tarjeta de módulo / departamento (cristal con brillo) ───
+function Tarjeta({
+  c,
+  icon,
+  titulo,
+  badge,
+  onClick,
+  bloqueado = false,
+  hint,
+}: {
   c: string;
-  dibujo: "stock" | "base" | "cotiz" | "crm" | "compra" | "distri";
   icon: ReactNode;
   titulo: string;
   badge: ReactNode;
   onClick?: () => void;
   bloqueado?: boolean;
-  // true = cartel punteado (departamentos) / false = ventana sólida
-  agente?: boolean;
   hint?: string;
-}
-
-function Ventana({ c, dibujo, icon, titulo, badge, onClick, bloqueado = false, agente = false, hint }: VentanaProps) {
+}) {
   const estilo: CSSProperties = {
-    background: `linear-gradient(155deg, ${c}26 0%, rgba(8,28,48,0.93) 55%)`,
-    border: agente ? `1px dashed ${c}77` : `1.5px solid ${c}66`,
-    boxShadow: `0 1px 0 rgba(255,255,255,0.06) inset, 0 12px 36px -16px ${c}88`,
+    ...GLASS,
+    border: `1.5px solid ${c}99`,
+    boxShadow: `0 0 22px ${c}44, inset 0 0 16px ${c}1f`,
   };
-  const base = `relative overflow-hidden h-full w-full text-left rounded-xl p-3 flex flex-col`;
-  const contenido = (
+  const cuerpo = (
     <>
       <span className="absolute inset-x-0 top-0 h-[3px]" style={{ background: `linear-gradient(90deg, transparent, ${c}, transparent)` }} />
-      <Dibujo tipo={dibujo} c={c} />
-      <div className="relative flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div
-            className="h-9 w-9 shrink-0 rounded-lg flex items-center justify-center"
-            style={{ background: `${c}22`, border: `1px solid ${c}66`, boxShadow: `0 0 16px ${c}44` }}
-          >
-            {icon}
-          </div>
-          {!agente && <h2 className="text-[14px] font-black text-white leading-tight tracking-tight">{titulo}</h2>}
-        </div>
-        {badge}
+      <div
+        className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center"
+        style={{ background: `${c}22`, border: `1px solid ${c}77`, boxShadow: `0 0 16px ${c}55` }}
+      >
+        {icon}
       </div>
-      {agente && <h3 className="relative mt-auto pr-16 pt-1 text-[11.5px] font-black text-white leading-tight tracking-tight">{titulo}</h3>}
-      {!agente && (
-        <p className="relative mt-auto text-[10px] font-black tracking-widest">
+      <div className="min-w-0 flex-1">
+        <h3 className="text-[12px] font-black text-white leading-tight tracking-tight">{titulo}</h3>
+        <p className="mt-1 text-[9.5px] font-black tracking-widest">
           {onClick ? (
-            <span className="flex items-center gap-1.5" style={{ color: c }}>
-              ABRIR <ArrowRight className="h-3 w-3 transition-transform duration-200 group-hover:translate-x-1" />
+            <span className="inline-flex items-center gap-1" style={{ color: c }}>
+              ABRIR <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
             </span>
           ) : bloqueado ? (
-            <span className="text-slate-400 flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-slate-400">
               <Lock className="h-3 w-3" /> SIN ACCESO
             </span>
           ) : (
             <span className="text-slate-500">EN DESARROLLO</span>
           )}
         </p>
-      )}
+      </div>
+      {badge}
     </>
   );
-
-  const title = agente
-    ? `${titulo}${onClick ? ` — ${hint || "abrir"}` : bloqueado ? " — sin acceso para tu tipo de usuario" : " — próximo paso del sistema"}`
-    : bloqueado
-      ? "Sin acceso para tu tipo de usuario"
-      : undefined;
-
+  const base = "relative overflow-hidden h-full w-full rounded-xl px-3 flex items-center gap-2.5 text-left";
+  const title = bloqueado ? "Sin acceso para tu tipo de usuario" : hint;
   return onClick ? (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={`group ${base} cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:brightness-110`}
-      style={estilo}
-    >
-      {contenido}
+    <button type="button" onClick={onClick} title={title} className={`group ${base} cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:brightness-125`} style={estilo}>
+      {cuerpo}
     </button>
   ) : (
-    <div
-      title={title}
-      className={`${base} select-none ${bloqueado ? "opacity-55 grayscale" : "opacity-90"}`}
-      style={{ ...estilo, borderStyle: "dashed" }}
-    >
-      {contenido}
+    <div title={title} className={`${base} select-none ${bloqueado ? "opacity-55 grayscale" : "opacity-90"}`} style={{ ...estilo, borderStyle: "dashed" }}>
+      {cuerpo}
     </div>
   );
 }
 
+function BaseCard({ onClick }: { onClick?: () => void }) {
+  return (
+    <Tarjeta
+      c={DORADO}
+      icon={<Database className="h-5 w-5" style={{ color: DORADO }} />}
+      titulo="LA BASE · CENTRAL KATUETÉ"
+      badge={<Pill c={DORADO}>NÚCLEO</Pill>}
+      onClick={onClick}
+      bloqueado={!onClick}
+      hint="abrir La Base"
+    />
+  );
+}
 function StockCard({ onClick }: { onClick: () => void }) {
   return (
-    <Ventana
+    <Tarjeta
       c={C_STOCK}
-      dibujo="stock"
       icon={<Boxes className="h-5 w-5" style={{ color: C_STOCK }} />}
       titulo="STOCK GENERAL"
       badge={
@@ -246,26 +164,10 @@ function StockCard({ onClick }: { onClick: () => void }) {
     />
   );
 }
-
-function BaseCard({ onClick }: { onClick?: () => void }) {
-  return (
-    <Ventana
-      c={C_BASE}
-      dibujo="base"
-      icon={<Database className="h-5 w-5" style={{ color: C_BASE }} />}
-      titulo="LA BASE"
-      badge={<Pill c={C_BASE}>NÚCLEO</Pill>}
-      onClick={onClick}
-      bloqueado={!onClick}
-    />
-  );
-}
-
 function CotizadorCard({ onClick }: { onClick: () => void }) {
   return (
-    <Ventana
+    <Tarjeta
       c={C_COTIZ}
-      dibujo="cotiz"
       icon={<Calculator className="h-5 w-5" style={{ color: C_COTIZ }} />}
       titulo="COTIZADOR"
       badge={<Pill c={C_COTIZ}>4 PLANES</Pill>}
@@ -273,12 +175,10 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
     />
   );
 }
-
 function CrmCard({ onClick }: { onClick: () => void }) {
   return (
-    <Ventana
+    <Tarjeta
       c={C_CRM}
-      dibujo="crm"
       icon={<BarChart3 className="h-5 w-5" style={{ color: C_CRM }} />}
       titulo="CRM"
       badge={<Pill c={C_CRM}>RANKING</Pill>}
@@ -286,194 +186,165 @@ function CrmCard({ onClick }: { onClick: () => void }) {
     />
   );
 }
-
-function AgenteDistribucionCard({ onClick }: { onClick?: () => void }) {
-  const bloq = !onClick;
+function DistriCard({ onClick }: { onClick?: () => void }) {
+  const b = !onClick;
   return (
-    <Ventana
-      agente
+    <Tarjeta
       c={C_DISTRI}
-      dibujo="distri"
-      icon={<Network className="h-4 w-4" style={{ color: C_DISTRI }} />}
+      icon={<Network className="h-5 w-5" style={{ color: C_DISTRI }} />}
       titulo="DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA"
-      badge={<Pill c={bloq ? "#94a3b8" : C_DISTRI}>{bloq ? "SIN ACCESO" : "ACTIVO"}</Pill>}
+      badge={<Pill c={b ? "#94a3b8" : C_DISTRI}>{b ? "SIN ACCESO" : "ACTIVO"}</Pill>}
       onClick={onClick}
-      bloqueado={bloq}
+      bloqueado={b}
       hint="abrir Stock General"
     />
   );
 }
-
-function AgenteCompraCard({ onClick, hint }: { onClick?: () => void; hint?: string }) {
-  const bloq = !onClick;
+function CompraCard({ onClick, hint }: { onClick?: () => void; hint?: string }) {
+  const b = !onClick;
   return (
-    <Ventana
-      agente
+    <Tarjeta
       c={C_COMPRA}
-      dibujo="compra"
-      icon={<ShoppingCart className="h-4 w-4" style={{ color: C_COMPRA }} />}
+      icon={<ShoppingCart className="h-5 w-5" style={{ color: C_COMPRA }} />}
       titulo="DEPARTAMENTO DE COMPRA"
-      badge={<Pill c={bloq ? "#94a3b8" : C_COMPRA}>{bloq ? "SIN ACCESO" : "ACTIVO"}</Pill>}
+      badge={<Pill c={b ? "#94a3b8" : C_COMPRA}>{b ? "SIN ACCESO" : "ACTIVO"}</Pill>}
       onClick={onClick}
-      bloqueado={bloq}
+      bloqueado={b}
       hint={hint}
     />
   );
 }
 
-function SucursalCard({ nombre }: { nombre: string }) {
+// Cartel de sucursal (como los banners del ejemplo)
+function SucursalBanner({ nombre }: { nombre: string }) {
   return (
-    <div
-      className="h-full w-full rounded-xl px-3 flex items-center gap-3 select-none"
-      style={{
-        background: `linear-gradient(155deg, ${C_DISTRI}22, rgba(8,28,48,0.93) 70%)`,
-        border: `1px dashed ${C_DISTRI}66`,
-      }}
-      title={`${nombre} — stock controlado por el Departamento Distribución/Logística`}
-    >
-      <MiniCasa />
+    <div className="h-full w-full rounded-xl px-3 flex items-center gap-2.5 select-none" style={GLASS} title={`${nombre} — stock controlado por el Departamento Distribución/Logística`}>
+      <MapPin className="h-5 w-5 shrink-0" style={{ color: C_DISTRI }} />
       <div className="min-w-0">
-        <p className="text-[11.5px] font-black text-white leading-tight">{nombre}</p>
-        <p className="text-[8.5px] font-bold tracking-widest mt-0.5" style={{ color: C_DISTRI }}>
-          PRÓXIMAMENTE
+        <p className="text-[12px] font-black text-white leading-tight">SUCURSAL {nombre}</p>
+        <p className="text-[9px] font-bold tracking-widest mt-0.5" style={{ color: C_DISTRI }}>
+          SHOWROOM + DEPÓSITO · PRÓXIMAMENTE
         </p>
       </div>
     </div>
   );
 }
 
-// ─── LIENZO: casa + sucursales (se escala al ancho de pantalla) ───
-const W = 1090;
-const H = 700;
+// ─── Edificio isométrico dibujado en SVG ───
+function Edificio({ x, y, s = 1, h = 56, central = false }: { x: number; y: number; s?: number; h?: number; central?: boolean }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      {/* plataforma */}
+      <polygon points={`0,${h - 70} 140,${h} 0,${h + 70} -140,${h}`} fill="#101d36" stroke="#3b82f6" strokeOpacity="0.8" strokeWidth="1.5" filter="url(#glow)" />
+      <polygon points={`0,${h - 58} 120,${h} 0,${h + 58} -120,${h}`} fill="#1a2a48" opacity="0.8" />
+      {/* cara izquierda */}
+      <g transform="translate(-120 0) matrix(1 0.5 0 1 0 0)">
+        <rect width="120" height={h} fill="#cfd9e8" />
+        <rect x="8" y="6" width="104" height="16" fill="#1d4ed8" />
+        <text x="60" y="18" textAnchor="middle" fontSize="11" fontWeight="900" fill="#fff" fontFamily={FONT}>VIZA HOME</text>
+        {[0, 1, 2, 3].map((i) => (
+          <rect key={i} x={10 + i * 27} y="28" width="19" height={h - 36} fill="#f6c36a" opacity="0.9" stroke="#1e3a8a" strokeWidth="1.5" />
+        ))}
+      </g>
+      {/* cara derecha */}
+      <g transform={`translate(0 60) matrix(1 -0.5 0 1 0 0)`}>
+        <rect width="120" height={h} fill="#8fa3bd" />
+        {[0, 1, 2].map((i) => (
+          <rect key={i} x={8 + i * 36} y="14" width="26" height={h - 24} fill="#1e3a8a" opacity="0.9" stroke="#e2e8f0" strokeWidth="1" />
+        ))}
+      </g>
+      {/* techo */}
+      <polygon points="0,-60 120,0 0,60 -120,0" fill="#dbe3ee" stroke="#94a3b8" strokeWidth="1" />
+      <polygon points="0,-42 86,0 0,42 -86,0" fill="#5b6b82" />
+      {[-24, -8, 8, 24].map((o) => (
+        <line key={o} x1={-62 + o * 0.5} y1={o * 0.5 + 12} x2={62 + o * 0.5} y2={o * 0.5 - 12} stroke="#f59e0b" strokeWidth="5" strokeOpacity="0.85" strokeLinecap="round" />
+      ))}
+      {/* camionetas en el patio */}
+      <g transform={`translate(${central ? 20 : 34} ${h + 30})`}>
+        <polygon points="0,0 34,17 34,29 0,12" fill="#2563eb" />
+        <polygon points="34,17 46,11 46,23 34,29" fill="#1e3a8a" />
+        <polygon points="0,0 12,-6 46,11 34,17" fill="#e2e8f0" />
+      </g>
+      {central && (
+        <>
+          <g transform={`translate(-30 ${h + 38})`}>
+            <polygon points="0,0 34,17 34,29 0,12" fill="#2563eb" />
+            <polygon points="34,17 46,11 46,23 34,29" fill="#1e3a8a" />
+            <polygon points="0,0 12,-6 46,11 34,17" fill="#e2e8f0" />
+          </g>
+          <g transform={`translate(-80 ${h + 12})`}>
+            <polygon points="0,0 34,17 34,29 0,12" fill="#2563eb" />
+            <polygon points="34,17 46,11 46,23 34,29" fill="#1e3a8a" />
+            <polygon points="0,0 12,-6 46,11 34,17" fill="#e2e8f0" />
+          </g>
+        </>
+      )}
+      {/* luz de la A de la logo sobre el techo */}
+      <g transform="translate(-6 -4)">
+        {[0, 1, 2, 3].map((i) => (
+          <rect key={i} x={(i % 2) * 8} y={Math.floor(i / 2) * 8} width="6" height="6" fill={DORADO}>
+            <animate attributeName="opacity" values="0.5;1;0.5" dur="2.6s" begin={`${i * 0.3}s`} repeatCount="indefinite" />
+          </rect>
+        ))}
+      </g>
+    </g>
+  );
+}
 
-type Rect = { x: number; y: number; w: number; h: number };
-const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h });
-
-const POS = {
-  base: { x: 170, y: 100, w: 260, h: 85 }, // desván (techo)
-  stock: { x: 40, y: 235, w: 240, h: 100 },
-  distribucion: { x: 320, y: 235, w: 240, h: 100 },
-  cotizador: { x: 40, y: 355, w: 240, h: 100 },
-  compra: { x: 320, y: 355, w: 240, h: 100 },
-  crm: { x: 40, y: 475, w: 520, h: 100 },
-};
-const SUC_X = 800;
-const SUC_W = 250;
-const SUC_H = 80;
-const SUC_Y = [190, 300, 410, 520];
-
-// Flujos (mismas relaciones que antes)
-const F_BASE_STOCK = "M 200 185 C 200 210, 160 212, 160 235";
-const F_BASE_TRONCO = "M 300 185 L 300 405";
-const F_TRONCO_COTIZ = "M 300 405 L 284 405";
-const F_TRONCO_COMPRA = "M 300 405 L 316 405";
-const F_STOCK_DISTRI = "M 280 285 L 318 285";
-const F_COMPRA_DISTRI = "M 440 355 L 440 337";
-const F_COTIZ_CRM = "M 160 455 L 160 473";
-const F_SUCURSALES = SUC_Y.map((y, i) => {
-  const yc = y + SUC_H / 2;
-  return { id: `distri-suc-${i}`, d: `M 560 285 C 690 285, 700 ${yc}, ${SUC_X} ${yc}` };
-});
-
+// ─── Líneas de flujo ───
 function Flecha({ id, color }: { id: string; color: string }) {
   return (
-    <marker id={id} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker id={id} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 1 L 9 5 L 0 9 z" fill={color} />
     </marker>
   );
 }
 
-function Flujo({ d, color, punteado = false, flecha }: { d: string; color: string; punteado?: boolean; flecha: string }) {
+type Estilo = "pedidos" | "fisico" | "sync" | "pagos" | "post";
+const COLORES: Record<Estilo, string> = { pedidos: L_PEDIDOS, fisico: L_FISICO, sync: L_SYNC, pagos: L_PAGOS, post: L_POST };
+const DASH: Record<Estilo, string | undefined> = { pedidos: undefined, fisico: "9 6", sync: "2 7", pagos: undefined, post: "14 5" };
+
+function Linea({ d, t, ida = true }: { d: string; t: Estilo; ida?: boolean }) {
+  const c = COLORES[t];
+  const dash = DASH[t];
   return (
     <g>
-      <path d={d} fill="none" stroke={color} strokeOpacity={0.22} strokeWidth={8} strokeLinecap="round" filter="url(#brillo)" />
-      {punteado ? (
-        <path d={d} fill="none" stroke={color} strokeOpacity={0.9} strokeWidth={2} strokeDasharray="6 6" strokeLinecap="round" markerEnd={`url(#${flecha})`}>
-          <animate attributeName="stroke-dashoffset" from="24" to="0" dur="1.6s" repeatCount="indefinite" />
-        </path>
-      ) : (
-        <>
-          <path d={d} fill="none" stroke={color} strokeOpacity={0.6} strokeWidth={2} strokeLinecap="round" markerEnd={`url(#${flecha})`} />
-          <circle r={3.5} fill={color}>
-            <animateMotion dur="2.8s" repeatCount="indefinite" path={d} />
-          </circle>
-        </>
+      <path d={d} fill="none" stroke={c} strokeOpacity="0.25" strokeWidth="7" strokeLinecap="round" filter="url(#glow)" />
+      <path d={d} fill="none" stroke={c} strokeWidth="2.2" strokeLinecap="round" strokeDasharray={dash} markerEnd={`url(#f-${t})`} markerStart={ida ? undefined : `url(#f-${t})`}>
+        {dash && <animate attributeName="stroke-dashoffset" from="30" to="0" dur="1.8s" repeatCount="indefinite" />}
+      </path>
+      {!dash && (
+        <circle r="3.5" fill={c}>
+          <animateMotion dur="3s" repeatCount="indefinite" path={d} />
+        </circle>
       )}
     </g>
   );
 }
 
-// Casa dibujada (techo "A", chimenea, paredes, puerta, suelo, nubes)
-function CasaDibujo() {
-  return (
-    <g>
-      {/* nubes */}
-      <g opacity="0.16" fill="#fff">
-        <g>
-          <ellipse cx="700" cy="50" rx="46" ry="12" />
-          <ellipse cx="725" cy="42" rx="26" ry="11" />
-          <animateTransform attributeName="transform" type="translate" values="0 0; 40 0; 0 0" dur="26s" repeatCount="indefinite" />
-        </g>
-        <g>
-          <ellipse cx="900" cy="95" rx="38" ry="10" />
-          <ellipse cx="920" cy="88" rx="22" ry="9" />
-          <animateTransform attributeName="transform" type="translate" values="0 0; -36 0; 0 0" dur="30s" repeatCount="indefinite" />
-        </g>
-      </g>
+// ─── Lienzo escalable ───
+const W = 1340;
+const H = 780;
+type Rect = { x: number; y: number; w: number; h: number };
+const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h });
 
-      {/* chimenea + humo */}
-      <rect x="470" y="62" width="36" height="100" rx="3" fill={AZUL_OSC} stroke={DORADO} strokeWidth="2.5" />
-      <rect x="464" y="56" width="48" height="10" rx="2" fill={AZUL} stroke={DORADO} strokeWidth="2" />
-      {[0, 1, 2].map((i) => (
-        <circle key={i} cx="488" cy="48" r="7" fill="#fff" opacity="0">
-          <animate attributeName="cy" values="48;8" dur="4s" begin={`${i * 1.3}s`} repeatCount="indefinite" />
-          <animate attributeName="r" values="5;16" dur="4s" begin={`${i * 1.3}s`} repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0;0.22;0" dur="4s" begin={`${i * 1.3}s`} repeatCount="indefinite" />
-        </circle>
-      ))}
-
-      {/* paredes */}
-      <rect x="20" y="205" width="560" height="445" rx="6" fill="url(#pared)" stroke={`${DORADO}88`} strokeWidth="2" />
-
-      {/* techo = la "A" de la logo */}
-      <polygon points="300,10 604,208 -4,208" fill="url(#techo)" stroke={DORADO} strokeWidth="5" strokeLinejoin="round" />
-      <polygon points="300,26 566,200 34,200" fill="none" stroke="#ffffff" strokeOpacity="0.12" strokeWidth="1.5" />
-
-      {/* las 4 ventanitas doradas de la logo, en la punta del techo */}
-      {[0, 1, 2, 3].map((i) => (
-        <rect key={i} x={284 + (i % 2) * 18} y={48 + Math.floor(i / 2) * 18} width="14" height="14" fill={DORADO}>
-          <animate attributeName="opacity" values="0.6;1;0.6" dur="3s" begin={`${i * 0.35}s`} repeatCount="indefinite" />
-        </rect>
-      ))}
-
-      {/* puerta */}
-      <path d="M 262 650 V 612 A 38 38 0 0 1 338 612 V 650 Z" fill={`${DORADO}22`} stroke={DORADO} strokeWidth="2.5" />
-      <circle cx="326" cy="634" r="3" fill={DORADO} />
-      <text x="300" y="672" textAnchor="middle" fontSize="9.5" fontWeight="900" letterSpacing="2" fill={DORADO} fontFamily={FONT}>
-        SALIDA A SUCURSALES
-      </text>
-
-      {/* camino punteado de la puerta hacia la red de sucursales */}
-      <path d="M 338 646 C 520 700, 700 640, 790 620" fill="none" stroke={DORADO} strokeOpacity="0.45" strokeWidth="2" strokeDasharray="2 8" strokeLinecap="round" />
-
-      {/* suelo y arbustos */}
-      <line x1="0" y1="650" x2="1090" y2="650" stroke={DORADO} strokeOpacity="0.35" strokeWidth="2" />
-      <circle cx="4" cy="640" r="16" fill="#1f8a5a" opacity="0.55" />
-      <circle cx="590" cy="642" r="13" fill="#1f8a5a" opacity="0.55" />
-      <circle cx="606" cy="646" r="9" fill="#2aa874" opacity="0.5" />
-
-      {/* rótulo de la red */}
-      <g>
-        <line x1="925" y1="172" x2="925" y2="150" stroke={DORADO} strokeOpacity="0.6" strokeWidth="2" />
-      </g>
-    </g>
-  );
-}
+const R = {
+  panelTop: { x: 420, y: 6, w: 500, h: 128 },
+  distri: { x: 436, y: 52, w: 232, h: 70 },
+  compra: { x: 672, y: 52, w: 232, h: 70 },
+  base: { x: 500, y: 178, w: 340, h: 76 },
+  panelMod: { x: 20, y: 448, w: 390, h: 262 },
+  stock: { x: 36, y: 498, w: 172, h: 76 },
+  cotiz: { x: 222, y: 498, w: 172, h: 76 },
+  crm: { x: 36, y: 590, w: 358, h: 76 },
+  neBanner: { x: 80, y: 140, w: 300, h: 56 },
+  lpBanner: { x: 960, y: 140, w: 300, h: 56 },
+  sgBanner: { x: 960, y: 496, w: 300, h: 56 },
+};
 
 function Escenario({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [escala, setEscala] = useState(1);
-
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -486,35 +357,26 @@ function Escenario({ children }: { children: ReactNode }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
   return (
     <div ref={ref} className="hidden lg:block w-full" style={{ height: H * escala }}>
-      <div style={{ position: "relative", width: W, height: H, transform: `scale(${escala})`, transformOrigin: "top left" }}>
-        {children}
-      </div>
+      <div style={{ position: "relative", width: W, height: H, transform: `scale(${escala})`, transformOrigin: "top left" }}>{children}</div>
     </div>
   );
 }
 
 function Conector({ color = DORADO }: { color?: string }) {
-  return (
-    <div
-      className="mx-auto h-7 w-0.5 rounded"
-      style={{ background: `linear-gradient(${color}, ${color}55)`, boxShadow: `0 0 10px ${color}66` }}
-    />
-  );
+  return <div className="mx-auto h-7 w-0.5 rounded" style={{ background: `linear-gradient(${color}, ${color}55)`, boxShadow: `0 0 10px ${color}66` }} />;
 }
 
-export function Orquestador({
-  user,
-  onGoBase,
-  onGoStock,
-  onGoSales,
-  onGoCrm,
-  onGoGestion,
-  onGoCompra,
-  onGoDistribucion,
-}: OrquestadorProps) {
+const LEYENDA: { t: Estilo; txt: string }[] = [
+  { t: "pedidos", txt: "Flujo de pedidos" },
+  { t: "fisico", txt: "Flujo físico de mercadería" },
+  { t: "sync", txt: "Sincronización automática" },
+  { t: "pagos", txt: "Pagos y facturación" },
+  { t: "post", txt: "Postventa" },
+];
+
+export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onGoGestion, onGoCompra, onGoDistribucion }: OrquestadorProps) {
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
   const accesos = accesosDeUsuario(user);
   const esSupremo = accesos.esSupremo;
@@ -535,50 +397,39 @@ export function Orquestador({
       style={{
         fontFamily: FONT,
         background:
-          "radial-gradient(900px 520px at 28% 4%, rgba(21,87,137,0.55), transparent 65%), radial-gradient(700px 420px at 100% 100%, rgba(217,184,107,0.12), transparent 60%), linear-gradient(180deg, #071a2b 0%, #050b13 100%)",
+          "radial-gradient(1000px 600px at 50% 45%, rgba(30,90,200,0.35), transparent 65%), radial-gradient(700px 420px at 0% 0%, rgba(21,87,137,0.45), transparent 60%), linear-gradient(180deg, #08162e 0%, #050d1c 100%)",
       }}
     >
-      {/* puntitos sutiles */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
-          backgroundImage: "radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(rgba(120,180,255,0.10) 1px, transparent 1px)",
           backgroundSize: "26px 26px",
-          maskImage: "linear-gradient(to bottom, #000 0%, transparent 85%)",
-          WebkitMaskImage: "linear-gradient(to bottom, #000 0%, transparent 85%)",
         }}
       />
 
       {/* ─── Barra superior ─── */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#04101c]/75 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#04101c]/80 backdrop-blur">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-          <div className="flex items-center gap-3">
-            <MarcaA />
-            <div className="text-center sm:text-left">
-              <h1 className="text-base sm:text-xl lg:text-2xl font-black tracking-tight text-white leading-none">
-                SISTEMA ORQUESTADOR DE{" "}
-                <span
-                  style={{
-                    background: "linear-gradient(135deg, #b89853 0%, #f1d89b 50%, #D9B86B 100%)",
-                    WebkitBackgroundClip: "text",
-                    backgroundClip: "text",
-                    color: "transparent",
-                  }}
-                >
-                  VIZA HOME
-                </span>
-              </h1>
-              <p className="mt-1 text-[10px] font-bold tracking-widest text-sky-200/70">
-                TODO PARA TU HOGAR, EN UN SOLO LUGAR.
-              </p>
-            </div>
+          <div className="text-center sm:text-left">
+            <h1 className="text-base sm:text-xl lg:text-2xl font-black tracking-tight text-white leading-none">
+              SISTEMA ORQUESTADOR DE{" "}
+              <span
+                style={{
+                  background: "linear-gradient(135deg, #b89853 0%, #f1d89b 50%, #D9B86B 100%)",
+                  WebkitBackgroundClip: "text",
+                  backgroundClip: "text",
+                  color: "transparent",
+                }}
+              >
+                VIZA HOME
+              </span>
+            </h1>
+            <p className="mt-1 text-[10px] font-bold tracking-widest text-sky-300">UN SOLO ECOSISTEMA, TODOS LOS CANALES.</p>
           </div>
           <span className="hidden md:block h-7 w-px bg-white/15" aria-hidden="true" />
           <div className="flex items-center gap-3">
-            <div
-              className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-black shadow-lg shrink-0"
-              style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: AZUL_OSC }}
-            >
+            <div className="h-9 w-9 rounded-xl flex items-center justify-center text-sm font-black shadow-lg shrink-0" style={{ background: "linear-gradient(135deg, #b89853 0%, #D9B86B 100%)", color: AZUL_OSC }}>
               {inicial}
             </div>
             <div className="min-w-0">
@@ -601,88 +452,113 @@ export function Orquestador({
         </div>
       </header>
 
-      <main className="relative z-10 flex-1 flex flex-col items-center pt-6 pb-10">
-        {/* ═══ INFOGRAFÍA (pantallas grandes) ═══ */}
+      <main className="relative z-10 flex-1 flex flex-col items-center pt-4 pb-10">
+        {/* ═══ ECOSISTEMA (pantallas grandes) ═══ */}
         <Escenario>
           <svg width={W} height={H} className="absolute inset-0 pointer-events-none" aria-hidden="true">
             <defs>
-              <filter id="brillo" x="-20%" y="-20%" width="140%" height="140%">
+              <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
                 <feGaussianBlur stdDeviation="4" />
               </filter>
-              <linearGradient id="techo" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={AZUL} />
-                <stop offset="100%" stopColor={AZUL_OSC} />
-              </linearGradient>
-              <linearGradient id="pared" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgba(21,87,137,0.30)" />
-                <stop offset="100%" stopColor="rgba(8,28,48,0.55)" />
-              </linearGradient>
-              <Flecha id="flecha-dorada" color={DORADO} />
-              <Flecha id="flecha-azul" color={C_STOCK} />
-              <Flecha id="flecha-crm" color={C_CRM} />
-              <Flecha id="flecha-violeta" color={C_DISTRI} />
-              <Flecha id="flecha-compra" color={C_COMPRA} />
+              {(Object.keys(COLORES) as Estilo[]).map((t) => (
+                <Flecha key={t} id={`f-${t}`} color={COLORES[t]} />
+              ))}
             </defs>
 
-            <CasaDibujo />
+            {/* edificios */}
+            <Edificio x={230} y={270} />
+            <Edificio x={1110} y={270} />
+            <Edificio x={1110} y={620} />
+            <Edificio x={670} y={360} s={1.4} h={70} central />
 
-            <Flujo d={F_BASE_STOCK} color={DORADO} flecha="flecha-dorada" />
-            <Flujo d={F_BASE_TRONCO} color={DORADO} flecha="flecha-dorada" />
-            <Flujo d={F_TRONCO_COTIZ} color={DORADO} flecha="flecha-dorada" />
-            <Flujo d={F_TRONCO_COMPRA} color={C_COMPRA} flecha="flecha-compra" />
-            <Flujo d={F_STOCK_DISTRI} color={C_STOCK} flecha="flecha-azul" />
-            <Flujo d={F_COMPRA_DISTRI} color={C_COMPRA} punteado flecha="flecha-compra" />
-            <Flujo d={F_COTIZ_CRM} color={C_CRM} flecha="flecha-crm" />
-            {F_SUCURSALES.map((f) => (
-              <Flujo key={f.id} d={f.d} color={C_DISTRI} punteado flecha="flecha-violeta" />
-            ))}
+            {/* Panel automatización → banner de La Base */}
+            <Linea d="M 560 134 L 560 176" t="pedidos" ida={false} />
+            <Linea d="M 625 134 L 625 176" t="pagos" ida={false} />
+            <Linea d="M 715 134 L 715 176" t="sync" ida={false} />
+            <Linea d="M 780 134 L 780 176" t="post" ida={false} />
+            {/* La Base → edificio central */}
+            <Linea d="M 670 254 L 670 280" t="sync" />
+
+            {/* Nueva Esperanza ↔ Central */}
+            <Linea d="M 372 300 C 440 300, 450 330, 520 345" t="pedidos" ida={false} />
+            <Linea d="M 372 322 C 440 335, 460 362, 525 364" t="fisico" ida={false} />
+            <Linea d="M 360 342 C 430 355, 470 384, 540 388" t="sync" ida={false} />
+            {/* La Paloma ↔ Central */}
+            <Linea d="M 968 300 C 900 300, 890 330, 820 345" t="pedidos" ida={false} />
+            <Linea d="M 968 322 C 900 335, 880 362, 815 364" t="fisico" ida={false} />
+            <Linea d="M 980 342 C 910 355, 870 384, 800 388" t="sync" ida={false} />
+            {/* Saltos del Guairá ↔ Central */}
+            <Linea d="M 972 640 C 900 630, 880 530, 800 485" t="pedidos" ida={false} />
+            <Linea d="M 975 662 C 900 662, 870 548, 790 500" t="fisico" ida={false} />
+            <Linea d="M 982 620 C 910 600, 890 510, 810 470" t="sync" ida={false} />
+            {/* Módulos ↔ Central */}
+            <Linea d="M 412 540 C 470 540, 490 500, 545 470" t="pedidos" ida={false} />
+            <Linea d="M 412 566 C 480 575, 500 525, 556 484" t="pagos" ida={false} />
+            <Linea d="M 412 592 C 490 600, 510 545, 570 500" t="post" ida={false} />
+
+            {/* Leyenda */}
+            <g>
+              <rect x="470" y="620" width="400" height="142" rx="12" fill="rgba(7,25,60,0.8)" stroke="rgba(56,160,255,0.55)" strokeWidth="1.5" />
+              <text x="490" y="644" fontSize="10" fontWeight="900" letterSpacing="3" fill={DORADO} fontFamily={FONT}>REFERENCIAS</text>
+              {LEYENDA.map((l, i) => (
+                <g key={l.t} transform={`translate(490 ${660 + i * 20})`}>
+                  <line x1="0" y1="0" x2="80" y2="0" stroke={COLORES[l.t]} strokeWidth="2.5" strokeDasharray={DASH[l.t]} markerEnd={`url(#f-${l.t})`} />
+                  <text x="96" y="4" fontSize="11" fontWeight="700" fill="#e2e8f0" fontFamily={FONT}>{l.txt}</text>
+                </g>
+              ))}
+            </g>
           </svg>
 
-          <div style={place(POS.base)}><BaseCard onClick={onGoBase} /></div>
-          <div style={place(POS.stock)}><StockCard onClick={onGoStock} /></div>
-          <div style={place(POS.distribucion)}><AgenteDistribucionCard onClick={onGoDistribucion} /></div>
-          <div style={place(POS.cotizador)}><CotizadorCard onClick={onGoSales} /></div>
-          <div style={place(POS.compra)}>
-            <AgenteCompraCard onClick={onGoCompra} hint="abrir el Departamento de Compra" />
-          </div>
-          <div style={place(POS.crm)}><CrmCard onClick={onGoCrm} /></div>
+          {/* Panel superior: automatización / integración */}
+          <div className="rounded-2xl" style={{ ...place(R.panelTop), ...GLASS }} />
+          <p style={{ position: "absolute", left: R.panelTop.x, top: 16, width: R.panelTop.w }} className="text-center text-[14px] font-black tracking-[0.18em] text-white">
+            AUTOMATIZACIÓN / INTEGRACIÓN
+          </p>
+          <div style={place(R.distri)}><DistriCard onClick={onGoDistribucion} /></div>
+          <div style={place(R.compra)}><CompraCard onClick={onGoCompra} hint="abrir el Departamento de Compra" /></div>
 
-          {/* rótulo de la red de sucursales */}
-          <div style={{ position: "absolute", left: SUC_X, top: 120, width: SUC_W }} className="select-none">
-            <p className="text-[11px] font-black tracking-[0.25em]" style={{ color: DORADO }}>
-              RED DE SUCURSALES
-            </p>
-            <div className="mt-1.5 h-[2px] w-full" style={{ background: `linear-gradient(90deg, ${DORADO}, transparent)` }} />
-          </div>
-          {SUCURSALES_CUADROS.map((nombre, i) => (
-            <div key={nombre} style={place({ x: SUC_X, y: SUC_Y[i], w: SUC_W, h: SUC_H })}>
-              <SucursalCard nombre={nombre} />
-            </div>
-          ))}
+          {/* Centro: La Base */}
+          <div style={place(R.base)}><BaseCard onClick={onGoBase} /></div>
+
+          {/* Sucursales */}
+          <div style={place(R.neBanner)}><SucursalBanner nombre="NUEVA ESPERANZA" /></div>
+          <div style={place(R.lpBanner)}><SucursalBanner nombre="LA PALOMA" /></div>
+          <div style={place(R.sgBanner)}><SucursalBanner nombre="SALTOS DEL GUAIRA" /></div>
+
+          {/* Panel de módulos */}
+          <div className="rounded-3xl" style={{ ...place(R.panelMod), ...GLASS }} />
+          <p style={{ position: "absolute", left: R.panelMod.x, top: 462, width: R.panelMod.w }} className="text-center text-[13px] font-black tracking-[0.18em] text-white">
+            MÓDULOS DEL SISTEMA
+          </p>
+          <div style={place(R.stock)}><StockCard onClick={onGoStock} /></div>
+          <div style={place(R.cotiz)}><CotizadorCard onClick={onGoSales} /></div>
+          <div style={place(R.crm)}><CrmCard onClick={onGoCrm} /></div>
+
+          {/* Lema */}
+          <p style={{ position: "absolute", left: 960, top: 700, width: 360 }} className="text-[12px] font-bold tracking-widest text-sky-300 leading-snug">
+            MÁS QUE UNA TIENDA,
+            <br />
+            <span className="text-[15px] font-black text-white">UN ECOSISTEMA <span className="text-sky-300 font-bold">QUE TE CONECTA.</span></span>
+          </p>
         </Escenario>
 
-        {/* ═══ CELULAR / TABLET: mismos cuadros, uno debajo del otro ═══ */}
+        {/* ═══ CELULAR / TABLET ═══ */}
         <div className="lg:hidden w-full max-w-md px-4 sm:px-6">
-          <div className="min-h-[110px]"><BaseCard onClick={onGoBase} /></div>
+          <div className="h-[76px]"><BaseCard onClick={onGoBase} /></div>
           <Conector />
-          <div className="min-h-[110px]"><StockCard onClick={onGoStock} /></div>
+          <div className="h-[76px]"><DistriCard onClick={onGoDistribucion} /></div>
+          <Conector color={C_COMPRA} />
+          <div className="h-[76px]"><CompraCard onClick={onGoCompra} hint="abrir el Departamento de Compra" /></div>
           <Conector color={C_STOCK} />
-          <div className="min-h-[110px]"><AgenteDistribucionCard onClick={onGoDistribucion} /></div>
-          <Conector />
-          <div className="min-h-[110px]">
-            <AgenteCompraCard onClick={onGoCompra} hint="abrir el Departamento de Compra" />
-          </div>
-          <Conector />
-          <div className="min-h-[110px]"><CotizadorCard onClick={onGoSales} /></div>
+          <div className="h-[76px]"><StockCard onClick={onGoStock} /></div>
+          <Conector color={C_COTIZ} />
+          <div className="h-[76px]"><CotizadorCard onClick={onGoSales} /></div>
           <Conector color={C_CRM} />
-          <div className="min-h-[110px]"><CrmCard onClick={onGoCrm} /></div>
+          <div className="h-[76px]"><CrmCard onClick={onGoCrm} /></div>
           <Conector color={C_DISTRI} />
-          <p className="text-center text-[11px] font-black tracking-[0.25em] mb-2" style={{ color: DORADO }}>
-            RED DE SUCURSALES
-          </p>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 gap-2.5">
             {SUCURSALES_CUADROS.map((nombre) => (
-              <div key={nombre} className="min-h-[76px]"><SucursalCard nombre={nombre} /></div>
+              <div key={nombre} className="h-[60px]"><SucursalBanner nombre={nombre} /></div>
             ))}
           </div>
         </div>
