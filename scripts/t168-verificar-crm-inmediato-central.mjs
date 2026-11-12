@@ -31,7 +31,9 @@ const safra = leer("src/app/api/quotes/safra-pdf/route.ts");
 const cheque = leer("src/app/api/quotes/cheque-pdf/route.ts");
 const mayorista = leer("src/app/api/quotes/mayorista-pdf/route.ts");
 const ranking = leer("src/app/api/crm/ranking/route.ts");
-const panel = leer("src/components/viza/admin-panel.tsx");
+// Task 169: el CRM dejó de ser un modal del panel BASE y pasó a ser el módulo
+// src/components/viza/crm-panel.tsx (cuadro debajo de COTIZADOR).
+const panel = leer("src/components/viza/crm-panel.tsx");
 const sucursal = leer("src/lib/sucursal-usuario.ts");
 const schema = leer("prisma/schema.prisma");
 
@@ -99,7 +101,9 @@ check("usersCrm excluye CENTRAL", /usersCrm = users\.filter\([\s\S]*?sucursalDe\
 check("el ranking se arma SOLO con usersCrm", /const ranking = usersCrm/.test(ranking));
 check("emailToUserId (pedidos especiales) solo con usersCrm", /for \(const u of usersCrm\)/.test(ranking));
 check("los pedidos especiales de CENTRAL tampoco se listan",
-  /listarPresupuestosCrm\(\{[\s\S]*?\.filter\(\(p\) => sucursalDe\(p\.vendedorEmail\) !== "CENTRAL"\)/.test(ranking));
+  /todosPedidosEspeciales/.test(ranking) &&
+    /pedidosEspeciales = todosPedidosEspeciales\.filter\(/.test(ranking) &&
+    /sucursalDe\(p\.vendedorEmail\) !== "CENTRAL"/.test(ranking));
 check("el total general sale del ranking ya filtrado",
   /totalGeneral: ranking\.reduce\(\(acc, r\) => acc \+ r\.total, 0\)/.test(ranking));
 check("ya NO se usa el conteo global que incluía a CENTRAL",
@@ -111,20 +115,20 @@ check("SUCURSALES_USUARIO se sigue devolviendo para el select de asignación",
 check("SUCURSALES_USUARIO sigue incluyendo CENTRAL (asignación manual intacta)",
   /export const SUCURSALES_USUARIO = \["CENTRAL", \.\.\.SUCURSALES_VIZA\]/.test(sucursal));
 
-// ── 6. Panel: refresco automático + pills sin CENTRAL ──
-console.log("\n[6] Modal CRM: refresco inmediato y filtros");
-check("existe cargarCrm(silent) reutilizable", /const cargarCrm = useCallback\(async \(silent = false\)/.test(panel));
-check("abrirCrm usa cargarCrm(false)", /await cargarCrm\(false\)/.test(panel));
-check("refresca SOLO cada 5 segundos mientras el modal está abierto",
+// ── 6. Módulo CRM: refresco automático + pills sin CENTRAL ──
+console.log("\n[6] Módulo CRM: refresco inmediato y filtros");
+check("existe cargar(silent) reutilizable", /const cargar = useCallback\(async \(silent = false\)/.test(panel));
+check("la carga inicial usa cargar(false)", /void cargar\(false\)/.test(panel));
+check("refresca SOLO cada 5 segundos mientras el módulo está abierto",
   /setInterval\([\s\S]*?\}, 5000\)/.test(panel));
 check("también refresca al volver a la ventana (focus)", /addEventListener\("focus"/.test(panel));
 check("el refresco automático es silencioso (no spinner ni toast repetido)",
-  /if \(!silent\) setCrmLoading\(true\)/.test(panel) && /if \(!silent\) toast\.error/.test(panel));
-check("pausa el refresco mientras se guarda una sucursal", /if \(!crmGuardandoSuc\) void cargarCrm\(true\)/.test(panel));
+  /if \(silent\) setRefrescando\(true\)[\s\S]*?else setCargando\(true\)/.test(panel) && /if \(!silent\) toast\.error/.test(panel));
+check("pausa el refresco mientras se guarda una sucursal", /if \(!guardandoSuc\) void cargar\(true\)/.test(panel));
 check("las pills de filtro excluyen CENTRAL",
-  /const filtros = \["GENERAL", \.\.\.crmSucursales\.filter\(\(s\) => s !== "CENTRAL"\)\]/.test(panel));
-check("el select de asignación SIGUE ofreciendo CENTRAL (usa crmSucursales)",
-  /\{crmSucursales\.map\(\(s\) => \(/.test(panel));
+  /\["GENERAL", \.\.\.sucursales\.filter\(\(s\) => s !== "CENTRAL"\)\]/.test(panel));
+check("el select de asignación SIGUE ofreciendo CENTRAL (usa sucursales)",
+  /\{sucursales\.map\(\(s\) => \(/.test(panel));
 
 console.log(`\n═══ Resultado: ${ok} OK · ${fallo} FALLO ═══`);
 process.exit(fallo === 0 ? 0 : 1);

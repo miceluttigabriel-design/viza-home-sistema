@@ -60,9 +60,16 @@ export async function GET() {
     const sucursalEncargado = isAdmin || esConsulta
       ? null
       : await sucursalEncargadoDe(emailSesion, role);
-    if (!isAdmin && !sucursalEncargado && !esConsulta) {
-      return NextResponse.json({ error: "Sin permiso para el CRM" }, { status: 403 });
-    }
+    // Task 169 (pedido del dueño): el CRM ahora vive en el ORQUESTADOR y lo
+    // puede abrir CUALQUIER usuario autenticado. El alcance se recorta acá,
+    // en el servidor:
+    //   · admin / supremo → general (todas las sucursales)
+    //   · VIP / consulta  → general SOLO LECTURA
+    //   · ESPECIAL        → su sucursal (sucursalEncargado)
+    //   · COMÚN           → SOLO su propia fila (vista PERSONAL)
+    // Un COMÚN nunca recibe datos de otros usuarios: más abajo se devuelve
+    // únicamente su fila y sus pedidos especiales.
+    const esVistaPersonal = !isAdmin && !esConsulta && !sucursalEncargado;
 
     // Usuarios del sistema (solo columnas seguras: nunca la contraseña).
     // Task 95 (pedido del dueño): en el CRM NO aparecen:
@@ -285,11 +292,49 @@ export async function GET() {
     // emitirán… de todos": admin/consulta ven TODOS; el encargado ve los
     // de SU sucursal (mismo alcance del ranking). NUNCA lanza.
     // Task 168: los pedidos de usuarios de CENTRAL tampoco se listan.
-    const pedidosEspeciales = (
-      await listarPresupuestosCrm({
-        sucursal: sucursalEncargado || null,
-      })
-    ).filter((p) => sucursalDe(p.vendedorEmail) !== "CENTRAL");
+    const todosPedidosEspeciales = await listarPresupuestosCrm({
+      sucursal: sucursalEncargado || null,
+    });
+    const pedidosEspeciales = todosPedidosEspeciales.filter(
+      (p) => sucursalDe(p.vendedorEmail) !== "CENTRAL"
+    );
+
+    // ─── Vista PERSONAL (Task 169): COMÚN ve SOLO lo que él mismo emitió ───
+    // Se recorta en el servidor: el cliente no recibe nombres, emails ni
+    // totales de ningún otro usuario. Es la garantía de privacidad aunque
+    // alguien llame la API a mano o fuerce la vista en el front.
+    // La fila se arma con los datos del PROPIO usuario (aunque sea de
+    // CENTRAL): así ve su conteo real, sin aparecer en el ranking general.
+    if (esVistaPersonal) {
+      const propio = users.find(
+        (u) => String(u.email || "").trim().toLowerCase() === emailSesion
+      );
+      const tPropio = propio ? totalPorUser.get(propio.id) : undefined;
+      const filaPropia = propio
+        ? {
+            id: propio.id,
+            name: propio.name || propio.email,
+            email: propio.email,
+            role: propio.role,
+            active: propio.active,
+            sucursal: sucursalDe(propio.email),
+            total: tPropio?.total ?? 0,
+            aprobadas: aprobadasPorUser.get(propio.id) ?? 0,
+            porPlan: porPlanPorUser.get(propio.id) ?? porPlanVacio(),
+            ultimo: tPropio?.ultimo ? tPropio.ultimo.toISOString() : null,
+          }
+        : null;
+      const pedidosPropios = todosPedidosEspeciales.filter(
+        (p) => String(p.vendedorEmail || "").trim().toLowerCase() === emailSesion
+      );
+      return NextResponse.json({
+        ranking: filaPropia ? [filaPropia] : [],
+        sucursales: [],
+        totalGeneral: filaPropia?.total ?? 0,
+        pedidosEspeciales: pedidosPropios,
+        modoPersonal: true,
+      });
+    }
 
     // ─── Vista ENCARGADO: solo SU sucursal, sin datos de las demás ───
     // Mismo ranking ya calculado, recortado a su sucursal. El total que ve

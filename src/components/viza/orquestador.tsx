@@ -28,8 +28,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Database, Boxes, Calculator, Network, ShoppingCart, MapPin, ArrowRight } from "lucide-react";
-import { esUsuarioVip } from "@/lib/encargados-sucursal";
+import { Database, Boxes, Calculator, Network, ShoppingCart, MapPin, ArrowRight, BarChart3, Lock } from "lucide-react";
+import { accesosDeUsuario } from "@/lib/acceso-modulos";
 
 // Sucursales oficiales de VIZA (misma lista que SUCURSALES_VIZA en
 // src/lib/sucursal-usuario.ts, en el orden del dueño). Se repite acá SOLO
@@ -47,6 +47,7 @@ const DORADO = "#D9B86B";
 const C_STOCK = "#3b9be0"; // azul VIZA (versión clara para fondo negro)
 const C_BASE = DORADO; // dorado VIZA
 const C_COTIZ = "#34d399";
+const C_CRM = "#f59e0b";
 const C_DISTRI = "#a78bfa";
 const C_COMPRA = "#22d3ee";
 const FONT = "'Montserrat', sans-serif";
@@ -59,9 +60,13 @@ interface AppUser {
 
 interface OrquestadorProps {
   user: AppUser;
-  onGoBase: () => void;
+  // Task 169: el ORQUESTADOR es la pantalla de inicio de TODOS los usuarios.
+  // Cada prop opcional es un permiso: si no llega, el cuadro se ve pero queda
+  // BLOQUEADO (visible, sin acceso), tal como pidió el dueño.
+  onGoBase?: () => void;
   onGoStock: () => void;
   onGoSales: () => void;
+  onGoCrm: () => void;
   // Task 144: SOLO el supremo recibe esta prop. Si no llega, el botón GDA
   // no se renderiza para admins ni VIPs.
   onGoGestion?: () => void;
@@ -69,6 +74,10 @@ interface OrquestadorProps {
   // Lo recibe el supremo y los usuarios habilitados (page.tsx decide según
   // src/lib/acceso-encargado-compra.ts).
   onGoCompra?: () => void;
+  // DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA: para admins/VIPs mantiene el
+  // comportamiento de siempre (abre STOCK GENERAL). ESPECIAL/COMÚN no lo
+  // reciben y el cuadro queda bloqueado.
+  onGoDistribucion?: () => void;
 }
 
 // ─── Tarjeta de módulo (una sola pieza reutilizada por todos) ───
@@ -79,9 +88,19 @@ interface ModuloCardProps {
   badge: ReactNode;
   onClick?: () => void;
   className?: string;
+  // Task 169: visible pero SIN ACCESO para el tipo de usuario actual.
+  bloqueado?: boolean;
 }
 
-function ModuloCard({ c, icon, titulo, badge, onClick, className = "" }: ModuloCardProps) {
+function ModuloCard({
+  c,
+  icon,
+  titulo,
+  badge,
+  onClick,
+  className = "",
+  bloqueado = false,
+}: ModuloCardProps) {
   const estilo: CSSProperties = {
     background: `linear-gradient(155deg, ${c}1f 0%, rgba(9,12,17,0.94) 48%)`,
     border: `1px solid ${c}40`,
@@ -122,6 +141,10 @@ function ModuloCard({ c, icon, titulo, badge, onClick, className = "" }: ModuloC
           <span className="flex items-center gap-1.5" style={{ color: c }}>
             ABRIR <ArrowRight className="h-3 w-3 transition-transform duration-200 group-hover:translate-x-1" />
           </span>
+        ) : bloqueado ? (
+          <span className="text-slate-500 flex items-center gap-1.5">
+            <Lock className="h-3 w-3" /> SIN ACCESO
+          </span>
         ) : (
           <span className="text-slate-600">EN DESARROLLO</span>
         )}
@@ -139,9 +162,13 @@ function ModuloCard({ c, icon, titulo, badge, onClick, className = "" }: ModuloC
     </button>
   ) : (
     <div
-      className={`${base} select-none opacity-90`}
+      className={`${base} select-none ${bloqueado ? "opacity-60 grayscale" : "opacity-90"}`}
       style={{ ...estilo, borderStyle: "dashed" }}
-      title="Módulo en desarrollo — próximo paso del sistema"
+      title={
+        bloqueado
+          ? "Sin acceso para tu tipo de usuario"
+          : "Módulo en desarrollo — próximo paso del sistema"
+      }
     >
       {contenido}
     </div>
@@ -176,7 +203,7 @@ function StockCard({ onClick }: { onClick: () => void }) {
   );
 }
 
-function BaseCard({ onClick }: { onClick: () => void }) {
+function BaseCard({ onClick }: { onClick?: () => void }) {
   return (
     <ModuloCard
       c={C_BASE}
@@ -184,6 +211,7 @@ function BaseCard({ onClick }: { onClick: () => void }) {
       titulo="LA BASE"
       badge={<Pill c={C_BASE}>NÚCLEO</Pill>}
       onClick={onClick}
+      bloqueado={!onClick}
     />
   );
 }
@@ -195,6 +223,19 @@ function CotizadorCard({ onClick }: { onClick: () => void }) {
       icon={<Calculator className="h-6 w-6" style={{ color: C_COTIZ }} />}
       titulo="COTIZADOR"
       badge={<Pill c={C_COTIZ}>4 PLANES</Pill>}
+      onClick={onClick}
+    />
+  );
+}
+
+// Task 169: cuadro NUEVO del CRM, debajo del COTIZADOR (pedido del dueño).
+function CrmCard({ onClick }: { onClick: () => void }) {
+  return (
+    <ModuloCard
+      c={C_CRM}
+      icon={<BarChart3 className="h-6 w-6" style={{ color: C_CRM }} />}
+      titulo="CRM"
+      badge={<Pill c={C_CRM}>RANKING</Pill>}
       onClick={onClick}
     />
   );
@@ -213,6 +254,7 @@ function AgenteCard({
   estado = "PRÓXIMAMENTE",
   onClick,
   hint,
+  bloqueado = false,
 }: {
   c: string;
   icon: ReactNode;
@@ -220,19 +262,28 @@ function AgenteCard({
   estado?: string;
   onClick?: () => void;
   hint?: string;
+  bloqueado?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className="relative overflow-hidden h-full w-full rounded-2xl p-3 flex flex-col select-none text-left transition-transform hover:scale-[1.02] disabled:hover:scale-100 disabled:cursor-default"
+      className={`relative overflow-hidden h-full w-full rounded-2xl p-3 flex flex-col select-none text-left transition-transform hover:scale-[1.02] disabled:hover:scale-100 disabled:cursor-default ${
+        bloqueado && !onClick ? "opacity-60 grayscale" : ""
+      }`}
       style={{
         background: `linear-gradient(155deg, ${c}1f 0%, rgba(9,12,17,0.94) 55%)`,
         border: `1px dashed ${c}55`,
         boxShadow: `0 10px 30px -16px ${c}66`,
       }}
-      title={`${titulo}${onClick ? ` — ${hint || "abrir Stock General"}` : " — próximo paso del sistema"}`}
+      title={`${titulo}${
+        onClick
+          ? ` — ${hint || "abrir Stock General"}`
+          : bloqueado
+            ? " — sin acceso para tu tipo de usuario"
+            : " — próximo paso del sistema"
+      }`}
     >
       <span
         className="absolute inset-x-0 top-0 h-[2px]"
@@ -245,7 +296,9 @@ function AgenteCard({
         >
           {icon}
         </div>
-        <Pill c={c}>{estado}</Pill>
+        <Pill c={bloqueado && !onClick ? "#94a3b8" : c}>
+          {bloqueado && !onClick ? "SIN ACCESO" : estado}
+        </Pill>
       </div>
       <h3 className="mt-auto pt-2 text-[12px] font-black text-white leading-tight tracking-tight">{titulo}</h3>
     </button>
@@ -260,6 +313,7 @@ function AgenteDistribucionCard({ onClick }: { onClick?: () => void }) {
       titulo="DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA"
       estado="ACTIVO"
       onClick={onClick}
+      bloqueado={!onClick}
     />
   );
 }
@@ -273,6 +327,7 @@ function AgenteCompraCard({ onClick, hint }: { onClick?: () => void; hint?: stri
       estado="ACTIVO"
       onClick={onClick}
       hint={hint}
+      bloqueado={!onClick}
     />
   );
 }
@@ -298,7 +353,8 @@ function SucursalCard({ nombre }: { nombre: string }) {
 
 // ─── DIAGRAMA: lienzo fijo que se escala solo al ancho de la pantalla ───
 const W = 1050;
-const H = 500;
+// Task 169: se agrega el cuadro CRM debajo del COTIZADOR → el lienzo crece.
+const H = 640;
 
 // Cuadros: x, y, ancho, alto (en px del lienzo).
 // Pedido del dueño: los dos encargados van AL LADO de su módulo principal —
@@ -307,6 +363,8 @@ const POS = {
   stock: { x: 0, y: 0, w: 360, h: 130 },
   base: { x: 0, y: 160, w: 360, h: 130 },
   cotizador: { x: 0, y: 320, w: 360, h: 130 },
+  // Task 169: CRM justo debajo del COTIZADOR (pedido del dueño).
+  crm: { x: 0, y: 480, w: 360, h: 130 },
   distribucion: { x: 430, y: 10, w: 260, h: 110 },
   compra: { x: 430, y: 170, w: 260, h: 110 },
 };
@@ -326,6 +384,8 @@ const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, to
 // Stock y hacia ABAJO al Cotizador.
 const FLUJO_BASE_STOCK = "M 180 160 C 180 150, 180 140, 180 130";
 const FLUJO_BASE_COTIZ = "M 180 290 C 180 300, 180 310, 180 320";
+// COTIZADOR → CRM (Task 169): misma columna, baja al cuadro nuevo.
+const FLUJO_COTIZ_CRM = "M 180 450 C 180 460, 180 470, 180 480";
 // STOCK GENERAL → DEPARTAMENTO DISTRIBUCIÓN/LOGÍSTICA (mismo eje horizontal, y=65).
 const FLUJO_STOCK_DISTRI = "M 360 65 C 390 65, 400 65, 430 65";
 // LA BASE → DEPARTAMENTO DE COMPRA (mismo eje horizontal, y=225).
@@ -408,19 +468,34 @@ function Conector({ color = DORADO }: { color?: string }) {
   );
 }
 
-export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion, onGoCompra }: OrquestadorProps) {
+export function Orquestador({
+  user,
+  onGoBase,
+  onGoStock,
+  onGoSales,
+  onGoCrm,
+  onGoGestion,
+  onGoCompra,
+  onGoDistribucion,
+}: OrquestadorProps) {
   const inicial = (user.name || user.email).charAt(0).toUpperCase();
-  const esSupremo = user.role === "supremo_admin";
-  // Pedido del dueño: el DEPARTAMENTO DE COMPRA se abre como PÁGINA COMPLETA
-  // (igual que STOCK GENERAL), sin ventana encima. Para admins/VIP el cuadro
-  // mantiene el comportamiento anterior (abre STOCK GENERAL).
-  // Task 165: VIP por ROL promovido desde el GDA o por la lista histórica.
-  const esVip = esUsuarioVip(user.email, user.role);
-  const etiquetaUsuario = esSupremo
-    ? "SUPREMO · ACCESO TOTAL"
-    : esVip
-      ? "VIP · ACCESO"
-      : "ADMINISTRADOR";
+  // Task 169: una sola fuente de verdad para el tipo de usuario y el alcance
+  // de cada módulo (misma lib que usa page.tsx).
+  const accesos = accesosDeUsuario(user);
+  const esSupremo = accesos.esSupremo;
+  const etiquetaUsuario =
+    accesos.tipo === "SUPREMO"
+      ? "SUPREMO · ACCESO TOTAL"
+      : accesos.tipo === "ADMIN"
+        ? "ADMINISTRADOR"
+        : accesos.tipo === "VIP"
+          ? "VIP · ACCESO"
+          : accesos.tipo === "ESPECIAL"
+            ? "ESPECIAL · ENCARGADO"
+            : "COMÚN · VENDEDOR";
+  // Los cuadros de la Base/Departamentos son VISIBLES para todos, pero solo
+  // se pueden abrir si page.tsx pasó la prop correspondiente: cada tarjeta
+  // deduce su estado de bloqueo de la ausencia de esa prop.
 
   return (
     <div
@@ -498,11 +573,13 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion,
               </filter>
               <Flecha id="flecha-dorada" color={DORADO} />
               <Flecha id="flecha-azul" color={C_STOCK} />
+              <Flecha id="flecha-crm" color={C_CRM} />
               <Flecha id="flecha-violeta" color={C_DISTRI} />
               <Flecha id="flecha-compra" color={C_COMPRA} />
             </defs>
             <Flujo d={FLUJO_BASE_STOCK} color={DORADO} flecha="flecha-dorada" />
             <Flujo d={FLUJO_BASE_COTIZ} color={DORADO} flecha="flecha-dorada" />
+            <Flujo d={FLUJO_COTIZ_CRM} color={C_CRM} flecha="flecha-crm" />
             <Flujo d={FLUJO_STOCK_DISTRI} color={C_STOCK} flecha="flecha-azul" />
             <Flujo d={FLUJO_BASE_COMPRA} color={C_COMPRA} flecha="flecha-compra" />
             <Flujo d={FLUJO_COMPRA_DISTRI} color={C_COMPRA} punteado flecha="flecha-compra" />
@@ -514,11 +591,14 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion,
           <div style={place(POS.stock)}><StockCard onClick={onGoStock} /></div>
           <div style={place(POS.base)}><BaseCard onClick={onGoBase} /></div>
           <div style={place(POS.cotizador)}><CotizadorCard onClick={onGoSales} /></div>
-          <div style={place(POS.distribucion)}><AgenteDistribucionCard onClick={onGoStock} /></div>
+          <div style={place(POS.crm)}><CrmCard onClick={onGoCrm} /></div>
+          <div style={place(POS.distribucion)}>
+            <AgenteDistribucionCard onClick={onGoDistribucion} />
+          </div>
           <div style={place(POS.compra)}>
             <AgenteCompraCard
-              onClick={onGoCompra || onGoStock}
-              hint={onGoCompra ? "abrir el Departamento de Compra" : "abrir Stock General"}
+              onClick={onGoCompra}
+              hint="abrir el Departamento de Compra"
             />
           </div>
           {SUCURSALES_CUADROS.map((nombre, i) => (
@@ -532,18 +612,22 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoGestion,
         <div className="lg:hidden w-full max-w-md px-4 sm:px-6">
           <div className="min-h-[120px]"><StockCard onClick={onGoStock} /></div>
           <Conector color={C_STOCK} />
-          <div className="min-h-[110px]"><AgenteDistribucionCard onClick={onGoStock} /></div>
+          <div className="min-h-[110px]">
+            <AgenteDistribucionCard onClick={onGoDistribucion} />
+          </div>
           <Conector />
           <div className="min-h-[120px]"><BaseCard onClick={onGoBase} /></div>
           <Conector color={C_COMPRA} />
           <div className="min-h-[110px]">
             <AgenteCompraCard
-              onClick={onGoCompra || onGoStock}
-              hint={onGoCompra ? "abrir el Departamento de Compra" : "abrir Stock General"}
+              onClick={onGoCompra}
+              hint="abrir el Departamento de Compra"
             />
           </div>
           <Conector />
           <div className="min-h-[120px]"><CotizadorCard onClick={onGoSales} /></div>
+          <Conector color={C_CRM} />
+          <div className="min-h-[120px]"><CrmCard onClick={onGoCrm} /></div>
           <Conector color={C_DISTRI} />
           <div className="grid grid-cols-2 gap-2.5">
             {SUCURSALES_CUADROS.map((nombre) => (
