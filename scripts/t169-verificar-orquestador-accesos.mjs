@@ -7,7 +7,8 @@
 //     y también de la Base".
 //   · "el ORQUESTADOR queda visible para todos los usuarios".
 //   · ESPECIAL (4 encargados): Cotizador + CRM de SU sucursal + Stock.
-//   · COMÚN: Cotizador + CRM con SOLO sus propios presupuestos + Stock.
+//   · COMÚN: Cotizador + CRM con SOLO sus propios presupuestos.
+//     Task 171 (pedido del dueño): el COMÚN ya NO tiene Stock General.
 //   · Los demás módulos quedan VISIBLES pero BLOQUEADOS.
 //   · VIP: CRM general SOLO LECTURA + Base SOLO LECTURA.
 // El recorte del CRM de un COMÚN se hace EN EL SERVIDOR.
@@ -44,10 +45,10 @@ check("modoCrm = general para supremo/admin/VIP",
   /esSupremo \|\| esAdminRol \|\| esVip[\s\S]*?\? "general"/.test(accesos));
 check("modoCrm = sucursal para ESPECIAL", /esEspecial[\s\S]*?\? "sucursal"/.test(accesos));
 check("modoCrm = personal para COMÚN (fallback final)", /: "personal"/.test(accesos));
-check("Cotizador, CRM y Stock habilitados para TODOS",
+check("Cotizador y CRM habilitados para TODOS; Stock NO para el COMÚN (Task 171)",
   /puedeVerCotizador: true/.test(accesos) &&
     /puedeVerCrm: true/.test(accesos) &&
-    /puedeVerStock: true/.test(accesos));
+    /puedeVerStock: !esComun/.test(accesos));
 check("Base reservada a supremo/admin/VIP",
   /puedeVerBase: esSupremo \|\| esAdminRol \|\| esVip/.test(accesos));
 check("ESPECIAL y COMÚN NO pueden asignar sucursal en el CRM",
@@ -106,9 +107,9 @@ check("la Base solo se pinta si puedeVerBase",
 check("Compras sigue limitada por la lista de emails",
   /verEncargadoCompra \? \(\) => irA\("compra"\) : undefined/.test(page));
 check("GDA solo si esSupremo", /onGoGestion=\{accesos\.esSupremo \?/.test(page));
-check("el Orquestador recibe onGoCrm y onGoStock para todos",
+check("el Orquestador recibe onGoCrm para todos y onGoStock solo con permiso (Task 171)",
   /onGoCrm=\{\(\) => irA\("crm"\)\}/.test(page) &&
-    /onGoStock=\{\(\) => irA\("stock"\)\}/.test(page));
+    /onGoStock=\{accesos\.puedeVerStock \? \(\) => irA\("stock"\) : undefined\}/.test(page));
 
 // ── 4. Módulo CRM completo ──
 console.log("\n[4] crm-panel.tsx: módulo de página completa");

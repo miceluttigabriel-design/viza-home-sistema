@@ -6,8 +6,10 @@
 //   · ESPECIAL (los 4 encargados de sucursal) → COTIZADOR + CRM DE SU
 //     SUCURSAL + STOCK GENERAL. La Base y los departamentos quedan visibles
 //     pero BLOQUEADOS.
-//   · COMÚN → COTIZADOR + CRM PERSONAL (solo lo que él mismo emitió) +
-//     STOCK GENERAL. La Base y los departamentos quedan bloqueados.
+//   · COMÚN → COTIZADOR + CRM PERSONAL (solo lo que él mismo emitió).
+//     Task 171 (pedido del dueño): "el stock general no debe estar disponible
+//     para usuarios comunes". La Base, el Stock y los departamentos quedan
+//     bloqueados.
 //
 // Este archivo SOLO lee listas estáticas (no toca Prisma ni la base), así que
 // se puede importar desde componentes de cliente. El BACKEND re-valida el
@@ -95,7 +97,10 @@ export function accesosDeUsuario(user: {
     crmSoloLectura: esVip || esEspecial || esComun,
     puedeVerCotizador: true,
     puedeVerCrm: true,
-    puedeVerStock: true,
+    // Task 171 (pedido del dueño): STOCK GENERAL queda para SUPREMO / ADMIN /
+    // VIP / ESPECIAL. El usuario COMÚN ya no lo ve ni puede abrirlo (tampoco
+    // por API: /api/stock/general re-valida con esta misma función).
+    puedeVerStock: !esComun,
     // La Base queda para Supremo/Admin/VIP. ESPECIAL y COMÚN la ven
     // bloqueada en el Orquestador y no reciben la navegación.
     puedeVerBase: esSupremo || esAdminRol || esVip,

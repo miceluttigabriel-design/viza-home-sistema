@@ -64,7 +64,10 @@ interface OrquestadorProps {
   // Cada prop opcional es un permiso: si no llega, el cuadro se ve pero queda
   // BLOQUEADO (visible, sin acceso), tal como pidió el dueño.
   onGoBase?: () => void;
-  onGoStock: () => void;
+  // Task 171 (pedido del dueño): STOCK GENERAL ya no está disponible para
+  // usuarios COMUNES. page.tsx solo pasa esta prop si accesos.puedeVerStock
+  // es true; sin ella, el cuadro se ve BLOQUEADO (igual que la Base).
+  onGoStock?: () => void;
   onGoSales: () => void;
   onGoCrm: () => void;
   // Task 144: SOLO el supremo recibe esta prop. Si no llega, el botón GDA
@@ -186,19 +189,25 @@ function Pill({ c, children }: { c: string; children: ReactNode }) {
   );
 }
 
-function StockCard({ onClick }: { onClick: () => void }) {
+function StockCard({ onClick }: { onClick?: () => void }) {
   return (
     <ModuloCard
       c={C_STOCK}
       icon={<Boxes className="h-6 w-6" style={{ color: C_STOCK }} />}
       titulo="STOCK GENERAL"
       badge={
-        <Pill c="#4ade80">
-          <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-          SYSTEM ONLINE
-        </Pill>
+        onClick ? (
+          <Pill c="#4ade80">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+            SYSTEM ONLINE
+          </Pill>
+        ) : (
+          <Pill c="#94a3b8">RESTRINGIDO</Pill>
+        )
       }
       onClick={onClick}
+      // Task 171: sin permiso (usuario COMÚN) se ve igual, pero bloqueado.
+      bloqueado={!onClick}
     />
   );
 }

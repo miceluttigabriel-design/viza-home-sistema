@@ -105,12 +105,14 @@ export default function Home() {
   //   según la lista de emails). El GDA sigue siendo SOLO del supremo.
   // - ESPECIAL: COTIZADOR + CRM de SU SUCURSAL + STOCK. Base y departamentos
   //   quedan VISIBLES pero bloqueados.
-  // - COMÚN: COTIZADOR + CRM PERSONAL (solo lo emitido por él) + STOCK.
+  // - COMÚN: COTIZADOR + CRM PERSONAL (solo lo emitido por él). Task 171:
+  //   STOCK GENERAL ya no está disponible para usuarios comunes; el cuadro
+  //   queda visible pero bloqueado.
   if (view === "orquestador") {
     return (
       <Orquestador
         user={user}
-        onGoStock={() => irA("stock")}
+        onGoStock={accesos.puedeVerStock ? () => irA("stock") : undefined}
         onGoSales={() => irA("sales")}
         onGoCrm={() => irA("crm")}
         onGoBase={accesos.puedeVerBase ? () => irA("base") : undefined}
@@ -150,7 +152,9 @@ export default function Home() {
     );
   }
 
-  // ═══ STOCK GENERAL (todos los tipos, pedido del dueño) ═══
+  // ═══ STOCK GENERAL (supremo/admin/VIP/ESPECIAL, Task 171) ═══
+  // El usuario COMÚN no entra: la guarda de permisos de arriba ya lo devuelve
+  // al Orquestador y la API re-valida en el servidor.
   if (view === "stock") {
     return (
       <StockGeneral

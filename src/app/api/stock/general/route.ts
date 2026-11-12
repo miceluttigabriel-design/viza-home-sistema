@@ -12,6 +12,10 @@ import {
   condicionPrismaBienesEmpresa,
   esBienDeEmpresa,
 } from "@/lib/bienes-empresa"; // Task 170: bienes de uso de la empresa (AUTOMOTOR S.A.)
+// Task 171 (pedido del dueño): "el stock general no debe estar disponible para
+// usuarios comunes". La MISMA matriz del Orquestador se re-valida acá, en el
+// servidor, para que nadie entre llamando la API a mano.
+import { accesosDeUsuario } from "@/lib/acceso-modulos";
 
 // Task 126 (pedido del dueño): la respuesta SIEMPRE se calcula en vivo —
 // nada de caché de ruta. Así, cada vez que LA BASE guarda una edición,
@@ -162,11 +166,24 @@ async function fusionarColumnasBase<T extends { id: string }>(
 
 export async function GET(req: NextRequest) {
   try {
-    // Auth: cualquier usuario autenticado puede VER (igual que /api/stats y
-    // /api/products). La escritura NO existe en este endpoint.
+    // Auth: SOLO los tipos con acceso a STOCK GENERAL (Task 171).
+    // Cualquier otro usuario autenticado recibe 403, aunque llame la API a
+    // mano: el módulo ya no está disponible para los usuarios COMUNES.
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+    const accesos = accesosDeUsuario({
+      email: session.user?.email || "",
+      role: (session.user as any)?.role || "",
+    });
+    if (!accesos.puedeVerStock) {
+      return NextResponse.json(
+        {
+          error: "STOCK GENERAL no está disponible para usuarios comunes",
+        },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(req.url);
