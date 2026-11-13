@@ -3,10 +3,11 @@
 // ═══════════════════════════════════════════════════════════════════
 // SISTEMA ORQUESTADOR DE VIZA HOME — cara "ECOSISTEMA ISOMÉTRICO"
 //
-//   · CENTRO: CENTRAL / KATUETÉ (CD central) = LA BASE (núcleo)
-//   · ARRIBA: panel AUTOMATIZACIÓN / INTEGRACIÓN = los 2 Departamentos
-//   · ALREDEDOR: edificios 3D de las sucursales + líneas de flujo
-//   · ABAJO-IZQUIERDA: MÓDULOS (Stock General, Cotizador, CRM)
+//   · CENTRO-ARRIBA: CASA CENTRAL de KATUETE, edificio de 2 pisos
+//     (planta baja = sucursal Katuete / planta alta = Central) = LA BASE
+//   · IZQUIERDA: columna MÓDULOS → AUTOMATIZACIÓN → LA BASE
+//   · ADELANTE: las 3 sucursales (Nueva Esperanza, La Paloma y
+//     Saltos del Guairá) en fila frente a la Central, con sus líneas
 //
 // SOLO VISUAL: mismas props, permisos y callbacks que el orquestador
 // anterior. Para usarlo, reemplazar src/components/viza/orquestador.tsx
@@ -133,7 +134,7 @@ function BaseCard({ onClick }: { onClick?: () => void }) {
           <div className="text-[11px] font-black text-black leading-none">LA BASE</div>
           <div className="mt-0.5 flex flex-col gap-0.5">
             <span className="text-[10px] font-black uppercase tracking-tight">CENTRAL</span>
-            <span className="text-[8px] font-bold tracking-widest opacity-85">KATUETE · SUCURSAL EXTRA</span>
+            <span className="text-[8px] font-bold tracking-widest opacity-85">KATUETE · CASA CENTRAL</span>
           </div>
         </>
       }
@@ -214,34 +215,55 @@ function SucursalBanner({ nombre }: { nombre: string }) {
 }
 
 // ─── Edificio isométrico dibujado en SVG ───
-function Edificio({ x, y, s = 1, h = 56, central = false }: { x: number; y: number; s?: number; h?: number; central?: boolean }) {
+// `pisos` permite dibujar la CASA CENTRAL de Katuete con 2 plantas: la
+// planta baja (sucursal) y arriba la Central, como es en la realidad.
+function Edificio({ x, y, s = 1, h = 56, central = false, pisos = 1 }: { x: number; y: number; s?: number; h?: number; central?: boolean; pisos?: number }) {
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
       {/* plataforma */}
       <polygon points={`0,${h - 70} 140,${h} 0,${h + 70} -140,${h}`} fill="#101d36" stroke="#3b82f6" strokeOpacity="0.8" strokeWidth="1.5" filter="url(#glow)" />
       <polygon points={`0,${h - 58} 120,${h} 0,${h + 58} -120,${h}`} fill="#1a2a48" opacity="0.8" />
-      {/* cara izquierda */}
-      <g transform="translate(-120 0) matrix(1 0.5 0 1 0 0)">
-        <rect width="120" height={h} fill="#cfd9e8" />
-        <rect x="8" y="6" width="104" height="16" fill="#1d4ed8" />
-        <text x="60" y="18" textAnchor="middle" fontSize="11" fontWeight="900" fill="#fff" fontFamily={FONT}>VIZA HOME</text>
-        {[0, 1, 2, 3].map((i) => (
-          <rect key={i} x={10 + i * 27} y="28" width="19" height={h - 36} fill="#f6c36a" opacity="0.9" stroke="#1e3a8a" strokeWidth="1.5" />
-        ))}
-      </g>
-      {/* cara derecha */}
-      <g transform={`translate(0 60) matrix(1 -0.5 0 1 0 0)`}>
-        <rect width="120" height={h} fill="#8fa3bd" />
-        {[0, 1, 2].map((i) => (
-          <rect key={i} x={8 + i * 36} y="14" width="26" height={h - 24} fill="#1e3a8a" opacity="0.9" stroke="#e2e8f0" strokeWidth="1" />
-        ))}
-      </g>
-      {/* techo */}
-      <polygon points="0,-60 120,0 0,60 -120,0" fill="#dbe3ee" stroke="#94a3b8" strokeWidth="1" />
-      <polygon points="0,-42 86,0 0,42 -86,0" fill="#5b6b82" />
-      {[-24, -8, 8, 24].map((o) => (
-        <line key={o} x1={-62 + o * 0.5} y1={o * 0.5 + 12} x2={62 + o * 0.5} y2={o * 0.5 - 12} stroke="#f59e0b" strokeWidth="5" strokeOpacity="0.85" strokeLinecap="round" />
-      ))}
+      {Array.from({ length: pisos }, (_, i) => {
+        // Cada piso se apoya en el techo del anterior (dy = -h * i).
+        const dy = -h * i;
+        const arriba = i === pisos - 1;
+        const paredIzq = i === 0 ? "#cfd9e8" : "#e4ebf5";
+        const paredDer = i === 0 ? "#8fa3bd" : "#9fb2c9";
+        const techo = i === 0 ? "#dbe3ee" : "#e8eef7";
+        const techoInt = i === 0 ? "#5b6b82" : "#64748b";
+        return (
+          <g key={i}>
+            {/* cara izquierda */}
+            <g transform={`translate(-120 ${dy}) matrix(1 0.5 0 1 0 0)`}>
+              <rect width="120" height={h} fill={paredIzq} />
+              <rect x="8" y="6" width="104" height="16" fill="#1d4ed8" />
+              <text x="60" y="18" textAnchor="middle" fontSize="11" fontWeight="900" fill="#fff" fontFamily={FONT}>VIZA HOME</text>
+              {[0, 1, 2, 3].map((w) => (
+                <rect key={w} x={10 + w * 27} y="28" width="19" height={h - 36} fill="#f6c36a" opacity="0.9" stroke="#1e3a8a" strokeWidth="1.5" />
+              ))}
+            </g>
+            {/* cara derecha */}
+            <g transform={`translate(0 ${60 + dy}) matrix(1 -0.5 0 1 0 0)`}>
+              <rect width="120" height={h} fill={paredDer} />
+              {[0, 1, 2].map((w) => (
+                <rect key={w} x={8 + w * 36} y="14" width="26" height={h - 24} fill="#1e3a8a" opacity="0.9" stroke="#e2e8f0" strokeWidth="1" />
+              ))}
+            </g>
+            {/* techo del piso */}
+            <polygon points={`0,${-60 + dy} 120,${dy} 0,${60 + dy} -120,${dy}`} fill={techo} stroke="#94a3b8" strokeWidth="1" />
+            <polygon points={`0,${-42 + dy} 86,${dy} 0,${42 + dy} -86,${dy}`} fill={techoInt} />
+            {arriba && (
+              <g transform={`translate(-6 ${dy - 4})`}>
+                {[0, 1, 2, 3].map((w) => (
+                  <rect key={w} x={(w % 2) * 8} y={Math.floor(w / 2) * 8} width="6" height="6" fill={DORADO}>
+                    <animate attributeName="opacity" values="0.5;1;0.5" dur="2.6s" begin={`${w * 0.3}s`} repeatCount="indefinite" />
+                  </rect>
+                ))}
+              </g>
+            )}
+          </g>
+        );
+      })}
       {/* camionetas en el patio */}
       <g transform={`translate(${central ? 20 : 34} ${h + 30})`}>
         <polygon points="0,0 34,17 34,29 0,12" fill="#2563eb" />
@@ -262,14 +284,6 @@ function Edificio({ x, y, s = 1, h = 56, central = false }: { x: number; y: numb
           </g>
         </>
       )}
-      {/* luz de la A de la logo sobre el techo */}
-      <g transform="translate(-6 -4)">
-        {[0, 1, 2, 3].map((i) => (
-          <rect key={i} x={(i % 2) * 8} y={Math.floor(i / 2) * 8} width="6" height="6" fill={DORADO}>
-            <animate attributeName="opacity" values="0.5;1;0.5" dur="2.6s" begin={`${i * 0.3}s`} repeatCount="indefinite" />
-          </rect>
-        ))}
-      </g>
     </g>
   );
 }
@@ -325,10 +339,13 @@ const R = {
   compra: { x: 32, y: 408, w: 268, h: 64 },
   // La Base cierra la columna, debajo del panel de automatización.
   base: { x: 32, y: 504, w: 268, h: 70 },
-  neBanner: { x: 60, y: 600, w: 300, h: 56 },
-  lpBanner: { x: 960, y: 140, w: 300, h: 56 },
-  sgBanner: { x: 960, y: 496, w: 300, h: 56 },
-  katueteExtra: { x: 600, y: 640, w: 240, h: 56 },
+  // Task 185 (pedido del dueño): Katuete es la CASA CENTRAL (planta baja =
+  // sucursal, planta alta = Central). Ya no se dibuja aparte: el edificio de
+  // Katuete es el edificio central de 2 pisos. Las otras 3 sucursales van
+  // adelante, en una fila frente a la Central.
+  neBanner: { x: 230, y: 600, w: 300, h: 56 },
+  lpBanner: { x: 610, y: 600, w: 300, h: 56 },
+  sgBanner: { x: 990, y: 600, w: 300, h: 56 },
 };
 
 function Escenario({ children }: { children: ReactNode }) {
@@ -445,13 +462,12 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
               ))}
             </defs>
 
-            {/* edificios */}
-            <Edificio x={230} y={740} />
-            <Edificio x={1110} y={270} />
-            <Edificio x={1110} y={620} />
-            <Edificio x={670} y={360} s={1.4} h={70} central />
-            {/* Katuete (sucursal extra de Central) — edificio igual a las otras sucursales, debajo del cuadrito */}
-            <Edificio x={720} y={770} />
+            {/* edificios: la Central de Katuete (2 pisos, centro y arriba) y
+                las 3 sucursales adelante, en una fila */}
+            <Edificio x={380} y={760} />
+            <Edificio x={760} y={760} />
+            <Edificio x={1140} y={760} />
+            <Edificio x={780} y={320} s={1.4} h={70} pisos={2} central />
 
             {/* Panel automatización → cuadro de La Base (conectores cortos en
                 la columna izquierda) */}
@@ -460,34 +476,25 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 218 488 L 218 504" t="sync" ida={false} />
             <Linea d="M 280 488 L 280 504" t="post" ida={false} />
             {/* La Base → edificio central */}
-            <Linea d="M 308 539 C 380 525, 445 480, 494 440" t="sync" />
+            <Linea d="M 300 539 C 400 560, 540 505, 620 438" t="sync" />
 
-            {/* Nueva Esperanza ↔ Central (sucursal abajo a la izquierda) */}
-            <Linea d="M 352 748 C 420 700, 460 560, 500 468" t="pedidos" ida={false} />
-            <Linea d="M 360 770 C 432 725, 470 580, 506 482" t="fisico" ida={false} />
-            <Linea d="M 368 792 C 442 750, 480 600, 512 496" t="sync" ida={false} />
-            {/* La Paloma ↔ Central */}
-            <Linea d="M 968 300 C 900 300, 890 330, 820 345" t="pedidos" ida={false} />
-            <Linea d="M 968 322 C 900 335, 880 362, 815 364" t="fisico" ida={false} />
-            <Linea d="M 980 342 C 910 355, 870 384, 800 388" t="sync" ida={false} />
-            {/* Saltos del Guairá ↔ Central */}
-            <Linea d="M 972 640 C 900 630, 880 530, 800 485" t="pedidos" ida={false} />
-            <Linea d="M 975 662 C 900 662, 870 548, 790 500" t="fisico" ida={false} />
-            <Linea d="M 982 620 C 910 600, 890 510, 810 470" t="sync" ida={false} />
+            {/* Nueva Esperanza → Central */}
+            <Linea d="M 530 612 C 570 600, 592 520, 626 452" t="pedidos" ida={false} />
+            <Linea d="M 530 630 C 575 620, 606 545, 640 470" t="fisico" ida={false} />
+            <Linea d="M 530 648 C 582 640, 620 570, 654 488" t="sync" ida={false} />
+            {/* La Paloma → Central */}
+            <Linea d="M 680 600 C 708 570, 740 535, 756 520" t="pedidos" ida={false} />
+            <Linea d="M 780 600 L 780 518" t="fisico" ida={false} />
+            <Linea d="M 860 600 C 832 570, 812 535, 804 520" t="sync" ida={false} />
+            {/* Saltos del Guairá → Central */}
+            <Linea d="M 990 612 C 950 600, 928 520, 934 452" t="pedidos" ida={false} />
+            <Linea d="M 990 630 C 945 620, 914 545, 920 470" t="fisico" ida={false} />
+            <Linea d="M 990 648 C 938 640, 900 570, 906 488" t="sync" ida={false} />
 
-            {/* Central → Katuete (sucursal extra): las 3 líneas de conexión
-                bajan en curva y se enlazan en el pie del edificio, como en
-                las demás sucursales (pedidos, físico/logística y sincro). */}
-            <Linea d="M 640 528 C 520 610, 500 760, 600 828" t="pedidos" />
-            <Linea d="M 665 545 C 540 630, 520 790, 630 843" t="fisico" />
-            <Linea d="M 680 556 C 545 655, 525 810, 660 858" t="sync" />
-
-            {/* Cuadrito de sucursal → edificio de Katuete */}
-            <Linea d="M 720 696 L 720 710" t="pedidos" ida={false} />
             {/* Módulos (columna izquierda) ↔ Central */}
-            <Linea d="M 308 79 C 395 130, 455 250, 504 372" t="pedidos" ida={false} />
-            <Linea d="M 308 159 C 400 200, 460 285, 506 392" t="pagos" ida={false} />
-            <Linea d="M 308 239 C 405 275, 465 320, 508 412" t="post" ida={false} />
+            <Linea d="M 308 79 C 395 130, 500 250, 620 356" t="pedidos" ida={false} />
+            <Linea d="M 308 159 C 400 200, 505 285, 622 378" t="pagos" ida={false} />
+            <Linea d="M 308 239 C 405 275, 510 320, 624 400" t="post" ida={false} />
           </svg>
 
           {/* Columna izquierda: MÓDULOS DEL SISTEMA → AUTOMATIZACIÓN /
@@ -510,12 +517,10 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
           {/* La Base cierra la columna izquierda */}
           <div style={place(R.base)}><BaseCard onClick={onGoBase} /></div>
 
-          {/* Sucursales */}
+          {/* Sucursales (adelante, en fila frente a la Central) */}
           <div style={place(R.neBanner)}><SucursalBanner nombre="NUEVA ESPERANZA" /></div>
           <div style={place(R.lpBanner)}><SucursalBanner nombre="LA PALOMA" /></div>
           <div style={place(R.sgBanner)}><SucursalBanner nombre="SALTOS DEL GUAIRA" /></div>
-          {/* Sucursal extra: Katuete (de La Base / Central) */}
-          <div style={place(R.katueteExtra)}><SucursalBanner nombre="KATUETE" /></div>
         </Escenario>
 
         {/* ═══ CELULAR / TABLET ═══ */}

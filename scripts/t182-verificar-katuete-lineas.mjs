@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 // ============================================================
-// T182 — VERIFICACIÓN: LAS 3 LÍNEAS DE CONEXIÓN DE KATUETE
-// Pedido del dueño:
-//   "para la sucursal de Katuete las líneas no tenemos todas... podés agregar
-//    las dos líneas faltantes y que todas las líneas de conexión queden bien
-//    en el pie de la sucursal, linkadas en la parte de abajo".
+// T182 — VERIFICACIÓN: CADA SUCURSAL CON SUS 3 LÍNEAS DE CONEXIÓN
+// (actualizado en la Task 185)
 //
-// Regla aplicada:
-//   · La sucursal KATUETE (extra de La Base / Central) tiene las MISMAS 3
-//     líneas que las demás sucursales: pedidos, físico/logística y sincro.
-//   · Las 3 bajan desde Central y terminan en el PIE del edificio de Katuete
-//     (parte de abajo), sin quedar tapadas por el cuadrito de sucursal.
-//   · Hay un solo edificio de Katuete (sin duplicados).
+// Historia:
+//   · Task 182: la sucursal Katuete tenía que tener las 3 líneas
+//     (pedidos, físico/logística y sincro) enlazadas en el pie.
+//   · Task 185 (pedido del dueño): Katuete es la CASA CENTRAL. Se eliminó
+//     el dibujo suelto de Katuete; ahora la Central es un edificio de 2
+//     pisos (planta baja = sucursal Katuete, planta alta = Central) y las
+//     otras 3 sucursales van adelante, en fila, cada una con sus 3 líneas.
+//
 // Checks estáticos sobre el archivo.
 // Correr:  node scripts/t182-verificar-katuete-lineas.mjs
 // ============================================================
@@ -25,42 +24,58 @@ const check = (nombre, cond) => {
 
 const orq = readFileSync("src/components/viza/orquestador.tsx", "utf8");
 
-console.log("═══ T182 · KATUETE CON SUS 3 LÍNEAS DE CONEXIÓN ═══");
+console.log("═══ T182 · CADA SUCURSAL CON SUS 3 LÍNEAS (KATUETE = CASA CENTRAL) ═══");
 
-// ── 1. Las 3 líneas de conexión existen ──
-console.log("\n[1] Las 3 líneas de conexión (pedidos / físico / sincro)");
-const katuete = /Central → Katuete \(sucursal extra\)[\s\S]{0,600}?Cuadrito de sucursal → edificio de Katuete/.exec(orq)?.[0] ?? "";
-check("existe el bloque de conexión de Katuete", katuete.length > 0);
-check("línea de PEDIDOS al pie de Katuete",
-  /<Linea d="M 640 528 C 520 610, 500 760, 600 828" t="pedidos" \/>/.test(katuete));
-check("línea FÍSICO/LOGÍSTICA al pie de Katuete",
-  /<Linea d="M 665 545 C 540 630, 520 790, 630 843" t="fisico" \/>/.test(katuete));
-check("línea de SINCRONIZACIÓN al pie de Katuete",
-  /<Linea d="M 680 556 C 545 655, 525 810, 660 858" t="sync" \/>/.test(katuete));
-check("son 3 líneas en total (antes había 1 sola)",
-  (katuete.match(/<Linea /g) || []).length === 3);
+// ── 1. La Central de Katuete es un solo edificio de 2 pisos ──
+console.log("\n[1] La Central de Katuete, edificio único de 2 pisos");
+check("existe un solo edificio central de 2 pisos",
+  /<Edificio x=\{780\} y=\{320\} s=\{1\.4\} h=\{70\} pisos=\{2\} central \/>/.test(orq));
+check("el edificio soporta varios pisos", /pisos = 1/.test(orq) && /length: pisos/.test(orq));
+check("el piso de arriba nace del techo del de abajo (dy = -h * i)",
+  /const dy = -h \* i;/.test(orq));
+check("ya no hay dibujo suelto de Katuete (720,770)", !/<Edificio x=\{720\} y=\{770\}/.test(orq));
+check("ya no existe el cuadrito extra de Katuete", !/katueteExtra/.test(orq));
 
-// ── 2. Las líneas llegan al pie (parte de abajo) del edificio ──
-console.log("\n[2] Las líneas se enlazan abajo, en el pie del edificio");
-const puntas = [...katuete.matchAll(/C [^"]*?(\d+) (\d+)" t="/g)].map((m) => Number(m[2]));
-check("las 3 puntas terminan en la parte de abajo (y >= 820)", puntas.length === 3 && puntas.every((y) => y >= 820));
-check("ninguna línea termina sobre el cuadrito (y 640..696)", puntas.every((y) => y < 640 || y > 696));
-check("el cuadrito sigue enlazado al edificio (720,696 → 720,710)",
-  /<Linea d="M 720 696 L 720 710" t="pedidos" ida=\{false\} \/>/.test(orq));
+// ── 2. Las 3 sucursales adelante, en fila ──
+console.log("\n[2] Las 3 sucursales adelante, en fila frente a la Central");
+check("Nueva Esperanza (380,760)", /<Edificio x=\{380\} y=\{760\} \/>/.test(orq));
+check("La Paloma (760,760)", /<Edificio x=\{760\} y=\{760\} \/>/.test(orq));
+check("Saltos del Guairá (1140,760)", /<Edificio x=\{1140\} y=\{760\} \/>/.test(orq));
+check("los 3 cuadritos van arriba de sus edificios",
+  /neBanner: \{ x: 230, y: 600, w: 300, h: 56 \}/.test(orq) &&
+    /lpBanner: \{ x: 610, y: 600, w: 300, h: 56 \}/.test(orq) &&
+    /sgBanner: \{ x: 990, y: 600, w: 300, h: 56 \}/.test(orq));
+check("los edificios entran en el lienzo (760 + 126 <= 940)", 760 + 126 <= 940);
 
-// ── 3. Un solo edificio de Katuete (sin duplicado) ──
-console.log("\n[3] Un solo edificio de Katuete");
-const edificiosKatuete = [...orq.matchAll(/<Edificio x=\{720\} y=\{770\} \/>/g)].length;
-check("está el edificio de Katuete debajo del cuadrito", edificiosKatuete === 1);
-check("ya no está el edificio duplicado (600,480)", !/<Edificio x=\{600\} y=\{480\}/.test(orq));
+// ── 3. Las 3 líneas de cada sucursal ──
+console.log("\n[3] Cada sucursal con sus 3 líneas (pedidos / físico / sincro)");
+check("Nueva Esperanza tiene sus 3 líneas",
+  /M 530 612 C 570 600, 592 520, 626 452/.test(orq) &&
+    /M 530 630 C 575 620, 606 545, 640 470/.test(orq) &&
+    /M 530 648 C 582 640, 620 570, 654 488/.test(orq));
+check("La Paloma tiene sus 3 líneas",
+  /M 680 600 C 708 570, 740 535, 756 520/.test(orq) &&
+    /M 780 600 L 780 518/.test(orq) &&
+    /M 860 600 C 832 570, 812 535, 804 520/.test(orq));
+check("Saltos del Guairá tiene sus 3 líneas",
+  /M 990 612 C 950 600, 928 520, 934 452/.test(orq) &&
+    /M 990 630 C 945 620, 914 545, 920 470/.test(orq) &&
+    /M 990 648 C 938 640, 900 570, 906 488/.test(orq));
+check("las 9 líneas salen desde arriba de cada cuadrito (y = 600..648)",
+  (orq.match(/M (?:530|680|780|860|990) (?:600|612|630|648)/g) || []).length === 9);
+check("ya no quedan las líneas viejas de Katuete (M 640 528 / 665 545 / 680 556)",
+  !/M 640 528/.test(orq) && !/M 665 545/.test(orq) && !/M 680 556/.test(orq));
 
 // ── 4. El resto del diagrama sigue entero ──
 console.log("\n[4] Resto del diagrama sin cambios");
 check("lienzo W=1340 · H=940", /const W = 1340/.test(orq) && /const H = 940/.test(orq));
-check("siguen las 3 líneas de Saltos del Guairá",
-  /M 972 640 C 900 630, 880 530, 800 485/.test(orq));
-check("siguen las sucursales NUEVA ESPERANZA / LA PALOMA", /NUEVA ESPERANZA/.test(orq) && /LA PALOMA/.test(orq));
-check("el cuadrito KATUETE sigue en su lugar", /katueteExtra: \{ x: 600, y: 640, w: 240, h: 56 \}/.test(orq));
+check("La Base se conecta con la Central", /M 300 539 C 400 560, 540 505, 620 438/.test(orq));
+check("La Base sigue cerrando la columna izquierda",
+  /base: \{ x: 32, y: 504, w: 268, h: 70 \}/.test(orq));
+check("las 3 sucursales se siguen mostrando como cuadros",
+  /SucursalBanner nombre="NUEVA ESPERANZA"/.test(orq) &&
+    /SucursalBanner nombre="LA PALOMA"/.test(orq) &&
+    /SucursalBanner nombre="SALTOS DEL GUAIRA"/.test(orq));
 
 console.log(`\n═══ Resultado: ${ok} OK · ${fallo} FALLO ═══`);
 process.exit(fallo === 0 ? 0 : 1);

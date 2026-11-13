@@ -50,21 +50,21 @@ check("ya no están lado a lado (stock 36,498 / cotiz 222,498)",
 console.log("\n[3] Cada botón conserva su línea hacia Central");
 check("existe el bloque de conexión de módulos",
   /Módulos \(columna izquierda\) ↔ Central/.test(orq));
-check("las 3 líneas salen de la columna (x=308) y llegan a Central",
-  /M 308 79 C 395 130, 455 250, 504 372/.test(orq) &&
-    /M 308 159 C 400 200, 460 285, 506 392/.test(orq) &&
-    /M 308 239 C 405 275, 465 320, 508 412/.test(orq));
+check("las 3 líneas salen de la columna (x=308) y llegan a la Central",
+  /M 308 79 C 395 130, 500 250, 620 356/.test(orq) &&
+    /M 308 159 C 400 200, 505 285, 622 378/.test(orq) &&
+    /M 308 239 C 405 275, 510 320, 624 400/.test(orq));
 
-// ── 4. Nueva Esperanza reubicada para liberar el lugar ──
-console.log("\n[4] Nueva Esperanza abajo a la izquierda");
-check("el cuadrito de Nueva Esperanza bajó (60, 600)", /neBanner: \{ x: 60, y: 600, w: 300, h: 56 \}/.test(orq));
-check("el edificio de Nueva Esperanza bajó (230, 740)", /<Edificio x=\{230\} y=\{740\} \/>/.test(orq));
+// ── 4. Nueva Esperanza adelante, en la fila de sucursales ──
+console.log("\n[4] Nueva Esperanza adelante, en la fila frente a la Central");
+check("el cuadrito de Nueva Esperanza quedó en la fila (230, 600)", /neBanner: \{ x: 230, y: 600, w: 300, h: 56 \}/.test(orq));
+check("el edificio de Nueva Esperanza quedó adelante (380, 760)", /<Edificio x=\{380\} y=\{760\} \/>/.test(orq));
 check("Nueva Esperanza conserva sus 3 líneas",
-  /M 352 748 C 420 700, 460 560, 500 468/.test(orq) &&
-    /M 360 770 C 432 725, 470 580, 506 482/.test(orq) &&
-    /M 368 792 C 442 750, 480 600, 512 496/.test(orq));
-check("el edificio entra en el lienzo (740 + 126 <= 940)",
-  740 + 126 <= 940);
+  /M 530 612 C 570 600, 592 520, 626 452/.test(orq) &&
+    /M 530 630 C 575 620, 606 545, 640 470/.test(orq) &&
+    /M 530 648 C 582 640, 620 570, 654 488/.test(orq));
+check("el edificio entra en el lienzo (760 + 126 <= 940)",
+  760 + 126 <= 940);
 
 // ── 5. Lo demás sigue igual ──
 console.log("\n[5] Resto del ecosistema intacto");
@@ -74,9 +74,15 @@ check("los departamentos ahora van en la columna, debajo de los módulos (Task 1
   /panelAuto: \{ x: 16, y: 300, w: 300, h: 188 \}/.test(orq));
 check("La Base cierra la columna, debajo de automatización (Task 184)",
   /base: \{ x: 32, y: 504, w: 268, h: 70 \}/.test(orq));
-check("Katuete sigue con sus 3 líneas", /M 680 556 C 545 655, 525 810, 660 858/.test(orq));
-check("La Paloma y Saltos del Guairá siguen en su lugar",
-  /lpBanner: \{ x: 960, y: 140/.test(orq) && /sgBanner: \{ x: 960, y: 496/.test(orq));
+check("los módulos conservan sus 3 líneas hacia la Central",
+  /M 308 79 C 395 130, 500 250, 620 356/.test(orq) &&
+    /M 308 159 C 400 200, 505 285, 622 378/.test(orq) &&
+    /M 308 239 C 405 275, 510 320, 624 400/.test(orq));
+check("Katuete es la Casa Central de 2 pisos (Task 185)",
+  /<Edificio x=\{780\} y=\{320\} s=\{1\.4\} h=\{70\} pisos=\{2\} central \/>/.test(orq) &&
+    !/<Edificio x=\{720\} y=\{770\}/.test(orq));
+check("La Paloma y Saltos del Guairá siguen adelante, en la fila",
+  /lpBanner: \{ x: 610, y: 600/.test(orq) && /sgBanner: \{ x: 990, y: 600/.test(orq));
 
 console.log(`\n═══ Resultado: ${ok} OK · ${fallo} FALLO ═══`);
 process.exit(fallo === 0 ? 0 : 1);

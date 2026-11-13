@@ -78,13 +78,13 @@ check("4 conectores cortos entre automatización y La Base",
     /M 218 488 L 218 504/.test(orq) &&
     /M 280 488 L 280 504/.test(orq));
 check("La Base se conecta con el edificio central",
-  /M 308 539 C 380 525, 445 480, 494 440/.test(orq));
+  /M 300 539 C 400 560, 540 505, 620 438/.test(orq));
 check("ya no quedan los conectores viejos del panel superior",
   !/M 560 134 L 560 176/.test(orq) && !/M 670 254 L 670 280/.test(orq));
-check("los módulos conservan sus 3 líneas hacia Central",
-  /M 308 79 C 395 130, 455 250, 504 372/.test(orq) &&
-    /M 308 159 C 400 200, 460 285, 506 392/.test(orq) &&
-    /M 308 239 C 405 275, 465 320, 508 412/.test(orq));
+check("los módulos conservan sus 3 líneas hacia la Central",
+  /M 308 79 C 395 130, 500 250, 620 356/.test(orq) &&
+    /M 308 159 C 400 200, 505 285, 622 378/.test(orq) &&
+    /M 308 239 C 405 275, 510 320, 624 400/.test(orq));
 
 // ── 5. Nada se pisa ──
 console.log("\n[5] La columna no se pisa con las sucursales");
@@ -92,10 +92,13 @@ check("Nueva Esperanza arranca después de La Base (600 > 504 + 70)",
   600 >= 504 + 70);
 check("el lienzo sigue siendo 1340 x 940",
   /const W = 1340/.test(orq) && /const H = 940/.test(orq));
-check("Katuete y las demás sucursales siguen en su lugar",
-  /katueteExtra: \{ x: 600, y: 640/.test(orq) &&
-    /lpBanner: \{ x: 960, y: 140/.test(orq) &&
-    /sgBanner: \{ x: 960, y: 496/.test(orq));
+check("Las 3 sucursales van adelante, en fila (Task 185)",
+  /neBanner: \{ x: 230, y: 600/.test(orq) &&
+    /lpBanner: \{ x: 610, y: 600/.test(orq) &&
+    /sgBanner: \{ x: 990, y: 600/.test(orq) &&
+    /<Edificio x=\{380\} y=\{760\} \/>/.test(orq) &&
+    /<Edificio x=\{760\} y=\{760\} \/>/.test(orq) &&
+    /<Edificio x=\{1140\} y=\{760\} \/>/.test(orq));
 
 console.log(`\n═══ Resultado: ${ok} OK · ${fallo} FALLO ═══`);
 process.exit(fallo === 0 ? 0 : 1);
