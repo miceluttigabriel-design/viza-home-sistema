@@ -469,10 +469,14 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 975 662 C 900 662, 870 548, 790 500" t="fisico" ida={false} />
             <Linea d="M 982 620 C 910 600, 890 510, 810 470" t="sync" ida={false} />
 
-            {/* Central → cuadrito de Katuete (sucursal extra) */}
-            <Linea d="M 670 436 C 690 500, 720 560, 720 640" t="pedidos" />
+            {/* Central → Katuete (sucursal extra): las 3 líneas de conexión
+                bajan en curva y se enlazan en el pie del edificio, como en
+                las demás sucursales (pedidos, físico/logística y sincro). */}
+            <Linea d="M 640 528 C 520 610, 500 760, 600 828" t="pedidos" />
+            <Linea d="M 665 545 C 540 630, 520 790, 630 843" t="fisico" />
+            <Linea d="M 680 556 C 545 655, 525 810, 660 858" t="sync" />
 
-            {/* Cuadrito → Edificio de Katuete */}
+            {/* Cuadrito de sucursal → edificio de Katuete */}
             <Linea d="M 720 696 L 720 710" t="pedidos" ida={false} />
             {/* Módulos ↔ Central */}
             <Linea d="M 412 540 C 470 540, 490 500, 545 470" t="pedidos" ida={false} />
