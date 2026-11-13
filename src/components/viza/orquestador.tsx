@@ -316,11 +316,14 @@ const R = {
   distri: { x: 436, y: 52, w: 232, h: 70 },
   compra: { x: 672, y: 52, w: 232, h: 70 },
   base: { x: 500, y: 178, w: 340, h: 76 },
-  panelMod: { x: 20, y: 448, w: 390, h: 262 },
-  stock: { x: 36, y: 498, w: 172, h: 76 },
-  cotiz: { x: 222, y: 498, w: 172, h: 76 },
-  crm: { x: 36, y: 590, w: 358, h: 76 },
-  neBanner: { x: 80, y: 140, w: 300, h: 56 },
+  // Task 183 (pedido del dueño): los botones de los módulos van a la
+  // EXTREMA IZQUIERDA, desde arriba (bien abajo del header) y uno abajo del
+  // otro, con sus líneas de conexión hacia Central.
+  panelMod: { x: 16, y: 8, w: 300, h: 292 },
+  stock: { x: 32, y: 44, w: 268, h: 70 },
+  cotiz: { x: 32, y: 124, w: 268, h: 70 },
+  crm: { x: 32, y: 204, w: 268, h: 70 },
+  neBanner: { x: 60, y: 600, w: 300, h: 56 },
   lpBanner: { x: 960, y: 140, w: 300, h: 56 },
   sgBanner: { x: 960, y: 496, w: 300, h: 56 },
   katueteExtra: { x: 600, y: 640, w: 240, h: 56 },
@@ -441,7 +444,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             </defs>
 
             {/* edificios */}
-            <Edificio x={230} y={270} />
+            <Edificio x={230} y={740} />
             <Edificio x={1110} y={270} />
             <Edificio x={1110} y={620} />
             <Edificio x={670} y={360} s={1.4} h={70} central />
@@ -456,10 +459,10 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             {/* La Base → edificio central */}
             <Linea d="M 670 254 L 670 280" t="sync" />
 
-            {/* Nueva Esperanza ↔ Central */}
-            <Linea d="M 372 300 C 440 300, 450 330, 520 345" t="pedidos" ida={false} />
-            <Linea d="M 372 322 C 440 335, 460 362, 525 364" t="fisico" ida={false} />
-            <Linea d="M 360 342 C 430 355, 470 384, 540 388" t="sync" ida={false} />
+            {/* Nueva Esperanza ↔ Central (sucursal abajo a la izquierda) */}
+            <Linea d="M 352 748 C 420 700, 460 560, 500 468" t="pedidos" ida={false} />
+            <Linea d="M 360 770 C 432 725, 470 580, 506 482" t="fisico" ida={false} />
+            <Linea d="M 368 792 C 442 750, 480 600, 512 496" t="sync" ida={false} />
             {/* La Paloma ↔ Central */}
             <Linea d="M 968 300 C 900 300, 890 330, 820 345" t="pedidos" ida={false} />
             <Linea d="M 968 322 C 900 335, 880 362, 815 364" t="fisico" ida={false} />
@@ -478,10 +481,10 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
 
             {/* Cuadrito de sucursal → edificio de Katuete */}
             <Linea d="M 720 696 L 720 710" t="pedidos" ida={false} />
-            {/* Módulos ↔ Central */}
-            <Linea d="M 412 540 C 470 540, 490 500, 545 470" t="pedidos" ida={false} />
-            <Linea d="M 412 566 C 480 575, 500 525, 556 484" t="pagos" ida={false} />
-            <Linea d="M 412 592 C 490 600, 510 545, 570 500" t="post" ida={false} />
+            {/* Módulos (columna izquierda) ↔ Central */}
+            <Linea d="M 308 79 C 395 130, 455 250, 504 372" t="pedidos" ida={false} />
+            <Linea d="M 308 159 C 400 200, 460 285, 506 392" t="pagos" ida={false} />
+            <Linea d="M 308 239 C 405 275, 465 320, 508 412" t="post" ida={false} />
           </svg>
 
           {/* Panel superior: automatización / integración */}
@@ -504,7 +507,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
 
           {/* Panel de módulos */}
           <div className="rounded-3xl" style={{ ...place(R.panelMod), ...GLASS }} />
-          <p style={{ position: "absolute", left: R.panelMod.x, top: 462, width: R.panelMod.w }} className="text-center text-[13px] font-black tracking-[0.18em] text-white">
+          <p style={{ position: "absolute", left: R.panelMod.x, top: 20, width: R.panelMod.w }} className="text-center text-[13px] font-black tracking-[0.18em] text-white">
             MÓDULOS DEL SISTEMA
           </p>
           <div style={place(R.stock)}><StockCard onClick={onGoStock} /></div>

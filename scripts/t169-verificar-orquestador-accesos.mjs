@@ -66,12 +66,13 @@ check("usa la matriz compartida accesosDeUsuario()",
   /import \{ accesosDeUsuario \} from "@\/lib\/acceso-modulos"/.test(orq));
 check("prop onGoCrm obligatoria", /onGoCrm: \(\) => void/.test(orq));
 check("existe CrmCard", /function CrmCard/.test(orq));
-check("el CRM está debajo del COTIZADOR en el panel de módulos",
-  /crm: \{ x: 36, y: 590, w: 358, h: 76 \}/.test(orq) &&
-    /cotiz: \{ x: 222, y: 498, w: 172, h: 76 \}/.test(orq));
+check("los módulos van en columna a la izquierda, uno abajo del otro (Task 183)",
+  /stock: \{ x: 32, y: 44, w: 268, h: 70 \}/.test(orq) &&
+    /cotiz: \{ x: 32, y: 124, w: 268, h: 70 \}/.test(orq) &&
+    /crm: \{ x: 32, y: 204, w: 268, h: 70 \}/.test(orq));
 check("el lienzo crece para que entre el CRM", /const H = 940/.test(orq));
-check("los módulos se conectan con el núcleo (flujo Módulos ↔ Central)",
-  /Módulos ↔ Central/.test(orq) && /place\(R\.crm\)/.test(orq));
+check("los módulos se conectan con el núcleo (flujo Módulos (columna izquierda) ↔ Central)",
+  /Módulos \(columna izquierda\) ↔ Central/.test(orq) && /place\(R\.crm\)/.test(orq));
 check("el CRM se renderiza en el diagrama", /place\(R\.crm\)[\s\S]{0,80}CrmCard/.test(orq));
 check("el CRM se renderiza también en celular/tablet",
   /lg:hidden[\s\S]*?<CrmCard onClick=\{onGoCrm\}/.test(orq));
