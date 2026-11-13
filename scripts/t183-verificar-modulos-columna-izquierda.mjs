@@ -32,7 +32,7 @@ console.log("═══ T183 · MÓDULOS EN COLUMNA A LA IZQUIERDA, DEBAJO DEL HE
 
 // ── 1. Panel arriba a la izquierda ──
 console.log("\n[1] Panel de módulos a la extrema izquierda y arriba");
-check("el panel arranca arriba a la izquierda (16, 8)", /panelMod: \{ x: 16, y: 8, w: 300, h: 292 \}/.test(orq));
+check("el panel arranca arriba a la izquierda (16, 8)", /panelMod: \{ x: 16, y: 8, w: 300, h: 282 \}/.test(orq));
 check("el título MÓDULOS DEL SISTEMA va arriba (top: 20)", /left: R\.panelMod\.x, top: 20, width: R\.panelMod\.w/.test(orq));
 check("el panel ya no está en el medio (y=448)", !/panelMod: \{ x: 20, y: 448/.test(orq));
 
@@ -69,8 +69,11 @@ check("el edificio entra en el lienzo (740 + 126 <= 940)",
 // ── 5. Lo demás sigue igual ──
 console.log("\n[5] Resto del ecosistema intacto");
 check("lienzo W=1340 · H=940", /const W = 1340/.test(orq) && /const H = 940/.test(orq));
-check("La Base sigue en el centro", /base: \{ x: 500, y: 178, w: 340, h: 76 \}/.test(orq));
-check("los departamentos siguen arriba", /panelTop: \{ x: 420, y: 6, w: 500, h: 128 \}/.test(orq));
+check("La Base ahora cierra la columna izquierda (32, 504)", /base: \{ x: 32, y: 504, w: 268, h: 70 \}/.test(orq));
+check("los departamentos ahora van en la columna, debajo de los módulos (Task 184)",
+  /panelAuto: \{ x: 16, y: 300, w: 300, h: 188 \}/.test(orq));
+check("La Base cierra la columna, debajo de automatización (Task 184)",
+  /base: \{ x: 32, y: 504, w: 268, h: 70 \}/.test(orq));
 check("Katuete sigue con sus 3 líneas", /M 680 556 C 545 655, 525 810, 660 858/.test(orq));
 check("La Paloma y Saltos del Guairá siguen en su lugar",
   /lpBanner: \{ x: 960, y: 140/.test(orq) && /sgBanner: \{ x: 960, y: 496/.test(orq));

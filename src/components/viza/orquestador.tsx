@@ -312,17 +312,19 @@ type Rect = { x: number; y: number; w: number; h: number };
 const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h });
 
 const R = {
-  panelTop: { x: 420, y: 6, w: 500, h: 128 },
-  distri: { x: 436, y: 52, w: 232, h: 70 },
-  compra: { x: 672, y: 52, w: 232, h: 70 },
-  base: { x: 500, y: 178, w: 340, h: 76 },
-  // Task 183 (pedido del dueño): los botones de los módulos van a la
-  // EXTREMA IZQUIERDA, desde arriba (bien abajo del header) y uno abajo del
-  // otro, con sus líneas de conexión hacia Central.
-  panelMod: { x: 16, y: 8, w: 300, h: 292 },
+  // Task 184 (pedido del dueño): toda la columna izquierda, de arriba hacia
+  // abajo, uno debajo del otro: MÓDULOS DEL SISTEMA →
+  // AUTOMATIZACIÓN / INTEGRACIÓN → LA BASE · CENTRAL.
+  panelMod: { x: 16, y: 8, w: 300, h: 282 },
   stock: { x: 32, y: 44, w: 268, h: 70 },
   cotiz: { x: 32, y: 124, w: 268, h: 70 },
   crm: { x: 32, y: 204, w: 268, h: 70 },
+  // Mismo ancho y estilo que el panel de módulos, justo debajo.
+  panelAuto: { x: 16, y: 300, w: 300, h: 188 },
+  distri: { x: 32, y: 336, w: 268, h: 64 },
+  compra: { x: 32, y: 408, w: 268, h: 64 },
+  // La Base cierra la columna, debajo del panel de automatización.
+  base: { x: 32, y: 504, w: 268, h: 70 },
   neBanner: { x: 60, y: 600, w: 300, h: 56 },
   lpBanner: { x: 960, y: 140, w: 300, h: 56 },
   sgBanner: { x: 960, y: 496, w: 300, h: 56 },
@@ -451,13 +453,14 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             {/* Katuete (sucursal extra de Central) — edificio igual a las otras sucursales, debajo del cuadrito */}
             <Edificio x={720} y={770} />
 
-            {/* Panel automatización → banner de La Base */}
-            <Linea d="M 560 134 L 560 176" t="pedidos" ida={false} />
-            <Linea d="M 625 134 L 625 176" t="pagos" ida={false} />
-            <Linea d="M 715 134 L 715 176" t="sync" ida={false} />
-            <Linea d="M 780 134 L 780 176" t="post" ida={false} />
+            {/* Panel automatización → cuadro de La Base (conectores cortos en
+                la columna izquierda) */}
+            <Linea d="M 86 488 L 86 504" t="pedidos" ida={false} />
+            <Linea d="M 152 488 L 152 504" t="pagos" ida={false} />
+            <Linea d="M 218 488 L 218 504" t="sync" ida={false} />
+            <Linea d="M 280 488 L 280 504" t="post" ida={false} />
             {/* La Base → edificio central */}
-            <Linea d="M 670 254 L 670 280" t="sync" />
+            <Linea d="M 308 539 C 380 525, 445 480, 494 440" t="sync" />
 
             {/* Nueva Esperanza ↔ Central (sucursal abajo a la izquierda) */}
             <Linea d="M 352 748 C 420 700, 460 560, 500 468" t="pedidos" ida={false} />
@@ -487,15 +490,24 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 308 239 C 405 275, 465 320, 508 412" t="post" ida={false} />
           </svg>
 
-          {/* Panel superior: automatización / integración */}
-          <div className="rounded-2xl" style={{ ...place(R.panelTop), ...GLASS }} />
-          <p style={{ position: "absolute", left: R.panelTop.x, top: 16, width: R.panelTop.w }} className="text-center text-[14px] font-black tracking-[0.18em] text-white">
+          {/* Columna izquierda: MÓDULOS DEL SISTEMA → AUTOMATIZACIÓN /
+              INTEGRACIÓN → LA BASE · CENTRAL, uno debajo del otro */}
+          <div className="rounded-3xl" style={{ ...place(R.panelMod), ...GLASS }} />
+          <p style={{ position: "absolute", left: R.panelMod.x, top: 20, width: R.panelMod.w }} className="text-center text-[13px] font-black tracking-[0.18em] text-white">
+            MÓDULOS DEL SISTEMA
+          </p>
+          <div style={place(R.stock)}><StockCard onClick={onGoStock} /></div>
+          <div style={place(R.cotiz)}><CotizadorCard onClick={onGoSales} /></div>
+          <div style={place(R.crm)}><CrmCard onClick={onGoCrm} /></div>
+
+          <div className="rounded-3xl" style={{ ...place(R.panelAuto), ...GLASS }} />
+          <p style={{ position: "absolute", left: R.panelAuto.x, top: 312, width: R.panelAuto.w }} className="text-center text-[11px] font-black tracking-[0.16em] text-white">
             AUTOMATIZACIÓN / INTEGRACIÓN
           </p>
           <div style={place(R.distri)}><DistriCard onClick={onGoDistribucion} /></div>
           <div style={place(R.compra)}><CompraCard onClick={onGoCompra} hint="abrir el Departamento de Compra" /></div>
 
-          {/* Centro: La Base */}
+          {/* La Base cierra la columna izquierda */}
           <div style={place(R.base)}><BaseCard onClick={onGoBase} /></div>
 
           {/* Sucursales */}
@@ -504,15 +516,6 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
           <div style={place(R.sgBanner)}><SucursalBanner nombre="SALTOS DEL GUAIRA" /></div>
           {/* Sucursal extra: Katuete (de La Base / Central) */}
           <div style={place(R.katueteExtra)}><SucursalBanner nombre="KATUETE" /></div>
-
-          {/* Panel de módulos */}
-          <div className="rounded-3xl" style={{ ...place(R.panelMod), ...GLASS }} />
-          <p style={{ position: "absolute", left: R.panelMod.x, top: 20, width: R.panelMod.w }} className="text-center text-[13px] font-black tracking-[0.18em] text-white">
-            MÓDULOS DEL SISTEMA
-          </p>
-          <div style={place(R.stock)}><StockCard onClick={onGoStock} /></div>
-          <div style={place(R.cotiz)}><CotizadorCard onClick={onGoSales} /></div>
-          <div style={place(R.crm)}><CrmCard onClick={onGoCrm} /></div>
         </Escenario>
 
         {/* ═══ CELULAR / TABLET ═══ */}
