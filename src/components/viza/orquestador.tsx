@@ -445,9 +445,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Edificio x={1110} y={270} />
             <Edificio x={1110} y={620} />
             <Edificio x={670} y={360} s={1.4} h={70} central />
-            {/* Katuete (sucursal extra de Central) */}
-            <Edificio x={600} y={480} s={0.9} />
-            {/* Edificio de Katuete debajo del cuadrito */}
+            {/* Katuete (sucursal extra de Central) — un solo edificio, debajo del cuadrito */}
             <Edificio x={720} y={700} s={0.8} />
 
             {/* Panel automatización → banner de La Base */}
@@ -471,14 +469,11 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 975 662 C 900 662, 870 548, 790 500" t="fisico" ida={false} />
             <Linea d="M 982 620 C 910 600, 890 510, 810 470" t="sync" ida={false} />
 
-            {/* Central → Katuete (sucursal extra) */}
-            <Linea d="M 670 436 C 640 500, 620 560, 600 640" t="pedidos" />
+            {/* Central → cuadrito de Katuete (sucursal extra) */}
+            <Linea d="M 670 436 C 690 500, 720 560, 720 640" t="pedidos" />
 
             {/* Cuadrito → Edificio de Katuete */}
             <Linea d="M 720 696 L 720 700" t="pedidos" ida={false} />
-
-            {/* La Base → Katuete (sucursal extra) */}
-            <Linea d="M 500 216 C 420 216, 340 250, 280 290" t="pedidos" ida={false} />
             {/* Módulos ↔ Central */}
             <Linea d="M 412 540 C 470 540, 490 500, 545 470" t="pedidos" ida={false} />
             <Linea d="M 412 566 C 480 575, 500 525, 556 484" t="pagos" ida={false} />
