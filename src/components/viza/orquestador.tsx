@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Database, Boxes, Calculator, Network, ShoppingCart, BarChart3, Lock, MapPin } from "lucide-react";
+import { Database, Boxes, Calculator, Network, ShoppingCart, BarChart3, Lock, MapPin, Building2 } from "lucide-react";
 import { accesosDeUsuario } from "@/lib/acceso-modulos";
 
 const SUCURSALES_CUADROS = ["NUEVA ESPERANZA", "KATUETE", "LA PALOMA", "SALTOS DEL GUAIRA"] as const;
@@ -214,6 +214,26 @@ function SucursalBanner({ nombre }: { nombre: string }) {
   );
 }
 
+// Cartel de la Casa Central: va arriba del edificio de 2 pisos y aclara
+// que la Central está en el primer piso y abajo está el salón de Katuete.
+function CentralBanner() {
+  return (
+    <div
+      className="h-full w-full rounded-xl px-3 flex items-center gap-2.5 select-none"
+      style={GLASS}
+      title="CASA CENTRAL — Central en el primer piso + Salón Katuete en planta baja"
+    >
+      <Building2 className="h-5 w-5 shrink-0" style={{ color: DORADO }} />
+      <div className="min-w-0">
+        <p className="text-[12px] font-black text-white leading-tight">CENTRAL · PRIMER PISO</p>
+        <p className="text-[9px] font-bold tracking-widest mt-0.5" style={{ color: DORADO }}>
+          + SALÓN KATUETE
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Edificio isométrico dibujado en SVG ───
 // `pisos` permite dibujar la CASA CENTRAL de Katuete con 2 plantas: la
 // planta baja (sucursal) y arriba la Central, como es en la realidad.
@@ -343,6 +363,8 @@ const R = {
   // sucursal, planta alta = Central). Ya no se dibuja aparte: el edificio de
   // Katuete es el edificio central de 2 pisos. Las otras 3 sucursales van
   // adelante, en una fila frente a la Central.
+  // Cartel arriba de la Casa Central (2 pisos).
+  centralBanner: { x: 630, y: 64, w: 300, h: 56 },
   neBanner: { x: 230, y: 600, w: 300, h: 56 },
   lpBanner: { x: 610, y: 600, w: 300, h: 56 },
   sgBanner: { x: 990, y: 600, w: 300, h: 56 },
@@ -516,6 +538,9 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
 
           {/* La Base cierra la columna izquierda */}
           <div style={place(R.base)}><BaseCard onClick={onGoBase} /></div>
+
+          {/* Cartel arriba de la Casa Central */}
+          <div style={place(R.centralBanner)}><CentralBanner /></div>
 
           {/* Sucursales (adelante, en fila frente a la Central) */}
           <div style={place(R.neBanner)}><SucursalBanner nombre="NUEVA ESPERANZA" /></div>
