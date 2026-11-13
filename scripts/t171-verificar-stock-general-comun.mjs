@@ -54,8 +54,8 @@ check("StockCard acepta onClick opcional",
   /function StockCard\(\{ onClick \}: \{ onClick\?: \(\) => void \}\)/.test(orq));
 check("StockCard se muestra BLOQUEADO sin permiso",
   /bloqueado=\{!onClick\}/.test(orq));
-check("el cuadro bloqueado avisa RESTRINGIDO en vez de SYSTEM ONLINE",
-  /RESTRINGIDO/.test(orq) && /onClick \?[\s\S]*?SYSTEM ONLINE[\s\S]*?: \(/.test(orq));
+check("el cuadro bloqueado avisa SIN ACCESO (Task 173 quitó las píldoras)",
+  /SIN ACCESO/.test(orq) && /bloqueado=\{!onClick\}/.test(orq));
 check("se renderiza igual en el diagrama y en celular (sin permiso no rompe)",
   /place\(R\.stock\)[\s\S]*?<StockCard onClick=\{onGoStock\}/.test(orq) &&
     /lg:hidden[\s\S]*?<StockCard onClick=\{onGoStock\}/.test(orq));

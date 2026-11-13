@@ -40,7 +40,7 @@ check("las líneas de colores siguen dibujándose (solo se quitó la leyenda)",
 
 // ── 3. El orquestador isométrico sigue entero ──
 console.log("\n[3] Diseño isométrico intacto");
-check("sigue el lienzo escalable", /const W = 1340/.test(orq) && /const H = 780/.test(orq));
+check("sigue el lienzo escalable", /const W = 1340/.test(orq) && /const H = 940/.test(orq));
 check("siguen los edificios isométricos", /function Edificio\(/.test(orq));
 check("siguen las sucursales", /NUEVA ESPERANZA/.test(orq) && /SALTOS DEL GUAIRA/.test(orq));
 check("siguen los módulos STOCK / COTIZADOR / CRM",
@@ -52,7 +52,7 @@ check("onGoStock sigue siendo opcional", /onGoStock\?: \(\) => void/.test(orq));
 check("StockCard sigue aceptando onClick opcional",
   /function StockCard\(\{ onClick \}: \{ onClick\?: \(\) => void \}\)/.test(orq));
 check("StockCard se muestra bloqueado sin permiso",
-  /bloqueado=\{!onClick\}/.test(orq) && /RESTRINGIDO/.test(orq));
+  /bloqueado=\{!onClick\}/.test(orq) && /SIN ACCESO/.test(orq));
 check("page.tsx sigue pasando onGoStock solo con permiso",
   /onGoStock=\{accesos\.puedeVerStock \? \(\) => irA\("stock"\) : undefined\}/.test(page));
 

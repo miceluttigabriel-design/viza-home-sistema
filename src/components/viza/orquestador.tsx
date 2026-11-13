@@ -307,7 +307,7 @@ function Linea({ d, t, ida = true }: { d: string; t: Estilo; ida?: boolean }) {
 
 // ─── Lienzo escalable ───
 const W = 1340;
-const H = 900;
+const H = 940;
 type Rect = { x: number; y: number; w: number; h: number };
 const place = (r: Rect): CSSProperties => ({ position: "absolute", left: r.x, top: r.y, width: r.w, height: r.h });
 
@@ -445,8 +445,8 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Edificio x={1110} y={270} />
             <Edificio x={1110} y={620} />
             <Edificio x={670} y={360} s={1.4} h={70} central />
-            {/* Katuete (sucursal extra de Central) — un solo edificio, debajo del cuadrito */}
-            <Edificio x={720} y={700} s={0.8} />
+            {/* Katuete (sucursal extra de Central) — edificio igual a las otras sucursales, debajo del cuadrito */}
+            <Edificio x={720} y={770} />
 
             {/* Panel automatización → banner de La Base */}
             <Linea d="M 560 134 L 560 176" t="pedidos" ida={false} />
@@ -473,7 +473,7 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 670 436 C 690 500, 720 560, 720 640" t="pedidos" />
 
             {/* Cuadrito → Edificio de Katuete */}
-            <Linea d="M 720 696 L 720 700" t="pedidos" ida={false} />
+            <Linea d="M 720 696 L 720 710" t="pedidos" ida={false} />
             {/* Módulos ↔ Central */}
             <Linea d="M 412 540 C 470 540, 490 500, 545 470" t="pedidos" ida={false} />
             <Linea d="M 412 566 C 480 575, 500 525, 556 484" t="pagos" ida={false} />

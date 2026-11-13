@@ -69,7 +69,7 @@ check("existe CrmCard", /function CrmCard/.test(orq));
 check("el CRM está debajo del COTIZADOR en el panel de módulos",
   /crm: \{ x: 36, y: 590, w: 358, h: 76 \}/.test(orq) &&
     /cotiz: \{ x: 222, y: 498, w: 172, h: 76 \}/.test(orq));
-check("el lienzo crece para que entre el CRM", /const H = 900/.test(orq));
+check("el lienzo crece para que entre el CRM", /const H = 940/.test(orq));
 check("los módulos se conectan con el núcleo (flujo Módulos ↔ Central)",
   /Módulos ↔ Central/.test(orq) && /place\(R\.crm\)/.test(orq));
 check("el CRM se renderiza en el diagrama", /place\(R\.crm\)[\s\S]{0,80}CrmCard/.test(orq));
