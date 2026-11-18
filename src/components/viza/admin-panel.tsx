@@ -1451,7 +1451,9 @@ export function AdminPanel({ user, onGoSales, onGoGestion, isSupremo, onGoOrques
                     inventario del CtrCredito y lo importa en STOCK GENERAL
                     (lo mismo que IMPORTAR PLANILLA, pero solo). Todo admin
                     lo ve; los usuarios de consulta (solo lectura) no. */}
-                {!esLectura && <StockAutoControl />}
+                {!esLectura && (
+                  <StockAutoControl onActualizado={() => void fetchProducts()} />
+                )}
 
                 {/* Boton CREAR ETIQUETA (Task 84, pedido del dueño) — solo
                     supremo_admin: abre el modal para crear etiquetas nuevas

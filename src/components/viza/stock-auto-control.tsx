@@ -55,7 +55,16 @@ function textoHace(iso: string | null): string {
   return `hace ${Math.floor(h / 24)} d`;
 }
 
-export function StockAutoControl() {
+interface StockAutoControlProps {
+  /**
+   * Se llama cuando una corrida manual termina BIEN. La Base lo usa para
+   * volver a pedir los productos: sin esto el toast decia "Stock actualizado"
+   * pero la tabla seguia mostrando el stock viejo hasta recargar la pagina.
+   */
+  onActualizado?: () => void;
+}
+
+export function StockAutoControl({ onActualizado }: StockAutoControlProps = {}) {
   const [estado, setEstado] = useState<EstadoStockAuto | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [pidiendo, setPidiendo] = useState(false);
@@ -63,6 +72,9 @@ export function StockAutoControl() {
   // termino (sirve para avisar el resultado exacto).
   const [esperandoDesde, setEsperandoDesde] = useState<string | null>(null);
   const vivo = useRef(true);
+  // Ref para no re-disparar el efecto (y el toast) si el padre pasa una
+  // funcion nueva en cada render.
+  const onActualizadoRef = useRef(onActualizado);
 
   const cargar = useCallback(async () => {
     try {
@@ -92,6 +104,10 @@ export function StockAutoControl() {
     return () => window.clearInterval(id);
   }, [cargar, esperandoDesde]);
 
+  useEffect(() => {
+    onActualizadoRef.current = onActualizado;
+  }, [onActualizado]);
+
   // La corrida manual termino: avisar el resultado.
   useEffect(() => {
     if (!esperandoDesde || !estado) return;
@@ -109,6 +125,9 @@ export function StockAutoControl() {
         `Stock actualizado: ${estado.ultimosNuevos} nuevos · ${estado.ultimosActualizados} actualizados`,
         { duration: 10000 }
       );
+      // La tabla de la Base se refresca sola: el duenio ve el stock nuevo
+      // sin tener que recargar la pagina.
+      onActualizadoRef.current?.();
     }
   }, [estado, esperandoDesde]);
 
@@ -182,7 +201,7 @@ export function StockAutoControl() {
       if (!pcEnLinea) {
         setPidiendo(false);
         toast.warning(
-          "La PC esta apagada o sin internet (no da senal). El pedido queda guardado 30 minutos: se ejecuta solo cuando la PC vuelva a estar en linea.",
+          "La PC no esta dando senal: puede estar apagada, sin internet o el robot no pudo entrar al sistema. El pedido queda guardado 30 minutos y se ejecuta solo cuando la PC vuelva a estar en linea.",
           { id, duration: 14000 }
         );
         return;
@@ -258,7 +277,7 @@ export function StockAutoControl() {
         title={
           enLinea
             ? "La PC del robot esta encendida y conectada (deja una senal cada minuto)."
-            : "La PC del robot no da senal: esta apagada, sin internet o el robot no esta corriendo. La actualizacion automatica NO va a pasar hasta que vuelva."
+            : "La PC del robot no da senal: esta apagada, sin internet o el robot no pudo entrar al sistema (correo/clave). La actualizacion automatica NO va a pasar hasta que vuelva."
         }
       >
         {enLinea ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
