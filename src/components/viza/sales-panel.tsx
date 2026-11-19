@@ -365,12 +365,12 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   // Task 149 (pedido del dueño): al entrar NO hay plan seleccionado. Los
   // cuadros azules de completar (y todo el flujo de cada plan) aparecen SOLO
   // cuando el usuario marca un tipo de plan en PRESUPUESTAR. null = ninguno.
-  type ViewModePlan = "cotizador" | "safra" | "cheque" | "mayorista" | "especial";
+  type ViewModePlan = "cotizador" | "bodas" | "safra" | "cheque" | "mayorista" | "especial";
   const [viewMode, setViewMode] = useState<ViewModePlan | null>(null);
   // Task 142 (pedido del dueño): un solo botón dorado PRESUPUESTAR que abre
-  // el menú con los 5 tipos de plan (SAFRA / CUOTA / CHEQUE / PEDIDO ESPECIAL
-  // / MAYORISTA). Antes eran 5 botones sueltos en el header; ahora el panel
-  // queda más limpio sin cambiar NINGUNA pantalla ni ningún cálculo.
+  // el menú con las opciones de presupuesto (SAFRA / CUOTA / LISTA DE BODAS /
+  // CHEQUE / PEDIDO ESPECIAL / MAYORISTA). Antes eran botones sueltos en el
+  // header; ahora el panel queda más limpio sin cambiar ningún cálculo.
   const [presupuestarOpen, setPresupuestarOpen] = useState(false);
   const presupuestarRef = useRef<HTMLDivElement | null>(null);
 
@@ -1439,11 +1439,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               </button>
             )}
             {/* === PRESUPUESTAR (Task 142, pedido del dueño): UN solo botón
-                dorado que abre el menú con los 5 tipos de plan (SAFRA / CUOTA
-                / CHEQUE / PEDIDO ESPECIAL / MAYORISTA). Antes eran 5 botones
-                sueltos; ahora el panel queda más limpio. La lógica es la
-                MISMA de siempre: cada opción hace exactamente el mismo
-                setViewMode que hacía su botón anterior. === */}
+                dorado que abre el menú con las opciones de presupuesto
+                (SAFRA / CUOTA / LISTA DE BODAS / CHEQUE / PEDIDO ESPECIAL /
+                MAYORISTA). Antes eran botones sueltos; ahora el panel queda
+                más limpio. La lógica es la MISMA de siempre: cada opción hace
+                exactamente el mismo setViewMode que hacía su botón anterior. === */}
             <div ref={presupuestarRef} className="relative shrink-0 order-1">
               <button
                 onClick={() => setPresupuestarOpen((v) => !v)}
@@ -1455,7 +1455,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                   color: AZUL_OSCURO,
                   borderColor: DORADO,
                 }}
-                title="Elegir el tipo de plan para presupuestar"
+                title="Elegir qué tipo de presupuesto armar"
               >
                 <FileText className="h-3.5 w-3.5" />
                 <span>PRESUPUESTAR</span>
@@ -1467,7 +1467,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
               {presupuestarOpen && (
                 <div
                   role="menu"
-                  aria-label="Tipos de plan"
+                  aria-label="Tipos de presupuesto"
                   className="absolute left-0 top-full mt-2 w-64 rounded-2xl overflow-hidden shadow-2xl border z-50"
                   style={{
                     backgroundColor: AZUL_OSCURO,
@@ -1482,12 +1482,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                       borderBottom: "1px solid rgba(217,184,107,0.25)",
                     }}
                   >
-                    Tipo de plan
+                    Tipo de presupuesto
                   </div>
                   {(
                     [
                       { id: "safra", label: "PLAN SAFRA" },
                       { id: "cotizador", label: "PLAN CUOTA" },
+                      { id: "bodas", label: "LISTA DE BODAS" },
                       { id: "cheque", label: "PLAN CHEQUE" },
                       { id: "especial", label: "PLAN PEDIDO ESPECIAL" },
                       { id: "mayorista", label: "PRECIO MAYORISTA" },
@@ -1828,8 +1829,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             El Nombre del cliente es obligatorio para generar el presupuesto. Los demás campos son opcionales.
           </p>
         </Section>
+        </>
+        )}
 
-        {/* 2. PRODUCTOS AGREGADOS (con buscador integrado) */}
+        {/* 2. PRODUCTOS AGREGADOS (con buscador integrado) — COMPARTIDO:
+            PLAN CUOTA y LISTA DE BODAS usan el mismo carrito. */}
+        {(viewMode === "cotizador" || viewMode === "bodas") && (
+        <>
         <Section
           title={`PRODUCTOS AGREGADOS (${items.length})`}
           icon={<Package className="h-4 w-4" />}
@@ -1996,7 +2002,26 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             basePlanes={planesBaseCosto}
           />
         </Section>
+        </>
+        )}
 
+        {/* LISTA DE BODAS — opción propia del menú PRESUPUESTAR. Usa el mismo
+            carrito que PLAN CUOTA y se guarda en BD con el título de los novios. */}
+        {viewMode === "bodas" && (
+          <WeddingListSection
+            pdfData={weddingPdfData}
+            onItemsLoaded={() => {
+              // Al cargar una lista guardada los items cambian: invalidar cálculos
+              setCalcDone(false);
+              setCalculatedPlanes([]);
+              setCalculatedPlanesSinEntrega([]);
+              setSinEntregaInfo(null);
+            }}
+          />
+        )}
+
+        {viewMode === "cotizador" && (
+        <>
         {/* 2.4. (Task 143) El LISTADO DE PRODUCTOS CLASIFICADOS se movió a un
             modal que se abre desde el botón LISTA DE CLASIFICADOS del header.
             Así la vista CUOTA queda más limpia y el listado está disponible
@@ -2102,19 +2127,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             </div>
           </Section>
         )}
-        {/* 2.7. LISTA DE BODAS - misma cotización, se guarda en BD con el título de los novios */}
-        <WeddingListSection
-          pdfData={weddingPdfData}
-          onItemsLoaded={() => {
-            // Al cargar una lista guardada los items cambian: invalidar cálculos
-            setCalcDone(false);
-            setCalculatedPlanes([]);
-            setCalculatedPlanesSinEntrega([]);
-            setSinEntregaInfo(null);
-          }}
-        />
-
-                {/* 3. PRECIO DE CONTADO CON MARGEN */}
+        {/* 3. PRECIO DE CONTADO CON MARGEN */}
         <Section title="PRECIO DE CONTADO" icon={<Percent className="h-4 w-4" />}>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>

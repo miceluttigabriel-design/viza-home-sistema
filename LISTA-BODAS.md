@@ -1,8 +1,9 @@
 # Lista de bodas en el cotizador
 
-Funcionalidad nueva dentro de la vista **CUOTA**: el vendedor arma una lista de
-productos con el mismo carrito de la cotización, la guarda en la base de datos con
-el **título de los novios** y puede generar un PDF con el diseño VIZA.
+Funcionalidad nueva como **opción propia del menú PRESUPUESTAR** (igual que PLAN
+CUOTA / SAFRA / CHEQUE): el vendedor arma una lista de productos con el mismo
+carrito de la cotización, la guarda en la base de datos con el **título de los
+novios** y puede generar un PDF con el diseño VIZA.
 
 ## Qué se agregó
 
@@ -13,8 +14,8 @@ el **título de los novios** y puede generar un PDF con el diseño VIZA.
 | `src/store/cotizacion.ts` | Acción `setItems` para cargar una lista guardada en el carrito. |
 | `src/app/api/wedding-lists/route.ts` | API REST: `POST` (crear), `PUT` (editar), `GET` (listar), `DELETE` (borrar). |
 | `src/app/api/wedding-lists/pdf/route.ts` | PDF de la lista con planes de financiación. |
-| `src/components/viza/wedding-list-section.tsx` | Sección UI "LISTA DE BODAS" dentro de CUOTA. |
-| `src/components/viza/sales-panel.tsx` | Integración de la sección y de los planes compartidos del PDF. |
+| `src/components/viza/wedding-list-section.tsx` | Sección UI de la opción LISTA DE BODAS. |
+| `src/components/viza/sales-panel.tsx` | Integración como opción del menú PRESUPUESTAR y planes compartidos del PDF. |
 
 ## ⚠️ Paso obligatorio: crear las tablas
 
@@ -66,13 +67,14 @@ ALTER TABLE "WeddingListItem" ADD CONSTRAINT "WeddingListItem_weddingListId_fkey
 
 ## Cómo se usa
 
-1. Entrar a **CUOTA** y agregar productos con el buscador (como siempre).
-2. En la sección **LISTA DE BODAS** escribir el título, ej. `Juan Pérez & María López`
+1. Abrir **PRESUPUESTAR → LISTA DE BODAS** (es una opción más, no está dentro de PLAN CUOTA).
+2. Agregar productos con el buscador (como siempre).
+3. En la sección **LISTA DE BODAS** escribir el título, ej. `Juan Pérez & María López`
    (opcionalmente fecha del evento y observaciones).
-3. Apretar **GUARDAR LISTA**. Queda en la BD asociada al vendedor que la creó.
-4. **PDF DE BODAS** descarga el presupuesto con el título de los novios, los
+4. Apretar **GUARDAR LISTA**. Queda en la BD asociada al vendedor que la creó.
+5. **PDF DE BODAS** descarga el presupuesto con el título de los novios, los
    productos, el total contado y las opciones de financiación ya calculadas.
-5. **GUARDADAS** muestra las listas guardadas: **Cargar** vuelve a poner los
+6. **GUARDADAS** muestra las listas guardadas: **Cargar** vuelve a poner los
    productos en el carrito (con todos sus precios/cuotas) para seguir cotizando,
    y **Cargar** sobre una lista ya abierta permite editarla; el botón de papelera
    la borra.
