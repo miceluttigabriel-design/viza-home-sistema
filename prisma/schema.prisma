@@ -29,6 +29,7 @@ model User {
 
   quotes Quote[]
   passwordLogs PasswordLog[]
+  weddingLists WeddingList[]
 }
 
 // Bitácora de contraseñas - solo el SUPREMO_ADMIN puede verla
@@ -723,4 +724,45 @@ model ConfigStockAuto {
   heartbeat           DateTime? // ultima senal de la PC del robot
   updatedAt           DateTime  @updatedAt
   actualizadoPor      String    @default("SISTEMA")
+}
+
+// ============================================================================
+// LISTA DE BODAS
+// Listado de productos que el vendedor arma dentro del cotizador y guarda
+// con el título de los novios. Comparte el carrito con la cotización, así se
+// puede cotizar al mismo tiempo y después recuperar la lista guardada.
+// ============================================================================
+model WeddingList {
+  id         String   @id @default(cuid())
+  title      String   // Título de la lista (ej: "Juan Pérez & María López")
+  eventDate  String?  // Fecha del evento (YYYY-MM-DD), opcional
+  notes      String?
+  vendorName String   @default("Vendedor VIZA")
+  userId     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  items WeddingListItem[]
+  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model WeddingListItem {
+  id            String   @id @default(cuid())
+  weddingListId String
+  productId     String
+  sku           String
+  name          String
+  quantity      Int      @default(1)
+  unitPrice     Float    // precio de contado unitario al momento de guardar
+  subtotal      Float
+  // Snapshot completo del item de cotización (JSON.stringify) para poder
+  // recargar la lista y volver a calcular cuotas con los precios originales.
+  data          String
+  createdAt     DateTime @default(now())
+
+  list WeddingList @relation(fields: [weddingListId], references: [id], onDelete: Cascade)
+
+  @@index([weddingListId])
 }

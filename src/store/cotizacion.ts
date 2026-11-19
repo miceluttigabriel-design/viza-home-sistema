@@ -162,6 +162,9 @@ interface CotizacionState {
   addItem: (item: CotizacionItem) => void;
   removeItem: (productId: string) => void;
   setQuantity: (productId: string, qty: number) => void;
+  // Reemplaza todos los items (usado al cargar una lista de bodas guardada).
+  // Los planes se marcan como no calculados para obligar a recalcular.
+  setItems: (items: CotizacionItem[]) => void;
 
   addPlan: () => void;
   removePlan: (id: string) => void;
@@ -254,6 +257,12 @@ export const useCotizacionStore = create<CotizacionState>()(
               i.productId === productId ? { ...i, quantity: Math.max(1, qty) } : i
             )
             .filter((i) => i.quantity > 0),
+          planes: state.planes.map((p) => ({ ...p, calculado: false })),
+        })),
+
+      setItems: (items) =>
+        set((state) => ({
+          items,
           planes: state.planes.map((p) => ({ ...p, calculado: false })),
         })),
 

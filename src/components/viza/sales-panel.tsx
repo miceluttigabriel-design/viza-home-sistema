@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, Fragment } from "react";
+import { useEffect, useState, useCallback, useRef, Fragment, useMemo } from "react";
 import {
   Search,
   LogOut,
@@ -58,6 +58,10 @@ function emisionHoy(): { fecha: string; hora: string } {
     hora: `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,
   };
 }
+import {
+  WeddingListSection,
+  type WeddingPdfData,
+} from "@/components/viza/wedding-list-section";
 
 // === VIZA home brand palette ===
 const AZUL = "#155789";
@@ -1108,6 +1112,67 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
     }, 100);
   };
 
+  // Planes armados para los PDFs (compartidos entre el presupuesto normal y la
+  // LISTA DE BODAS). Se derivan del estado: no es estado nuevo.
+  const weddingPdfData: WeddingPdfData = useMemo(() => {
+    const planes: WeddingPdfData["planes"] = [];
+    if (incluirContadoEnPresupuesto) {
+      planes.push({
+        letra: "A",
+        cuotas: 1,
+        valorPorCuota: contadoAjustado,
+        total: contadoAjustado,
+      });
+    }
+    calculatedPlanes.forEach((p, idx) => {
+      planes.push({
+        letra: String.fromCharCode(65 + idx + (incluirContadoEnPresupuesto ? 1 : 0)),
+        cuotas: p.cuotas,
+        valorPorCuota: p.valorPorCuota,
+        total: p.total,
+      });
+    });
+
+    // REGLA INDEPENDIENTE: se incluyen en el PDF si mostrarSinEntrega está
+    // marcado y hay cálculos válidos (fecha + margen). No depende del radio.
+    const planesSinEntrega: WeddingPdfData["planesSinEntrega"] =
+      mostrarSinEntrega && sinEntregaInfo && calculatedPlanesSinEntrega.length > 0
+        ? calculatedPlanesSinEntrega.map((p, idx) => ({
+            letra: String.fromCharCode(65 + idx + (incluirContadoEnPresupuesto ? 1 : 0)),
+            cuotas: p.cuotas,
+            valorPorCuota: p.valorPorCuota,
+            total: p.total,
+            fechas: Array.from({ length: p.cuotas }, (_, i) =>
+              generarFechaCuota(fechaInicioPago, i + 1)
+            ),
+          }))
+        : null;
+
+    return {
+      planes,
+      planesSinEntrega,
+      mostrarConEntrega,
+      mostrarSinEntrega,
+      contadoOriginal: contadoOriginalTotal,
+      contadoAjustado,
+      contadoMarginPct,
+    };
+  }, [
+    incluirContadoEnPresupuesto,
+    calculatedPlanes,
+    calculatedPlanesSinEntrega,
+    fechaInicioPago,
+    mostrarConEntrega,
+    mostrarSinEntrega,
+    sinEntregaInfo,
+    contadoOriginalTotal,
+    contadoAjustado,
+    contadoMarginPct,
+  ]);
+
+  const planesForPdf = weddingPdfData.planes;
+  const planesSinEntregaForPdf = weddingPdfData.planesSinEntrega;
+
   const handleGenerarPDF = async () => {
     if (items.length === 0) {
       toast.error("No hay productos para generar el PDF");
@@ -1128,60 +1193,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
     // en lugar de las secciones de planes. (Antes se bloqueaba con toast.error.)
     setGeneratingPdf(true);
     try {
-      // Construir lista de planes para el PDF: si incluirContadoEnPresupuesto,
-      // se inserta "Plan A: Contado" como primera opción.
-      const planesForPdf: {
-        letra: string;
-        cuotas: number;
-        valorPorCuota: number;
-        total: number;
-      }[] = [];
-      if (incluirContadoEnPresupuesto) {
-        planesForPdf.push({
-          letra: "A",
-          cuotas: 1,
-          valorPorCuota: contadoAjustado,
-          total: contadoAjustado,
-        });
-      }
-      calculatedPlanes.forEach((p, idx) => {
-        planesForPdf.push({
-          letra: String.fromCharCode(65 + idx + (incluirContadoEnPresupuesto ? 1 : 0)),
-          cuotas: p.cuotas,
-          valorPorCuota: p.valorPorCuota,
-          total: p.total,
-        });
-      });
-
-      // Construir lista de planes SIN ENTREGA (si aplica)
-      // REGLA INDEPENDIENTE: Se incluye en el PDF si:
-      //   - mostrarSinEntrega === true (checkbox marcado), Y
-      //   - hay cálculos de sinEntregaInfo disponibles (fecha válida + margen)
-      // Ya NO depende del radio button tipoEntrega.
-      const planesSinEntregaForPdf:
-        | {
-            letra: string;
-            cuotas: number;
-            valorPorCuota: number;
-            total: number;
-            fechas: string[];
-          }[]
-        | null =
-        mostrarSinEntrega &&
-        sinEntregaInfo &&
-        calculatedPlanesSinEntrega.length > 0
-          ? calculatedPlanesSinEntrega.map((p, idx) => ({
-              letra: String.fromCharCode(
-                65 + idx + (incluirContadoEnPresupuesto ? 1 : 0)
-              ),
-              cuotas: p.cuotas,
-              valorPorCuota: p.valorPorCuota,
-              total: p.total,
-              fechas: Array.from({ length: p.cuotas }, (_, i) =>
-                generarFechaCuota(fechaInicioPago, i + 1)
-              ),
-            }))
-          : null;
+      // Los planes para el PDF ya se armaron arriba y se comparten con la
+      // sección LISTA DE BODAS (misma cotización, mismo PDF).
 
       // Task 117 (pedido del dueño): comparativo por producto PARA EL PDF.
       // Mismos valores que la vista comparativa de la pantalla (Task 116):
@@ -2089,6 +2102,17 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
             </div>
           </Section>
         )}
+        {/* 2.7. LISTA DE BODAS - misma cotización, se guarda en BD con el título de los novios */}
+        <WeddingListSection
+          pdfData={weddingPdfData}
+          onItemsLoaded={() => {
+            // Al cargar una lista guardada los items cambian: invalidar cálculos
+            setCalcDone(false);
+            setCalculatedPlanes([]);
+            setCalculatedPlanesSinEntrega([]);
+            setSinEntregaInfo(null);
+          }}
+        />
 
                 {/* 3. PRECIO DE CONTADO CON MARGEN */}
         <Section title="PRECIO DE CONTADO" icon={<Percent className="h-4 w-4" />}>
