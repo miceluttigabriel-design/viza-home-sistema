@@ -17,8 +17,9 @@ VIZA.
 | `src/store/cotizacion.ts` | Acción `setItems` para cargar una lista guardada en el carrito. |
 | `src/app/api/wedding-lists/route.ts` | API REST: `POST` (crear), `PUT` (editar), `GET` (listar), `DELETE` (borrar). |
 | `src/app/api/wedding-lists/pdf/route.ts` | PDF del presupuesto de bodas: regalos, entregantes, totales y opciones de financiación. |
-| `src/app/api/wedding-lists/listado/route.ts` | PDF del **LISTADO**: regalos y entregantes con diseño elegante, sin opciones de financiación. |
-| `src/lib/pdf/weddingListado.ts` | Diseño del listado (marfil, dorado, tipografía serif y tarjetas de regalos). |
+| `src/app/api/wedding-lists/listado/route.ts` | PDF del **LISTADO**: regalos y entregantes con diseño VIZA HOME, sin opciones de financiación. |
+| `src/lib/pdf/weddingListado.ts` | Diseño del listado: azul VIZA + dorado, membrete, flores, tarjetas de regalos y pie institucional. |
+| `src/lib/pdf/weddingFloral.ts` | Ramos de flores (PNG en base64) para las esquinas del listado. |
 | `src/components/viza/wedding-list-section.tsx` | Tabla editable de regalos y entregantes + guardar/cargar/PDF/listado. |
 | `src/components/viza/sales-panel.tsx` | Integración como opción del menú PRESUPUESTAR y botón AGREGAR REGALO. |
 | `prisma/sql/wedding-lists.sql` | SQL de creación de tablas (incluye las columnas nuevas). |
@@ -77,11 +78,14 @@ Las columnas nuevas de `WeddingListItem` son:
        **ENTREGANTE** con nombre, teléfono y CI.
      - Resumen de regalos/asignados, total según modalidad y total contado.
      - Opciones de financiación ya calculadas.
-   - **GENERAR LISTADO** descarga un documento aparte con **otra cara**: fondo
-     marfil, detalles dorados, nombres de los novios en tipografía serif y los
-     regalos en tarjetas. Muestra regalo, cantidad, entregante, modalidad y
-     valor, más los totales contado / según modalidad. **No incluye las opciones
-     de financiación.**
+   - **GENERAR LISTADO** descarga un documento aparte con **otra cara**: azul
+     VIZA y dorado como el presupuesto, membrete VIZA home, ramos de flores en
+     las esquinas, nombres de los novios en tipografía serif y los regalos en
+     tarjetas. Muestra regalo, cantidad, entregante, modalidad y valor, más los
+     totales contado / según modalidad en caja azul con borde dorado y el pie
+     institucional con sucursales, redes y web. **No incluye las opciones de
+     financiación** y tampoco muestra la etiqueta del plan de cuotas en cada
+     regalo (esa información es privada).
 7. **GUARDADAS** muestra las listas guardadas: **Cargar** vuelve a poner los
    productos y los datos de cada regalo para seguir editando; la papelera
    borra la lista.

@@ -3,7 +3,8 @@ import {
   VIZA_LOGO_WORDMARK_PNG,
   VIZA_LOGO_WORDMARK_RATIO,
 } from "./vizaLogo";
-import { formatPYG } from "./vizaPdfDesign";
+import { formatPYG, SUCURSALES_LINEA } from "./vizaPdfDesign";
+import { VIZA_FLORAL_BR_PNG, VIZA_FLORAL_TL_PNG } from "./weddingFloral";
 
 // ============================================================
 // LISTADO DE REGALOS — diseño "invitación" (marfil + dorado).
@@ -36,14 +37,17 @@ export interface WeddingListadoPayload {
 
 type RGB = [number, number, number];
 
-const CREAM: RGB = [249, 244, 234];
-const PAPER: RGB = [255, 253, 248];
-const GOLD: RGB = [201, 167, 96];
-const GOLD_DARK: RGB = [160, 124, 54];
-const GOLD_SOFT: RGB = [232, 217, 184];
-const NAVY: RGB = [18, 59, 92];
-const INK: RGB = [44, 48, 56];
-const MUTED: RGB = [134, 124, 108];
+// Colores del presupuesto VIZA HOME (azul + dorado).
+const CREAM: RGB = [252, 251, 247];
+const PAPER: RGB = [255, 255, 255];
+const GOLD: RGB = [217, 184, 107];
+const GOLD_DARK: RGB = [138, 106, 31];
+const GOLD_SOFT: RGB = [236, 224, 190];
+const CARD_LINE: RGB = [214, 224, 235];
+const NAVY: RGB = [21, 87, 137];
+const INK: RGB = [28, 37, 51];
+const MUTED: RGB = [107, 119, 133];
+const BLUE_SOFT: RGB = [238, 243, 248];
 
 const MESES = [
   "ENERO",
@@ -100,22 +104,26 @@ function giverLine(it: WeddingListadoItem): string {
 export function generateWeddingListadoPdf(
   payload: WeddingListadoPayload
 ): ArrayBuffer {
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const M = 46;
   const contentW = pageW - M * 2;
   const now = new Date();
 
-  const paintPage = () => {
+  const paintPage = (first = true) => {
     doc.setFillColor(...CREAM);
     doc.rect(0, 0, pageW, pageH, "F");
-    doc.setDrawColor(...GOLD);
-    doc.setLineWidth(1.1);
+    doc.setDrawColor(...NAVY);
+    doc.setLineWidth(1);
     doc.rect(24, 24, pageW - 48, pageH - 48);
-    doc.setDrawColor(...GOLD_SOFT);
-    doc.setLineWidth(0.4);
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.5);
     doc.rect(30, 30, pageW - 60, pageH - 60);
+    // Ramos de flores en las esquinas (grandes en la 1ª página, chicos en el resto)
+    const fs = first ? 215 : 130;
+    doc.addImage(VIZA_FLORAL_TL_PNG, "PNG", 0, 0, fs, fs, "viza-floral-tl");
+    doc.addImage(VIZA_FLORAL_BR_PNG, "PNG", pageW - fs, pageH - fs, fs, fs, "viza-floral-br");
   };
 
   const drawOrnament = (cx: number, y: number, width: number) => {
@@ -131,20 +139,27 @@ export function generateWeddingListadoPdf(
 
   paintPage();
 
-  let y = 52;
+  let y = 44;
 
-  // ===== MEMBRETE =====
-  const logoW = 74;
-  const logoH = logoW / VIZA_LOGO_WORDMARK_RATIO;
-  doc.addImage(
-    VIZA_LOGO_WORDMARK_PNG,
-    "PNG",
-    (pageW - logoW) / 2,
-    y,
-    logoW,
-    logoH
-  );
-  y += logoH + 20;
+  // ===== MEMBRETE (igual al del presupuesto: logo + "home" + eslogan) =====
+  const logoH = 30;
+  const logoW = logoH * VIZA_LOGO_WORDMARK_RATIO;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(19);
+  const homeW = doc.getTextWidth("home");
+  const headX = (pageW - (logoW + 5 + homeW)) / 2;
+  doc.addImage(VIZA_LOGO_WORDMARK_PNG, "PNG", headX, y, logoW, logoH);
+  doc.setTextColor(...GOLD);
+  doc.text("home", headX + logoW + 5, y + logoH - 1);
+  doc.setFontSize(7.4);
+  const s1 = "Todo para tu hogar";
+  const s2 = ", en un solo lugar.";
+  const sw = doc.getTextWidth(s1) + doc.getTextWidth(s2);
+  doc.setTextColor(...GOLD);
+  doc.text(s1, (pageW - sw) / 2, y + logoH + 12);
+  doc.setTextColor(...NAVY);
+  doc.text(s2, (pageW - sw) / 2 + doc.getTextWidth(s1), y + logoH + 12);
+  y += logoH + 26;
 
   drawOrnament(pageW / 2, y, 150);
   y += 18;
@@ -214,9 +229,9 @@ export function generateWeddingListadoPdf(
     }
   }
 
-  y += 6;
+  y += 4;
   drawOrnament(pageW / 2, y, 110);
-  y += 22;
+  y += 18;
 
   // ===== CONTADORES =====
   const items = payload.items;
@@ -254,16 +269,16 @@ export function generateWeddingListadoPdf(
       doc.line(cx - 58, y - 13, cx - 58, y + 8);
     }
   });
-  y += 32;
+  y += 26;
 
   // ===== RÓTULO DE SECCIÓN =====
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
-  doc.setTextColor(...GOLD_DARK);
+  doc.setTextColor(...NAVY);
   doc.text("REGALOS Y ENTREGANTES", M, y, { charSpace: 1.3 });
   const labelW = doc.getTextWidth("REGALOS Y ENTREGANTES") + 18 * 1.3 + 10;
-  doc.setDrawColor(...GOLD_SOFT);
-  doc.setLineWidth(0.6);
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(1);
   doc.line(M + labelW + 8, y - 2.3, M + contentW, y - 2.3);
   y += 16;
 
@@ -271,13 +286,13 @@ export function generateWeddingListadoPdf(
   const gap = 12;
   const cardW = (contentW - gap) / 2;
   const cardH = 88;
-  const rowGap = 10;
-  const bottomLimit = pageH - 78;
+  const rowGap = 8;
+  const bottomLimit = pageH - 108;
 
   const drawCard = (it: WeddingListadoItem, idx: number, x: number, cy: number) => {
     doc.setFillColor(...PAPER);
-    doc.setDrawColor(...GOLD_SOFT);
-    doc.setLineWidth(0.6);
+    doc.setDrawColor(...CARD_LINE);
+    doc.setLineWidth(0.7);
     doc.roundedRect(x, cy, cardW, cardH, 7, 7, "FD");
     doc.setFillColor(...GOLD);
     doc.rect(x, cy + 6, 3, cardH - 12, "F");
@@ -351,18 +366,24 @@ export function generateWeddingListadoPdf(
       doc.text("Pendiente de asignar", x + 12, cy + 70);
     }
 
-    // Modalidad + valor (derecha)
+    // Modalidad + valor (derecha).
+    // El plan de cuotas es información privada: el listado NO lo muestra.
+    const rawMode = quoteLabelOf(it);
+    const hidePlan =
+      String(it.quoteType ?? "").toLowerCase() === "cuota" ||
+      /CUOTA|PLAN/i.test(rawMode);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(5.8);
-    doc.setTextColor(...GOLD_DARK);
-    const mode = quoteLabelOf(it);
+    doc.setTextColor(...NAVY);
     const modeLines = doc
-      .splitTextToSize(mode, 82)
+      .splitTextToSize(rawMode, 82)
       .slice(0, 2) as string[];
     let my = cy + 59;
-    for (const line of modeLines) {
-      doc.text(line, x + cardW - 11, my, { align: "right", charSpace: 0.4 });
-      my += 7.2;
+    if (!hidePlan) {
+      for (const line of modeLines) {
+        doc.text(line, x + cardW - 11, my, { align: "right", charSpace: 0.4 });
+        my += 7.2;
+      }
     }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.6);
@@ -376,7 +397,7 @@ export function generateWeddingListadoPdf(
     const col = idx % 2;
     if (col === 0 && y + cardH > bottomLimit) {
       doc.addPage();
-      paintPage();
+      paintPage(false);
       drawContinuationHeader();
       y = 102;
     }
@@ -390,83 +411,106 @@ export function generateWeddingListadoPdf(
   // ===== TOTALES =====
   if (y + 86 > bottomLimit) {
     doc.addPage();
-    paintPage();
+    paintPage(false);
     drawContinuationHeader();
     y = 102;
   }
-  y += 2;
-  drawOrnament(pageW / 2, y, 110);
-  y += 16;
+  y += 4;
 
-  const boxH = 64;
+  const boxH = 66;
   const boxX = M + 30;
   const boxW = contentW - 60;
-  doc.setFillColor(...PAPER);
-  doc.setDrawColor(...GOLD_SOFT);
-  doc.setLineWidth(0.7);
-  doc.roundedRect(boxX, y, boxW, boxH, 8, 8, "FD");
   doc.setFillColor(...GOLD);
-  doc.rect(boxX + 10, y, boxW - 20, 2.2, "F");
+  doc.roundedRect(boxX, y + 3, boxW, boxH, 9, 9, "F");
+  doc.setFillColor(...NAVY);
+  doc.roundedRect(boxX, y, boxW, boxH, 9, 9, "F");
 
   const half = boxW / 2;
-  doc.setDrawColor(...GOLD_SOFT);
+  doc.setDrawColor(70, 125, 170);
   doc.setLineWidth(0.6);
   doc.line(boxX + half, y + 14, boxX + half, y + boxH - 12);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6);
-  doc.setTextColor(...GOLD_DARK);
+  doc.setFontSize(6.4);
+  doc.setTextColor(...GOLD);
   doc.text("TOTAL CONTADO", boxX + 22, y + 22, { charSpace: 1.3 });
   doc.text("TOTAL SEGÚN MODALIDAD", boxX + half + 22, y + 22, {
     charSpace: 1.3,
   });
 
-  doc.setFont("times", "bold");
-  doc.setFontSize(17);
-  doc.setTextColor(...NAVY);
-  doc.text(formatPYG(totalContado), boxX + 22, y + 46);
-  doc.text(formatPYG(totalCotizado), boxX + half + 22, y + 46);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(255, 255, 255);
+  doc.text(formatPYG(totalContado), boxX + 22, y + 44);
+  doc.text(formatPYG(totalCotizado), boxX + half + 22, y + 44);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.2);
-  doc.setTextColor(...MUTED);
+  doc.setTextColor(205, 220, 235);
   doc.text(
     "Precio de contado de los regalos, sin opciones de financiación.",
     boxX + 22,
-    y + 58
+    y + 57
   );
   doc.text(
     "Suma de cada regalo en la modalidad elegida.",
     boxX + half + 22,
-    y + 58
+    y + 57
   );
   y += boxH + 18;
 
-  // ===== PIE DE CADA PÁGINA =====
+  // ===== PIE DE CADA PÁGINA (datos de VIZA HOME, igual al presupuesto) =====
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-    doc.setDrawColor(...GOLD_SOFT);
-    doc.setLineWidth(0.6);
-    doc.line(M, pageH - 56, pageW - M, pageH - 56);
+    const bx = M;
+    const bw = contentW;
+    const bh = 46;
+    const by = pageH - 40 - bh;
+
+    // Sucursales encima de la barra
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.6);
+    doc.setTextColor(...NAVY);
+    doc.text(SUCURSALES_LINEA, pageW / 2, by - 7, { align: "center" });
+
+    const split = bw * 0.5;
+    doc.setFillColor(...GOLD);
+    doc.roundedRect(bx, by, bw, bh, 10, 10, "F");
+    doc.setFillColor(...NAVY);
+    doc.roundedRect(bx, by, split + 12, bh, 10, 10, "F");
+    doc.setFillColor(...GOLD);
+    doc.rect(bx + split, by, 12, bh, "F");
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.9);
-    doc.setTextColor(...GOLD_DARK);
-    doc.text("VIZA HOME  ·  LISTA DE BODAS", M, pageH - 43, {
-      charSpace: 1.2,
-    });
+    doc.setFontSize(8.6);
+    doc.setTextColor(255, 255, 255);
+    doc.text("VENTAS ONLINE", bx + 16, by + 15);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.4);
+    doc.text("WhatsApp: (0987) 700 707", bx + 16, by + 27);
+    doc.text("ventas.online@viza.com.py", bx + 16, by + 38);
+
+    doc.setTextColor(...NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.2);
+    doc.text("SEGUINOS", bx + split + 18, by + 15);
+    doc.text("VISITANOS", bx + split + 128, by + 15);
+    doc.setFontSize(7.4);
+    doc.text("Facebook · Instagram", bx + split + 18, by + 27);
+    doc.text("@vizahome", bx + split + 18, by + 38);
+    doc.text("www.viza.com.py", bx + split + 128, by + 27);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6);
     doc.setTextColor(...MUTED);
     const fechaGen = now.toLocaleDateString("es-PY");
-    doc.text(`Generado el ${fechaGen}`, pageW / 2, pageH - 43, {
-      align: "center",
-    });
-    doc.text(`Página ${i} de ${totalPages}`, pageW - M, pageH - 43, {
-      align: "right",
-    });
+    doc.text(
+      `Viza E.A.S (Viza Home)  ·  Lista de Bodas  ·  Generado el ${fechaGen}  ·  Página ${i} de ${totalPages}`,
+      pageW / 2,
+      pageH - 34,
+      { align: "center" }
+    );
   }
 
   return doc.output("arraybuffer");
