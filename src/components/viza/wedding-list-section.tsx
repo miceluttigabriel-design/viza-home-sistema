@@ -11,6 +11,7 @@ import {
   Loader2,
   Plus,
   UserRound,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCotizacionStore, type CotizacionItem } from "@/store/cotizacion";
@@ -113,6 +114,7 @@ export function WeddingListSection({
   const [loadingLists, setLoadingLists] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [generatingListado, setGeneratingListado] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Cada fila de la tabla: el producto del carrito + los datos del regalo.
@@ -193,6 +195,25 @@ export function WeddingListSection({
     }
   };
 
+  // Descarga un PDF ya generado por la API.
+  const descargarPdf = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const nombreNovios = () =>
+    (title.trim() || "Novios")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "_")
+      .replace(/[^\w-]/g, "");
+
   const handleGenerarPDF = async () => {
     if (items.length === 0) {
       toast.error("No hay productos en la lista para generar el PDF");
@@ -236,25 +257,59 @@ export function WeddingListSection({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? "Error al generar el PDF");
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const nombre = (title.trim() || "Novios")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, "_")
-        .replace(/[^\w-]/g, "");
-      a.download = `VIZA-ListaBodas-${nombre}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      descargarPdf(await res.blob(), `VIZA-ListaBodas-${nombreNovios()}.pdf`);
       toast.success("PDF de la lista de bodas generado");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF");
     } finally {
       setGeneratingPdf(false);
+    }
+  };
+
+  // LISTADO: misma tabla de regalos y entregantes, con un diseño distinto.
+  // A propósito NO incluye las opciones de financiación del presupuesto.
+  const handleGenerarListado = async () => {
+    if (items.length === 0) {
+      toast.error("No hay productos en la lista para generar el listado");
+      return;
+    }
+    setGeneratingListado(true);
+    try {
+      const payload = {
+        title: title.trim() || "Lista de Bodas",
+        eventDate,
+        notes,
+        items: rows.map(({ item, meta, values }) => ({
+          sku: item.sku,
+          name: item.name,
+          quantity: item.quantity,
+          priceContado: item.priceContado,
+          subtotalContado: item.priceContado * item.quantity,
+          giverName: meta.giverName.trim(),
+          giverPhone: meta.giverPhone.trim(),
+          giverCi: meta.giverCi.trim(),
+          quoteType: meta.quoteType,
+          quoteCuotas: values.cuotas,
+          quoteLabel: values.modeLabel,
+          quotedUnit: values.perCuota,
+          quotedTotal: values.total,
+        })),
+      };
+      const res = await fetch("/api/wedding-lists/listado", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Error al generar el listado");
+      }
+      descargarPdf(await res.blob(), `VIZA-ListadoBodas-${nombreNovios()}.pdf`);
+      toast.success("Listado de regalos generado");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo generar el listado");
+    } finally {
+      setGeneratingListado(false);
     }
   };
 
@@ -630,7 +685,7 @@ export function WeddingListSection({
         )}
       </div>
 
-      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           onClick={handleSave}
           disabled={saving || items.length === 0 || !title.trim()}
@@ -644,19 +699,6 @@ export function WeddingListSection({
           GUARDAR LISTA
         </button>
         <button
-          onClick={handleGenerarPDF}
-          disabled={generatingPdf || items.length === 0}
-          className="h-11 rounded-xl text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 transition-all hover:brightness-110"
-          style={{ backgroundColor: AZUL_OSCURO }}
-        >
-          {generatingPdf ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <FileText className="h-4 w-4" />
-          )}
-          PDF DE BODAS
-        </button>
-        <button
           onClick={() => setShowSaved((v) => !v)}
           className="h-11 rounded-xl border-2 border-stone-200 bg-white text-stone-600 hover:border-stone-400 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors"
         >
@@ -664,6 +706,45 @@ export function WeddingListSection({
           GUARDADAS ({savedLists.length})
         </button>
       </div>
+
+      {/* Documentos: presupuesto completo (con financiación) y listado elegante. */}
+      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button
+          onClick={handleGenerarPDF}
+          disabled={generatingPdf || items.length === 0}
+          className="h-12 rounded-xl text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 transition-all hover:brightness-110"
+          style={{ backgroundColor: AZUL_OSCURO }}
+        >
+          {generatingPdf ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <FileText className="h-4 w-4" />
+          )}
+          GENERAR PRESUPUESTO
+        </button>
+        <button
+          onClick={handleGenerarListado}
+          disabled={generatingListado || items.length === 0}
+          className="h-12 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            backgroundImage: `linear-gradient(120deg, #f6e8c6 0%, ${DORADO} 58%, ${DORADO_OSCURO} 100%)`,
+            color: AZUL_OSCURO,
+            border: "1px solid rgba(255,255,255,0.65)",
+            boxShadow: "0 8px 20px -9px rgba(184, 152, 83, 0.65)",
+          }}
+        >
+          {generatingListado ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          GENERAR LISTADO
+        </button>
+      </div>
+      <p className="mt-1.5 text-[10px] text-stone-400 text-center">
+        El listado muestra los regalos y entregantes con un diseño especial, sin las
+        opciones de financiación.
+      </p>
 
       {showSaved && (
         <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-3">
