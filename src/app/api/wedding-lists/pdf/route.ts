@@ -175,7 +175,7 @@ export async function POST(req: NextRequest) {
 
     const colN = 20;
     const colSku = 52;
-    const colCant = 28;
+    const colCant = 34;
     const colMode = 72;
     const colValor = 88;
     const colName =
