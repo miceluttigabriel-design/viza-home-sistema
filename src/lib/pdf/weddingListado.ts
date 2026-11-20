@@ -3,13 +3,13 @@ import {
   VIZA_LOGO_WORDMARK_PNG,
   VIZA_LOGO_WORDMARK_RATIO,
 } from "./vizaLogo";
-import { formatPYG, SUCURSALES_LINEA } from "./vizaPdfDesign";
+import { SUCURSALES_LINEA } from "./vizaPdfDesign";
 import { VIZA_FLORAL_BR_PNG, VIZA_FLORAL_TL_PNG } from "./weddingFloral";
 
 // ============================================================
-// LISTADO DE REGALOS — diseño "invitación" (marfil + dorado).
-// Es a propósito OTRA CARA respecto del presupuesto de bodas:
-// no muestra opciones de financiación ni tablas de planes.
+// LISTADO DE REGALOS — diseño "invitación" VIZA HOME.
+// Muestra SOLO los regalos y sus entregantes: sin modalidades,
+// sin planes de cuotas, sin opciones de financiación y sin valores.
 // ============================================================
 
 export interface WeddingListadoItem {
@@ -47,7 +47,6 @@ const CARD_LINE: RGB = [214, 224, 235];
 const NAVY: RGB = [21, 87, 137];
 const INK: RGB = [28, 37, 51];
 const MUTED: RGB = [107, 119, 133];
-const BLUE_SOFT: RGB = [238, 243, 248];
 
 const MESES = [
   "ENERO",
@@ -70,25 +69,6 @@ function fechaElegante(iso: string | null | undefined): string {
   const mes = MESES[Number(m) - 1];
   if (!mes) return `${d}/${m}/${a}`;
   return `${d} DE ${mes} DE ${a}`;
-}
-
-function quoteTotalOf(it: WeddingListadoItem): number {
-  const q = Number(it.quotedTotal);
-  if (Number.isFinite(q) && q > 0) return q;
-  const sub = Number(it.subtotalContado);
-  if (Number.isFinite(sub) && sub > 0) return sub;
-  return (Number(it.priceContado) || 0) * (Number(it.quantity) || 1);
-}
-
-function quoteCuotasOf(it: WeddingListadoItem): number {
-  return Math.max(1, Number(it.quoteCuotas) || 1);
-}
-
-function quoteLabelOf(it: WeddingListadoItem): string {
-  const saved = String(it.quoteLabel ?? "").trim();
-  if (saved) return saved.toUpperCase();
-  const n = quoteCuotasOf(it);
-  return n > 1 ? `PLAN ${n} CUOTAS` : "SOLO CONTADO";
 }
 
 function giverLine(it: WeddingListadoItem): string {
@@ -235,13 +215,6 @@ export function generateWeddingListadoPdf(
 
   // ===== CONTADORES =====
   const items = payload.items;
-  const totalContado = items.reduce(
-    (sum, it) =>
-      sum +
-      (Number(it.priceContado) || 0) * (Number(it.quantity) || 1),
-    0
-  );
-  const totalCotizado = items.reduce((sum, it) => sum + quoteTotalOf(it), 0);
   const asignados = items.filter((it) =>
     String(it.giverName ?? "").trim()
   ).length;
@@ -347,7 +320,7 @@ export function generateWeddingListadoPdf(
       doc.setFontSize(7.7);
       doc.setTextColor(...INK);
       const giverLines = doc
-        .splitTextToSize(giver, cardW - 24 - 66)
+        .splitTextToSize(giver, cardW - 24)
         .slice(0, 1) as string[];
       doc.text(giverLines[0] ?? giver, x + 12, cy + 70);
       if (contact) {
@@ -355,7 +328,7 @@ export function generateWeddingListadoPdf(
         doc.setFontSize(6.3);
         doc.setTextColor(...MUTED);
         const contactLines = doc
-          .splitTextToSize(contact, cardW - 24 - 66)
+          .splitTextToSize(contact, cardW - 24)
           .slice(0, 1) as string[];
         doc.text(contactLines[0] ?? contact, x + 12, cy + 79);
       }
@@ -365,32 +338,6 @@ export function generateWeddingListadoPdf(
       doc.setTextColor(...MUTED);
       doc.text("Pendiente de asignar", x + 12, cy + 70);
     }
-
-    // Modalidad + valor (derecha).
-    // El plan de cuotas es información privada: el listado NO lo muestra.
-    const rawMode = quoteLabelOf(it);
-    const hidePlan =
-      String(it.quoteType ?? "").toLowerCase() === "cuota" ||
-      /CUOTA|PLAN/i.test(rawMode);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.8);
-    doc.setTextColor(...NAVY);
-    const modeLines = doc
-      .splitTextToSize(rawMode, 82)
-      .slice(0, 2) as string[];
-    let my = cy + 59;
-    if (!hidePlan) {
-      for (const line of modeLines) {
-        doc.text(line, x + cardW - 11, my, { align: "right", charSpace: 0.4 });
-        my += 7.2;
-      }
-    }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.6);
-    doc.setTextColor(...NAVY);
-    doc.text(formatPYG(quoteTotalOf(it)), x + cardW - 11, cy + 79, {
-      align: "right",
-    });
   };
 
   items.forEach((it, idx) => {
@@ -408,56 +355,11 @@ export function generateWeddingListadoPdf(
     }
   });
 
-  // ===== TOTALES =====
-  if (y + 86 > bottomLimit) {
-    doc.addPage();
-    paintPage(false);
-    drawContinuationHeader();
-    y = 102;
+  // ===== CIERRE (sin totales ni valores) =====
+  y += 18;
+  if (y <= pageH - 120) {
+    drawOrnament(pageW / 2, y, 130);
   }
-  y += 4;
-
-  const boxH = 66;
-  const boxX = M + 30;
-  const boxW = contentW - 60;
-  doc.setFillColor(...GOLD);
-  doc.roundedRect(boxX, y + 3, boxW, boxH, 9, 9, "F");
-  doc.setFillColor(...NAVY);
-  doc.roundedRect(boxX, y, boxW, boxH, 9, 9, "F");
-
-  const half = boxW / 2;
-  doc.setDrawColor(70, 125, 170);
-  doc.setLineWidth(0.6);
-  doc.line(boxX + half, y + 14, boxX + half, y + boxH - 12);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.4);
-  doc.setTextColor(...GOLD);
-  doc.text("TOTAL CONTADO", boxX + 22, y + 22, { charSpace: 1.3 });
-  doc.text("TOTAL SEGÚN MODALIDAD", boxX + half + 22, y + 22, {
-    charSpace: 1.3,
-  });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(255, 255, 255);
-  doc.text(formatPYG(totalContado), boxX + 22, y + 44);
-  doc.text(formatPYG(totalCotizado), boxX + half + 22, y + 44);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.2);
-  doc.setTextColor(205, 220, 235);
-  doc.text(
-    "Precio de contado de los regalos, sin opciones de financiación.",
-    boxX + 22,
-    y + 57
-  );
-  doc.text(
-    "Suma de cada regalo en la modalidad elegida.",
-    boxX + half + 22,
-    y + 57
-  );
-  y += boxH + 18;
 
   // ===== PIE DE CADA PÁGINA (datos de VIZA HOME, igual al presupuesto) =====
   const totalPages = doc.getNumberOfPages();

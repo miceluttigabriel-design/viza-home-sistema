@@ -17,7 +17,7 @@ function slug(texto: string): string {
 }
 
 // POST /api/wedding-lists/listado
-// Listado elegante de regalos y entregantes, SIN opciones de financiación.
+// Listado de regalos y entregantes, sin modalidades ni valores.
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

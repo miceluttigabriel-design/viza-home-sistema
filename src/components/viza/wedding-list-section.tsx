@@ -12,6 +12,7 @@ import {
   Plus,
   UserRound,
   Sparkles,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCotizacionStore, type CotizacionItem } from "@/store/cotizacion";
@@ -113,6 +114,7 @@ export function WeddingListSection({
   const [showSaved, setShowSaved] = useState(false);
   const [loadingLists, setLoadingLists] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingCopy, setSavingCopy] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [generatingListado, setGeneratingListado] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -148,7 +150,7 @@ export function WeddingListSection({
     void fetchLists();
   }, [fetchLists]);
 
-  const handleSave = async () => {
+  const guardarLista = async (asNew: boolean) => {
     if (!title.trim()) {
       toast.error("Escribí el título de los novios (ej: Juan & María)");
       return;
@@ -157,7 +159,8 @@ export function WeddingListSection({
       toast.error("Agregá productos al carrito para guardar la lista");
       return;
     }
-    setSaving(true);
+    const setBusy = asNew ? setSavingCopy : setSaving;
+    setBusy(true);
     try {
       const payload = {
         title: title.trim(),
@@ -174,26 +177,36 @@ export function WeddingListSection({
           manualAmount: meta.manualAmount,
         })),
       };
+      // Si estoy editando una lista guardada, GUARDAR actualiza esa misma.
+      // GUARDAR COMO NUEVA siempre crea una lista aparte con el presupuesto actual.
+      const actualizar = Boolean(loadedListId) && !asNew;
       const res = await fetch("/api/wedding-lists", {
-        method: loadedListId ? "PUT" : "POST",
+        method: actualizar ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(loadedListId ? { id: loadedListId, ...payload } : payload),
+        body: JSON.stringify(
+          actualizar ? { id: loadedListId, ...payload } : payload
+        ),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al guardar");
       setLoadedListId(data.list.id);
       toast.success(
-        loadedListId
+        actualizar
           ? "Lista de bodas actualizada con los regalos y entregantes"
-          : "Lista de bodas guardada con éxito"
+          : asNew
+            ? "Nueva lista de bodas guardada a partir de este presupuesto"
+            : "Lista de bodas guardada con éxito"
       );
       await fetchLists();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo guardar la lista");
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
+
+  const handleSave = () => void guardarLista(false);
+  const handleGuardarComoNueva = () => void guardarLista(true);
 
   // Descarga un PDF ya generado por la API.
   const descargarPdf = (blob: Blob, filename: string) => {
@@ -279,20 +292,13 @@ export function WeddingListSection({
         title: title.trim() || "Lista de Bodas",
         eventDate,
         notes,
-        items: rows.map(({ item, meta, values }) => ({
+        items: rows.map(({ item, meta }) => ({
           sku: item.sku,
           name: item.name,
           quantity: item.quantity,
-          priceContado: item.priceContado,
-          subtotalContado: item.priceContado * item.quantity,
           giverName: meta.giverName.trim(),
           giverPhone: meta.giverPhone.trim(),
           giverCi: meta.giverCi.trim(),
-          quoteType: meta.quoteType,
-          quoteCuotas: values.cuotas,
-          quoteLabel: values.modeLabel,
-          quotedUnit: values.perCuota,
-          quotedTotal: values.total,
         })),
       };
       const res = await fetch("/api/wedding-lists/listado", {
@@ -673,7 +679,20 @@ export function WeddingListSection({
           </div>
         </div>
         {loadedListId && (
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
+            <button
+              onClick={handleGuardarComoNueva}
+              disabled={savingCopy || saving || items.length === 0 || !title.trim()}
+              className="h-9 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Crea una lista nueva con este presupuesto sin pisar la lista original"
+            >
+              {savingCopy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              GUARDAR COMO NUEVA
+            </button>
             <button
               onClick={handleNueva}
               className="h-9 px-3 rounded-lg border border-stone-300 bg-white text-stone-600 hover:text-rose-600 hover:border-rose-400 font-semibold text-xs flex items-center gap-1.5 transition-colors"
@@ -688,7 +707,7 @@ export function WeddingListSection({
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           onClick={handleSave}
-          disabled={saving || items.length === 0 || !title.trim()}
+          disabled={saving || savingCopy || items.length === 0 || !title.trim()}
           className="h-11 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:brightness-105"
           style={{
             backgroundImage: `linear-gradient(to right, ${DORADO}, ${DORADO_OSCURO})`,
@@ -696,7 +715,7 @@ export function WeddingListSection({
           }}
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          GUARDAR LISTA
+          {loadedListId ? "ACTUALIZAR LISTA" : "GUARDAR LISTA"}
         </button>
         <button
           onClick={() => setShowSaved((v) => !v)}
@@ -742,8 +761,8 @@ export function WeddingListSection({
         </button>
       </div>
       <p className="mt-1.5 text-[10px] text-stone-400 text-center">
-        El listado muestra los regalos y entregantes con un diseño especial, sin las
-        opciones de financiación.
+        El listado muestra solo los regalos y entregantes, con un diseño especial:
+        sin modalidades, sin planes y sin valores.
       </p>
 
       {showSaved && (

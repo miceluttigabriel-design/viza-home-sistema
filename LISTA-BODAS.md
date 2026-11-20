@@ -70,7 +70,10 @@ Las columnas nuevas de `WeddingListItem` son:
    - El valor del regalo se calcula solo y se muestra al instante.
    - La papelera quita el regalo de la lista.
 5. Apretar **GUARDAR LISTA**. Queda en la BD asociada al vendedor que la creó,
-   con todos los datos de los entregantes y las modalidades.
+   con todos los datos de los entregantes y las modalidades. Si estás editando
+   una lista guardada, el botón pasa a **ACTUALIZAR LISTA** y guarda los cambios
+   sobre esa misma lista. Para crear otra lista con el presupuesto actual sin
+   pisar la original, usar **GUARDAR COMO NUEVA**.
 6. Al final hay dos documentos:
    - **GENERAR PRESUPUESTO** descarga el presupuesto completo con:
      - Título de los novios, fecha y observaciones.
@@ -81,11 +84,10 @@ Las columnas nuevas de `WeddingListItem` son:
    - **GENERAR LISTADO** descarga un documento aparte con **otra cara**: azul
      VIZA y dorado como el presupuesto, membrete VIZA home, ramos de flores en
      las esquinas, nombres de los novios en tipografía serif y los regalos en
-     tarjetas. Muestra regalo, cantidad, entregante, modalidad y valor, más los
-     totales contado / según modalidad en caja azul con borde dorado y el pie
-     institucional con sucursales, redes y web. **No incluye las opciones de
-     financiación** y tampoco muestra la etiqueta del plan de cuotas en cada
-     regalo (esa información es privada).
+     tarjetas. Muestra **solo regalo, cantidad, entregante y contacto**, con el
+     pie institucional de sucursales, redes y web. **No incluye modalidades
+     (SOLO CONTADO, MAYORISTA, etc.), ni planes de cuotas, ni opciones de
+     financiación, ni ningún valor en dinero.**
 7. **GUARDADAS** muestra las listas guardadas: **Cargar** vuelve a poner los
    productos y los datos de cada regalo para seguir editando; la papelera
    borra la lista.
