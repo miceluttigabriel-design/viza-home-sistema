@@ -1,83 +1,82 @@
 # Lista de bodas en el cotizador
 
-Funcionalidad nueva como **opción propia del menú PRESUPUESTAR** (igual que PLAN
-CUOTA / SAFRA / CHEQUE): el vendedor arma una lista de productos con el mismo
-carrito de la cotización, la guarda en la base de datos con el **título de los
-novios** y puede generar un PDF con el diseño VIZA.
+Funcionalidad como **opción propia del menú PRESUPUESTAR** (igual que PLAN
+CUOTA / SAFRA / CHEQUE): el vendedor arma una lista de regalos con el mismo
+carrito de la cotización, asigna cada regalo a la persona que lo entrega, elige
+la modalidad de cotización y guarda todo en la base de datos con el **título de
+los novios**. Al final puede generar el PDF **Lista de Bodas** con el diseño
+VIZA.
 
 ## Qué se agregó
 
 | Archivo | Para qué |
 | --- | --- |
-| `prisma/schema.prisma` | Modelos `WeddingList` y `WeddingListItem` (relación con `User`). |
-| `src/store/wedding-list.ts` | Estado del formulario (título, fecha, notas, lista en edición). |
+| `prisma/schema.prisma` | Modelos `WeddingList` y `WeddingListItem` (relación con `User`) + datos del entregante y modalidad por regalo. |
+| `src/lib/wedding-list.ts` | Tipos, normalización y cálculo compartido de cada regalo (contado / cuotas / modalidades manuales). |
+| `src/store/wedding-list.ts` | Estado del formulario: título, fecha, notas, lista en edición y datos por regalo. |
 | `src/store/cotizacion.ts` | Acción `setItems` para cargar una lista guardada en el carrito. |
 | `src/app/api/wedding-lists/route.ts` | API REST: `POST` (crear), `PUT` (editar), `GET` (listar), `DELETE` (borrar). |
-| `src/app/api/wedding-lists/pdf/route.ts` | PDF de la lista con planes de financiación. |
-| `src/components/viza/wedding-list-section.tsx` | Sección UI de la opción LISTA DE BODAS. |
-| `src/components/viza/sales-panel.tsx` | Integración como opción del menú PRESUPUESTAR y planes compartidos del PDF. |
+| `src/app/api/wedding-lists/pdf/route.ts` | PDF con la tabla de regalos, entregantes y totales. |
+| `src/components/viza/wedding-list-section.tsx` | Tabla editable de regalos y entregantes + guardar/cargar/PDF. |
+| `src/components/viza/sales-panel.tsx` | Integración como opción del menú PRESUPUESTAR y botón AGREGAR REGALO. |
+| `prisma/sql/wedding-lists.sql` | SQL de creación de tablas (incluye las columnas nuevas). |
+| `prisma/sql/wedding-list-gifts.sql` | SQL para agregar las columnas nuevas a una base ya existente. |
 
-## ⚠️ Paso obligatorio: crear las tablas
+## ⚠️ Paso obligatorio: crear/actualizar las tablas
 
-Antes de usar la función hay que aplicar el schema (las tablas nuevas NO existen
-en la base actual):
+En una base nueva, ejecutar el SQL de creación:
 
 ```bash
-bun run db:push
+bunx prisma db execute --file prisma/sql/wedding-lists.sql --schema prisma/schema.prisma
 ```
 
-En producción (Vercel + Neon) correr el mismo comando con la `DATABASE_URL` de
-producción, o ejecutar este SQL en el editor de Neon:
+En una base donde la lista de bodas **ya existía**, ejecutar solo la migración
+de las columnas nuevas:
 
-```sql
-CREATE TABLE IF NOT EXISTS "WeddingList" (
-  "id" TEXT NOT NULL,
-  "title" TEXT NOT NULL,
-  "eventDate" TEXT,
-  "notes" TEXT,
-  "vendorName" TEXT NOT NULL DEFAULT 'Vendedor VIZA',
-  "userId" TEXT,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT "WeddingList_pkey" PRIMARY KEY ("id")
-);
-
-CREATE TABLE IF NOT EXISTS "WeddingListItem" (
-  "id" TEXT NOT NULL,
-  "weddingListId" TEXT NOT NULL,
-  "productId" TEXT NOT NULL,
-  "sku" TEXT NOT NULL,
-  "name" TEXT NOT NULL,
-  "quantity" INTEGER NOT NULL DEFAULT 1,
-  "unitPrice" DOUBLE PRECISION NOT NULL,
-  "subtotal" DOUBLE PRECISION NOT NULL,
-  "data" TEXT NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT "WeddingListItem_pkey" PRIMARY KEY ("id")
-);
-
-CREATE INDEX IF NOT EXISTS "WeddingList_userId_idx" ON "WeddingList"("userId");
-CREATE INDEX IF NOT EXISTS "WeddingListItem_weddingListId_idx" ON "WeddingListItem"("weddingListId");
-
-ALTER TABLE "WeddingList" ADD CONSTRAINT "WeddingList_userId_fkey"
-  FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "WeddingListItem" ADD CONSTRAINT "WeddingListItem_weddingListId_fkey"
-  FOREIGN KEY ("weddingListId") REFERENCES "WeddingList"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+```bash
+bunx prisma db execute --file prisma/sql/wedding-list-gifts.sql --schema prisma/schema.prisma
 ```
+
+Después regenerar el cliente de Prisma:
+
+```bash
+bun run db:generate
+```
+
+Las columnas nuevas de `WeddingListItem` son:
+
+- `giverName`, `giverPhone`, `giverCi`: datos de quien entrega el regalo.
+- `quoteType`: `contado` / `cuota` / `mayorista` / `safra` / `cheque` / `especial`.
+- `quoteCuotas`: cantidad de pagos cuando la modalidad es `cuota` (1-30).
+- `quotedAmount`: total cotizado del regalo según la modalidad elegida.
 
 ## Cómo se usa
 
 1. Abrir **PRESUPUESTAR → LISTA DE BODAS** (es una opción más, no está dentro de PLAN CUOTA).
-2. Agregar productos con el buscador (como siempre).
-3. En la sección **LISTA DE BODAS** escribir el título, ej. `Juan Pérez & María López`
-   (opcionalmente fecha del evento y observaciones).
-4. Apretar **GUARDAR LISTA**. Queda en la BD asociada al vendedor que la creó.
-5. **PDF DE BODAS** descarga el presupuesto con el título de los novios, los
-   productos, el total contado y las opciones de financiación ya calculadas.
-6. **GUARDADAS** muestra las listas guardadas: **Cargar** vuelve a poner los
-   productos en el carrito (con todos sus precios/cuotas) para seguir cotizando,
-   y **Cargar** sobre una lista ya abierta permite editarla; el botón de papelera
-   la borra.
+2. Agregar los regalos con el buscador de **PRODUCTOS AGREGADOS**. El botón
+   **AGREGAR REGALO** de la tabla lleva directo al buscador.
+3. Completar el **título de los novios**, la fecha del evento y las
+   observaciones.
+4. En la **TABLA DE REGALOS Y ENTREGANTES**, para cada producto:
+   - Nombre de quien regala, teléfono / WhatsApp y CI (opcional).
+   - **Modalidad**: SOLO CONTADO, PLAN CUOTA (elegir 1 a 30 pagos), MAYORISTA,
+     SAFRA, CHEQUE o ESPECIAL.
+   - Para MAYORISTA / SAFRA / CHEQUE / ESPECIAL se escribe el **total
+     cotizado** que devolvió el módulo correspondiente (si se deja vacío se usa
+     el precio de contado).
+   - El valor del regalo se calcula solo y se muestra al instante.
+   - La papelera quita el regalo de la lista.
+5. Apretar **GUARDAR LISTA**. Queda en la BD asociada al vendedor que la creó,
+   con todos los datos de los entregantes y las modalidades.
+6. **PDF DE BODAS** descarga el presupuesto con:
+   - Título de los novios, fecha y observaciones.
+   - Tabla de regalos con SKU, producto, cantidad, modalidad, valor y la línea
+     **ENTREGANTE** con nombre, teléfono y CI.
+   - Resumen de regalos/asignados, total según modalidad y total contado.
+   - Opciones de financiación ya calculadas.
+7. **GUARDADAS** muestra las listas guardadas: **Cargar** vuelve a poner los
+   productos y los datos de cada regalo para seguir editando; la papelera
+   borra la lista.
 
 ## Permisos
 
@@ -87,6 +86,9 @@ ALTER TABLE "WeddingListItem" ADD CONSTRAINT "WeddingListItem_weddingListId_fkey
 
 ## Validación realizada
 
+- Columnas aplicadas en la base de producción (Neon) y verificadas por
+  `information_schema`.
 - `bun run typecheck` → sin errores.
 - `bun run lint` → sin errores (2 warnings preexistentes en otros archivos).
-- `bun run build` → compila e incluye `/api/wedding-lists` y `/api/wedding-lists/pdf`.
+- `bun run build` → compila e incluye `/api/wedding-lists` y
+  `/api/wedding-lists/pdf`.

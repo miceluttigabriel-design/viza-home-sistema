@@ -9,10 +9,22 @@ import {
   Trash2,
   RotateCcw,
   Loader2,
+  Plus,
+  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCotizacionStore, type CotizacionItem } from "@/store/cotizacion";
-import { useWeddingListFormStore } from "@/store/wedding-list";
+import {
+  useWeddingListFormStore,
+  WEDDING_QUOTE_OPTIONS,
+  clampCuotas,
+  computeWeddingGift,
+  isManualQuoteType,
+  isWeddingQuoteType,
+  normalizeWeddingItemMeta,
+  type WeddingItemMeta,
+  type WeddingQuoteType,
+} from "@/store/wedding-list";
 import { formatPYG } from "@/lib/format";
 
 const AZUL = "#155789";
@@ -41,6 +53,12 @@ interface SavedItem {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  giverName: string | null;
+  giverPhone: string | null;
+  giverCi: string | null;
+  quoteType: string;
+  quoteCuotas: number;
+  quotedAmount: number;
   data: string;
 }
 
@@ -58,19 +76,35 @@ interface WeddingListSectionProps {
   pdfData: WeddingPdfData;
   /** Avisa al panel que los items cambiaron para invalidar cálculos previos. */
   onItemsLoaded: () => void;
+  /** Lleva el foco al buscador de productos para agregar otro regalo. */
+  onAddGift?: () => void;
 }
 
-export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectionProps) {
+const inputClass =
+  "w-full h-9 px-2.5 rounded-lg border border-stone-200 text-xs focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none";
+const selectClass =
+  "h-9 px-2 rounded-lg border border-stone-200 text-xs bg-white focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none";
+
+export function WeddingListSection({
+  pdfData,
+  onItemsLoaded,
+  onAddGift,
+}: WeddingListSectionProps) {
   const items = useCotizacionStore((s) => s.items);
   const setItems = useCotizacionStore((s) => s.setItems);
+  const removeItem = useCotizacionStore((s) => s.removeItem);
 
   const {
     title,
     eventDate,
     notes,
     loadedListId,
+    itemMeta,
     setField,
     setLoadedListId,
+    setItemMeta,
+    setItemMetaMap,
+    removeItemMeta,
     clearForm,
   } = useWeddingListFormStore();
 
@@ -81,7 +115,19 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const total = items.reduce((sum, i) => sum + i.priceContado * i.quantity, 0);
+  // Cada fila de la tabla: el producto del carrito + los datos del regalo.
+  const rows = items.map((item) => {
+    const meta = itemMeta[item.productId] ?? normalizeWeddingItemMeta(null);
+    const values = computeWeddingGift(item, meta);
+    return { item, meta, values };
+  });
+
+  const totalContado = rows.reduce(
+    (sum, r) => sum + r.item.priceContado * r.item.quantity,
+    0
+  );
+  const totalCotizado = rows.reduce((sum, r) => sum + r.values.total, 0);
+  const asignados = rows.filter((r) => r.meta.giverName.trim()).length;
 
   const fetchLists = useCallback(async () => {
     setLoadingLists(true);
@@ -115,7 +161,16 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
         title: title.trim(),
         eventDate,
         notes,
-        items,
+        items: rows.map(({ item, meta, values }) => ({
+          ...item,
+          giverName: meta.giverName.trim(),
+          giverPhone: meta.giverPhone.trim(),
+          giverCi: meta.giverCi.trim(),
+          quoteType: meta.quoteType,
+          quoteCuotas: values.cuotas,
+          quotedAmount: values.total,
+          manualAmount: meta.manualAmount,
+        })),
       };
       const res = await fetch("/api/wedding-lists", {
         method: loadedListId ? "PUT" : "POST",
@@ -126,7 +181,9 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
       if (!res.ok) throw new Error(data.error ?? "Error al guardar");
       setLoadedListId(data.list.id);
       toast.success(
-        loadedListId ? "Lista de bodas actualizada" : "Lista de bodas guardada con éxito"
+        loadedListId
+          ? "Lista de bodas actualizada con los regalos y entregantes"
+          : "Lista de bodas guardada con éxito"
       );
       await fetchLists();
     } catch (e) {
@@ -147,12 +204,20 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
         title: title.trim() || "Lista de Bodas",
         eventDate,
         notes,
-        items: items.map((it) => ({
-          sku: it.sku,
-          name: it.name,
-          quantity: it.quantity,
-          priceContado: it.priceContado,
-          subtotalContado: it.priceContado * it.quantity,
+        items: rows.map(({ item, meta, values }) => ({
+          sku: item.sku,
+          name: item.name,
+          quantity: item.quantity,
+          priceContado: item.priceContado,
+          subtotalContado: item.priceContado * item.quantity,
+          giverName: meta.giverName.trim(),
+          giverPhone: meta.giverPhone.trim(),
+          giverCi: meta.giverCi.trim(),
+          quoteType: meta.quoteType,
+          quoteCuotas: values.cuotas,
+          quoteLabel: values.modeLabel,
+          quotedUnit: values.perCuota,
+          quotedTotal: values.total,
         })),
         contadoOriginal: pdfData.contadoOriginal,
         contadoAjustado: pdfData.contadoAjustado,
@@ -199,14 +264,44 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
         .map((it) => JSON.parse(it.data) as CotizacionItem)
         .filter((it) => it && it.productId && typeof it.priceContado === "number");
       if (restaurados.length === 0) throw new Error("sin items válidos");
+
+      const metaMap: Record<string, WeddingItemMeta> = {};
+      for (const saved of list.items) {
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(saved.data) as Record<string, unknown>;
+        } catch {
+          parsed = {};
+        }
+        const quoteType: WeddingQuoteType = isWeddingQuoteType(saved.quoteType)
+          ? saved.quoteType
+          : isWeddingQuoteType(parsed.quoteType)
+            ? parsed.quoteType
+            : "contado";
+        const manualSaved =
+          String(parsed.manualAmount ?? "").replace(/[^\d]/g, "") ||
+          (isManualQuoteType(quoteType) && Number(saved.quotedAmount) > 0
+            ? String(Math.round(Number(saved.quotedAmount)))
+            : "");
+        metaMap[saved.productId] = normalizeWeddingItemMeta({
+          giverName: saved.giverName ?? parsed.giverName ?? "",
+          giverPhone: saved.giverPhone ?? parsed.giverPhone ?? "",
+          giverCi: saved.giverCi ?? parsed.giverCi ?? "",
+          quoteType,
+          quoteCuotas: saved.quoteCuotas || parsed.quoteCuotas || 12,
+          manualAmount: manualSaved,
+        });
+      }
+
       setItems(restaurados);
+      setItemMetaMap(metaMap);
       setField("title", list.title);
       setField("eventDate", list.eventDate ?? "");
       setField("notes", list.notes ?? "");
       setLoadedListId(list.id);
       setShowSaved(false);
       onItemsLoaded();
-      toast.success(`Lista "${list.title}" cargada en la cotización`);
+      toast.success(`Lista "${list.title}" cargada con sus regalos y entregantes`);
     } catch {
       toast.error("No se pudo cargar la lista guardada");
     }
@@ -241,6 +336,12 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
     toast.success("Lista nueva lista para armar");
   };
 
+  const handleQuitarRegalo = (productId: string) => {
+    removeItem(productId);
+    removeItemMeta(productId);
+    onItemsLoaded();
+  };
+
   return (
     <section className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -263,8 +364,10 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
       </div>
 
       <p className="text-[11px] text-stone-500 mb-3">
-        Usá los mismos productos del carrito: armá la lista, cotizala y guardala con el
-        título de los novios para recuperarla después.
+        Agregá los productos con el buscador y completá quién entrega cada regalo. Podés
+        cotizar cada regalo <strong>solo contado</strong> o con <strong>cualquier plan</strong>{" "}
+        (cuotas, mayorista, safra, cheque o especial) y guardar todo junto con el título de
+        los novios.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -306,23 +409,224 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
         />
       </div>
 
-      <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-[10px] uppercase font-semibold text-stone-400 tracking-wide">
-            Productos en la lista
+      {/* ===== TABLA DE REGALOS Y ENTREGANTES ===== */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+          <p className="text-[10px] uppercase font-bold text-stone-500 tracking-wide flex items-center gap-1.5">
+            <UserRound className="h-3.5 w-3.5" />
+            TABLA DE REGALOS Y ENTREGANTES
           </p>
-          <p className="font-bold text-stone-900 text-sm tabular-nums mt-0.5">
-            {items.length} producto{items.length !== 1 ? "s" : ""} · {formatPYG(total)}
-          </p>
+          {onAddGift && (
+            <button
+              onClick={onAddGift}
+              className="h-8 px-3 rounded-lg border border-stone-300 bg-white text-stone-600 hover:text-rose-600 hover:border-rose-400 font-semibold text-[11px] flex items-center gap-1.5 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              AGREGAR REGALO
+            </button>
+          )}
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-6 text-center">
+            <p className="text-sm font-medium text-stone-500">
+              Todavía no hay regalos en la lista
+            </p>
+            <p className="text-xs text-stone-400 mt-1">
+              Agregá productos con el buscador de arriba para armar la tabla.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rows.map(({ item, meta, values }, idx) => (
+              <div
+                key={item.productId}
+                className="rounded-xl border border-stone-200 bg-white p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-stone-400">
+                      Regalo {idx + 1} · {item.sku} · Cant. {item.quantity}
+                    </p>
+                    <p className="font-semibold text-stone-900 text-sm leading-snug">
+                      {item.name}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleQuitarRegalo(item.productId)}
+                    className="h-7 w-7 shrink-0 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition-colors"
+                    title="Quitar este regalo de la lista"
+                    aria-label={`Quitar ${item.name} de la lista`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    value={meta.giverName}
+                    onChange={(e) => setItemMeta(item.productId, { giverName: e.target.value })}
+                    placeholder="Nombre de quien regala"
+                    aria-label={`Nombre de quien regala ${item.name}`}
+                    className={inputClass}
+                  />
+                  <input
+                    type="tel"
+                    value={meta.giverPhone}
+                    onChange={(e) => setItemMeta(item.productId, { giverPhone: e.target.value })}
+                    placeholder="Teléfono / WhatsApp"
+                    aria-label={`Teléfono de quien regala ${item.name}`}
+                    className={inputClass}
+                  />
+                  <input
+                    type="text"
+                    value={meta.giverCi}
+                    onChange={(e) => setItemMeta(item.productId, { giverCi: e.target.value })}
+                    placeholder="CI (opcional)"
+                    aria-label={`CI de quien regala ${item.name}`}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <label className="text-[9px] font-bold uppercase tracking-wide text-stone-400">
+                    <span className="block mb-1">Modalidad</span>
+                    <select
+                      value={meta.quoteType}
+                      onChange={(e) =>
+                        setItemMeta(item.productId, {
+                          quoteType: e.target.value as WeddingQuoteType,
+                        })
+                      }
+                      className={selectClass}
+                      aria-label={`Modalidad de cotización de ${item.name}`}
+                    >
+                      {WEDDING_QUOTE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {meta.quoteType === "cuota" && (
+                    <label className="text-[9px] font-bold uppercase tracking-wide text-stone-400">
+                      <span className="block mb-1">Cuotas / pagos</span>
+                      <select
+                        value={meta.quoteCuotas}
+                        onChange={(e) =>
+                          setItemMeta(item.productId, {
+                            quoteCuotas: clampCuotas(e.target.value),
+                          })
+                        }
+                        className={selectClass}
+                        aria-label={`Cantidad de cuotas de ${item.name}`}
+                      >
+                        {Array.from({ length: 30 }, (_, i) => i + 1).map((n) => (
+                          <option key={n} value={n}>
+                            {n === 1 ? "1 pago" : `${n} cuotas`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+
+                  {isManualQuoteType(meta.quoteType) && (
+                    <label className="text-[9px] font-bold uppercase tracking-wide text-stone-400">
+                      <span className="block mb-1">Total cotizado (Gs)</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={meta.manualAmount}
+                        onChange={(e) =>
+                          setItemMeta(item.productId, { manualAmount: e.target.value })
+                        }
+                        placeholder={String(Math.round(item.priceContado * item.quantity))}
+                        className={`${selectClass} w-36`}
+                        aria-label={`Total cotizado de ${item.name}`}
+                      />
+                    </label>
+                  )}
+
+                  <div className="ml-auto text-right">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-stone-400">
+                      {values.modeLabel}
+                    </p>
+                    {values.cuotas > 1 ? (
+                      <>
+                        <p className="text-sm font-bold text-stone-900 tabular-nums">
+                          {formatPYG(values.perCuota)}{" "}
+                          <span className="text-[10px] font-normal">× {values.cuotas}</span>
+                        </p>
+                        <p className="text-[10px] font-semibold text-stone-500 tabular-nums">
+                          Total: {formatPYG(values.total)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-bold text-stone-900 tabular-nums">
+                        {formatPYG(values.total)}
+                      </p>
+                    )}
+                    {!values.assigned && (
+                      <p className="text-[9px] font-bold text-amber-600 uppercase">
+                        Sin asignar
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ===== RESUMEN ===== */}
+      <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+          <div>
+            <p className="text-[9px] uppercase font-semibold text-stone-400 tracking-wide">
+              Regalos
+            </p>
+            <p className="font-bold text-stone-900 text-sm tabular-nums mt-0.5">
+              {rows.length}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] uppercase font-semibold text-stone-400 tracking-wide">
+              Asignados
+            </p>
+            <p className="font-bold text-stone-900 text-sm tabular-nums mt-0.5">
+              {asignados} de {rows.length}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] uppercase font-semibold text-stone-400 tracking-wide">
+              Total contado
+            </p>
+            <p className="font-bold text-stone-900 text-sm tabular-nums mt-0.5">
+              {formatPYG(totalContado)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] uppercase font-semibold text-stone-400 tracking-wide">
+              Según modalidad
+            </p>
+            <p className="font-bold text-stone-900 text-sm tabular-nums mt-0.5">
+              {formatPYG(totalCotizado)}
+            </p>
+          </div>
         </div>
         {loadedListId && (
-          <button
-            onClick={handleNueva}
-            className="h-9 px-3 rounded-lg border border-stone-300 bg-white text-stone-600 hover:text-rose-600 hover:border-rose-400 font-semibold text-xs flex items-center gap-1.5 transition-colors"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Nueva lista
-          </button>
+          <div className="mt-2 flex justify-end">
+            <button
+              onClick={handleNueva}
+              className="h-9 px-3 rounded-lg border border-stone-300 bg-white text-stone-600 hover:text-rose-600 hover:border-rose-400 font-semibold text-xs flex items-center gap-1.5 transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Nueva lista
+            </button>
+          </div>
         )}
       </div>
 
@@ -376,7 +680,8 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {savedLists.map((list) => {
                 const listTotal = list.items.reduce(
-                  (s, it) => s + Number(it.subtotal || 0),
+                  (s, it) =>
+                    s + (Number(it.quotedAmount) || Number(it.subtotal) || 0),
                   0
                 );
                 const fecha = list.createdAt
@@ -392,7 +697,7 @@ export function WeddingListSection({ pdfData, onItemsLoaded }: WeddingListSectio
                         {list.title}
                       </p>
                       <p className="text-[11px] text-stone-500 mt-0.5">
-                        {fecha} · {list.items.length} producto
+                        {fecha} · {list.items.length} regalo
                         {list.items.length !== 1 ? "s" : ""} · {formatPYG(listTotal)}
                         {list.eventDate ? ` · Evento: ${list.eventDate}` : ""}
                       </p>

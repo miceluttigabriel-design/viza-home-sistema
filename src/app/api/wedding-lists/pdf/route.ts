@@ -27,6 +27,16 @@ interface PdfItem {
   quantity: number;
   priceContado: number;
   subtotalContado: number;
+  // Datos del entregante (quien regala el producto)
+  giverName?: string | null;
+  giverPhone?: string | null;
+  giverCi?: string | null;
+  // Modalidad con la que se cotizó este regalo
+  quoteType?: string | null;
+  quoteCuotas?: number | null;
+  quoteLabel?: string | null;
+  quotedUnit?: number | null;
+  quotedTotal?: number | null;
 }
 
 interface PdfPlan {
@@ -90,6 +100,23 @@ export async function POST(req: NextRequest) {
     }
     const title = String(body.title ?? "").trim() || "Lista de Bodas";
 
+    // Valor de cada regalo según la modalidad elegida (con respaldo al
+    // contado para payloads viejos que no traían estos campos).
+    const quoteTotalOf = (it: PdfItem) => {
+      const q = Number(it.quotedTotal);
+      return Number.isFinite(q) && q > 0 ? q : Number(it.subtotalContado) || 0;
+    };
+    const quoteUnitOf = (it: PdfItem) => {
+      const q = Number(it.quotedUnit);
+      return Number.isFinite(q) && q > 0 ? q : Number(it.priceContado) || 0;
+    };
+    const quoteCuotasOf = (it: PdfItem) => Math.max(1, Number(it.quoteCuotas) || 1);
+    const quoteLabelOf = (it: PdfItem) => {
+      const saved = String(it.quoteLabel ?? "").trim();
+      if (saved) return saved.toUpperCase();
+      return quoteCuotasOf(it) > 1 ? `PLAN ${quoteCuotasOf(it)} CUOTAS` : "SOLO CONTADO";
+    };
+
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
@@ -141,24 +168,25 @@ export async function POST(req: NextRequest) {
     }
     y += boxH + 24;
 
-    // ===== TABLA DE PRODUCTOS =====
-    ensureSpace(160);
-    drawSectionTitle(doc, "LISTA DE REGALOS - PRODUCTOS", margin, y, contentW);
+    // ===== TABLA DE REGALOS Y ENTREGANTES =====
+    ensureSpace(180);
+    drawSectionTitle(doc, "LISTA DE REGALOS Y ENTREGANTES", margin, y, contentW);
     y += 14;
 
-    const colN = 25;
-    const colSku = 70;
-    const colCant = 50;
-    const colPU = 110;
-    const colSub = 110;
-    const colName = contentW - colN - colSku - colCant - colPU - colSub;
+    const colN = 20;
+    const colSku = 52;
+    const colCant = 28;
+    const colMode = 72;
+    const colValor = 88;
+    const colName =
+      contentW - 7 - colN - colSku - colCant - colMode - colValor;
 
     doc.setFillColor(...BLUE);
     doc.rect(margin, y, contentW, 24, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
-    let xx = margin + 8;
+    let xx = margin + 7;
     doc.text("#", xx, y + 16);
     xx += colN;
     doc.text("SKU", xx, y + 16);
@@ -167,13 +195,15 @@ export async function POST(req: NextRequest) {
     xx += colName;
     doc.text("CANT.", xx, y + 16);
     xx += colCant;
-    doc.text("P. CONTADO", xx, y + 16);
-    doc.text("SUBTOTAL", margin + contentW - 10, y + 16, { align: "right" });
+    doc.text("MODALIDAD", xx, y + 16);
+    doc.text("VALOR", margin + contentW - 8, y + 16, { align: "right" });
     y += 24;
 
+    const mainH = 34;
+    const subH = 16;
     body.items.forEach((it, idx) => {
-      ensureSpace(34);
-      const rowH = 30;
+      ensureSpace(mainH + subH + 2);
+      const rowH = mainH + subH;
       if (idx % 2 === 1) {
         doc.setFillColor(...ZEBRA);
         doc.rect(margin, y, contentW, rowH, "F");
@@ -182,45 +212,135 @@ export async function POST(req: NextRequest) {
       doc.setLineWidth(0.5);
       doc.line(margin, y + rowH, margin + contentW, y + rowH);
 
-      let x = margin + 8;
+      // --- Fila principal: producto + modalidad + valor ---
+      let x = margin + 7;
       doc.setTextColor(...GREY);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.text(String(idx + 1), x, y + 13);
+      doc.text(String(idx + 1), x, y + 14);
       x += colN;
-      doc.text(it.sku, x, y + 13);
+      doc.text(it.sku, x, y + 14);
 
       x += colSku;
       doc.setTextColor(...DARK);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
-      doc.text(doc.splitTextToSize(it.name, colName - 6).slice(0, 2), x, y + 13);
+      doc.text(doc.splitTextToSize(it.name, colName - 8).slice(0, 2), x, y + 14);
 
       x += colName;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      doc.text(String(it.quantity), x + 6, y + 13);
+      doc.text(String(it.quantity), x + 4, y + 14);
 
       x += colCant;
-      doc.setTextColor(...DARK);
-      doc.text(formatPYG(it.priceContado), x, y + 13);
       doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
       doc.setTextColor(...BLUE);
-      doc.text(formatPYG(it.subtotalContado), margin + contentW - 10, y + 13, {
-        align: "right",
-      });
+      doc.text(
+        doc.splitTextToSize(quoteLabelOf(it), colMode - 4).slice(0, 2),
+        x,
+        y + 14
+      );
+
+      const cuotas = quoteCuotasOf(it);
+      const valorUnit = quoteUnitOf(it);
+      const valorTotal = quoteTotalOf(it);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...DARK);
+      if (cuotas > 1) {
+        doc.text(formatPYG(valorUnit), margin + contentW - 8, y + 12, {
+          align: "right",
+        });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(...GREY);
+        doc.text(
+          `${cuotas} pagos = ${formatPYG(valorTotal)}`,
+          margin + contentW - 8,
+          y + 23,
+          { align: "right" }
+        );
+      } else {
+        doc.text(formatPYG(valorTotal), margin + contentW - 8, y + 14, {
+          align: "right",
+        });
+      }
+
+      // --- Sub-fila: persona que entrega el regalo ---
+      const giverParts = [
+        String(it.giverName ?? "").trim(),
+        String(it.giverPhone ?? "").trim()
+          ? `Tel. ${String(it.giverPhone).trim()}`
+          : "",
+        String(it.giverCi ?? "").trim() ? `CI ${String(it.giverCi).trim()}` : "",
+      ].filter(Boolean);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.2);
+      if (giverParts.length > 0) {
+        doc.setTextColor(...BLUE);
+        doc.text("ENTREGANTE:", margin + 7, y + mainH + 10);
+        const labelW = doc.getTextWidth("ENTREGANTE: ") + 3;
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...DARK);
+        doc.text(
+          doc
+            .splitTextToSize(giverParts.join("  ·  "), contentW - 14 - labelW)
+            .slice(0, 1),
+          margin + 7 + labelW,
+          y + mainH + 10
+        );
+      } else {
+        doc.setTextColor(...GREY);
+        doc.text("ENTREGANTE: SIN ASIGNAR", margin + 7, y + mainH + 10);
+      }
       y += rowH;
     });
 
-    // ===== TOTAL =====
-    ensureSpace(70);
-    y += 12;
+    // ===== TOTALES =====
+    ensureSpace(90);
+    y += 14;
     const totalBoxW = 280;
     const totalBoxX = pageW - margin - totalBoxW;
     const ajustado =
       Number(body.contadoMarginPct) > 0 &&
       Number(body.contadoAjustado) !== Number(body.contadoOriginal);
-    const totalBoxH = ajustado ? 54 : 32;
+    const totalBoxH = ajustado ? 54 : 44;
+    const giftsTotal = body.items.reduce((sum, it) => sum + quoteTotalOf(it), 0);
+    const assignedCount = body.items.filter((it) =>
+      String(it.giverName ?? "").trim()
+    ).length;
+
+    // Resumen de regalos (izquierda)
+    const summaryW = totalBoxX - margin - 8;
+    doc.setFillColor(...GOLD_LIGHT);
+    doc.roundedRect(margin, y, summaryW, totalBoxH, 6, 6, "F");
+    doc.setFillColor(...GOLD);
+    doc.rect(margin, y, 3, totalBoxH, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(...GREY);
+    doc.text("RESUMEN DE REGALOS", margin + 12, y + 13);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...DARK);
+    doc.text(
+      `${body.items.length} regalo${body.items.length !== 1 ? "s" : ""} · ${assignedCount} asignado${assignedCount !== 1 ? "s" : ""}`,
+      margin + 12,
+      y + 26
+    );
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.8);
+    doc.setTextColor(...GREY);
+    doc.text("TOTAL SEGÚN MODALIDAD", margin + 12, y + totalBoxH - 6);
+    doc.setFontSize(9.5);
+    doc.setTextColor(...BLUE);
+    doc.text(formatPYG(giftsTotal), margin + summaryW - 12, y + totalBoxH - 6, {
+      align: "right",
+    });
+
+    // Total contado del presupuesto (derecha)
     doc.setFillColor(...BLUE);
     doc.rect(totalBoxX, y, totalBoxW, totalBoxH, "F");
     doc.setFillColor(...GOLD);

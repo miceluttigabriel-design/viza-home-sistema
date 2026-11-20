@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  clampCuotas,
+  isWeddingQuoteType,
+  type WeddingQuoteType,
+} from "@/lib/wedding-list";
 
 /**
  * API de LISTAS DE BODAS.
@@ -13,7 +18,9 @@ import { db } from "@/lib/db";
  *
  * Los items se guardan como "snapshot": además de los datos legibles se
  * guarda el CotizacionItem completo en `data` (JSON) para poder recargar la
- * lista y volver a cotizar con los precios/cuotas originales.
+ * lista y volver a cotizar con los precios/cuotas originales. Los datos del
+ * entregante y la modalidad de cotización se guardan también en columnas
+ * propias para poder listarlos sin abrir el JSON.
  */
 
 interface SavedItemInput {
@@ -23,6 +30,14 @@ interface SavedItemInput {
   quantity: number;
   priceContado?: number;
   subtotal?: number;
+  // Datos del entregante (quien regala el producto)
+  giverName?: string;
+  giverPhone?: string;
+  giverCi?: string;
+  // Modalidad con la que se cotizó el regalo
+  quoteType?: WeddingQuoteType;
+  quoteCuotas?: number;
+  quotedAmount?: number;
   [key: string]: unknown;
 }
 
@@ -36,6 +51,15 @@ function normalizeItems(raw: unknown): SavedItemInput[] {
       const name = String(it.name ?? "Producto");
       const quantity = Math.max(1, Number(it.quantity) || 1);
       const unitPrice = Number(it.priceContado ?? it.unitPrice ?? 0) || 0;
+      const quoteType: WeddingQuoteType = isWeddingQuoteType(it.quoteType)
+        ? it.quoteType
+        : "contado";
+      const quoteCuotas = quoteType === "cuota" ? clampCuotas(it.quoteCuotas) : 0;
+      const quotedAmountRaw = Number(it.quotedAmount);
+      const quotedAmount =
+        Number.isFinite(quotedAmountRaw) && quotedAmountRaw > 0
+          ? quotedAmountRaw
+          : unitPrice * quantity;
       return {
         ...it,
         productId,
@@ -44,6 +68,12 @@ function normalizeItems(raw: unknown): SavedItemInput[] {
         quantity,
         priceContado: unitPrice,
         subtotal: unitPrice * quantity,
+        giverName: String(it.giverName ?? "").trim(),
+        giverPhone: String(it.giverPhone ?? "").trim(),
+        giverCi: String(it.giverCi ?? "").trim(),
+        quoteType,
+        quoteCuotas,
+        quotedAmount,
       } as SavedItemInput;
     })
     .filter((it) => it.productId && it.name);
@@ -57,6 +87,12 @@ function itemsToCreate(items: SavedItemInput[]) {
     quantity: it.quantity,
     unitPrice: Number(it.priceContado) || 0,
     subtotal: Number(it.subtotal) || 0,
+    giverName: it.giverName || null,
+    giverPhone: it.giverPhone || null,
+    giverCi: it.giverCi || null,
+    quoteType: it.quoteType ?? "contado",
+    quoteCuotas: it.quoteCuotas ?? 0,
+    quotedAmount: Number(it.quotedAmount) || 0,
     data: JSON.stringify(it),
   }));
 }

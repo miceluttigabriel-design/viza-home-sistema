@@ -757,6 +757,15 @@ model WeddingListItem {
   quantity      Int      @default(1)
   unitPrice     Float    // precio de contado unitario al momento de guardar
   subtotal      Float
+  // === DATOS DEL ENTREGANTE (quien regala este producto) ===
+  giverName     String?  // nombre de la persona que da el regalo
+  giverPhone    String?  // teléfono / WhatsApp
+  giverCi       String?  // cédula (opcional)
+  // === MODALIDAD DE COTIZACIÓN DEL REGALO ===
+  // contado | cuota | mayorista | safra | cheque | especial
+  quoteType     String   @default("contado")
+  quoteCuotas   Int      @default(0) // 1-30 cuando quoteType = "cuota"
+  quotedAmount  Float    @default(0) // total cotizado del regalo según la modalidad
   // Snapshot completo del item de cotización (JSON.stringify) para poder
   // recargar la lista y volver a calcular cuotas con los precios originales.
   data          String

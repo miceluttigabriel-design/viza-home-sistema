@@ -23,10 +23,25 @@ CREATE TABLE IF NOT EXISTS "WeddingListItem" (
   "quantity" INTEGER NOT NULL DEFAULT 1,
   "unitPrice" DOUBLE PRECISION NOT NULL,
   "subtotal" DOUBLE PRECISION NOT NULL,
+  "giverName" TEXT,
+  "giverPhone" TEXT,
+  "giverCi" TEXT,
+  "quoteType" TEXT NOT NULL DEFAULT 'contado',
+  "quoteCuotas" INTEGER NOT NULL DEFAULT 0,
+  "quotedAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
   "data" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "WeddingListItem_pkey" PRIMARY KEY ("id")
 );
+
+-- Columnas nuevas para listas ya creadas (entregante + modalidad por regalo).
+ALTER TABLE "WeddingListItem"
+  ADD COLUMN IF NOT EXISTS "giverName" TEXT,
+  ADD COLUMN IF NOT EXISTS "giverPhone" TEXT,
+  ADD COLUMN IF NOT EXISTS "giverCi" TEXT,
+  ADD COLUMN IF NOT EXISTS "quoteType" TEXT NOT NULL DEFAULT 'contado',
+  ADD COLUMN IF NOT EXISTS "quoteCuotas" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "quotedAmount" DOUBLE PRECISION NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS "WeddingList_userId_idx" ON "WeddingList"("userId");
 CREATE INDEX IF NOT EXISTS "WeddingListItem_weddingListId_idx" ON "WeddingListItem"("weddingListId");

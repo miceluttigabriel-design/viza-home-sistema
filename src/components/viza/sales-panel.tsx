@@ -2010,6 +2010,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         {viewMode === "bodas" && (
           <WeddingListSection
             pdfData={weddingPdfData}
+            onAddGift={() => {
+              // Lleva al buscador de PRODUCTOS AGREGADOS para sumar otro regalo.
+              const input = searchInputRef.current;
+              if (!input) return;
+              input.scrollIntoView({ behavior: "smooth", block: "center" });
+              input.focus();
+            }}
             onItemsLoaded={() => {
               // Al cargar una lista guardada los items cambian: invalidar cálculos
               setCalcDone(false);
