@@ -52,6 +52,7 @@ interface PdfPlan {
   cuotas: number;
   valorPorCuota: number;
   total: number;
+  entregaPersonalizada?: number;
 }
 
 // Plan alternativo SIN ENTREGA inicial (con margen por diferido + fechas de cuotas)
@@ -101,8 +102,6 @@ interface PdfPayload {
   // Flags para mostrar/ocultar opciones en el presupuesto
   mostrarConEntrega?: boolean;
   mostrarSinEntrega?: boolean;
-  // Entrega inicial personalizada (Gs) - fila destacada propia cuando > 0
-  entregaPersonalizada?: number;
   planes: PdfPlan[];
   // Planes alternativos sin entrega inicial (solo si tipoEntrega === "sin_entrega")
   planesSinEntrega?: PdfPlanSinEntrega[] | null;
@@ -863,7 +862,7 @@ export async function POST(req: NextRequest) {
           doc.setFontSize(9);
           doc.setTextColor(...DARK);
           doc.text(
-            entregaInicial > 0
+            (plan.entregaPersonalizada ?? 0) > 0
               ? `${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`
               : `1 ENTRADA + ${plan.cuotas - 1} CUOTA${plan.cuotas - 1 !== 1 ? "S" : ""}`,
             pp2,
@@ -985,7 +984,7 @@ export async function POST(req: NextRequest) {
             // Task 118: mismo rótulo que la fila del plan arriba (1 ENTRADA +
             // N-1 CUOTAS; con entrega personalizada solo N-1 CUOTAS). En 2
             // líneas para que entre en la columna.
-            ...(entregaInicial > 0
+            ...((p.entregaPersonalizada ?? 0) > 0
               ? {
                   titulo: `${p.letra} · ${p.cuotas - 1} CUOTA${
                     p.cuotas - 1 !== 1 ? "S" : ""

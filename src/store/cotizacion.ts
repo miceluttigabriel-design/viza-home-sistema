@@ -114,6 +114,7 @@ export interface PlanCuotas {
   cuotas: number; // 1 a 30
   valorPorCuota: number; // calculado
   total: number; // calculado = valorPorCuota × cuotas
+  entregaPersonalizada?: number; // > 0 solo si la entrega baja esta cuota
   calculado: boolean; // si ya fue calculado o no
 }
 

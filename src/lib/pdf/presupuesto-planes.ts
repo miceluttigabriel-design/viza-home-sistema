@@ -17,6 +17,7 @@ export interface PlanPresupuesto {
   cuotas: number;
   valorPorCuota: number;
   total: number;
+  entregaPersonalizada?: number;
 }
 
 export interface PlanesPresupuestoInput {
@@ -24,8 +25,6 @@ export interface PlanesPresupuestoInput {
   planesSinEntrega?: PlanPresupuesto[] | null;
   mostrarConEntrega?: boolean;
   mostrarSinEntrega?: boolean;
-  // Entrega inicial personalizada (Gs): solo aplica a los planes CON ENTREGA.
-  entregaPersonalizada?: number;
 }
 
 export interface FilasFinanciacion {
@@ -57,12 +56,13 @@ export function resolverFilasFinanciacion(
       ? []
       : input.planesSinEntrega ?? [];
 
-  // La entrega inicial personalizada solo tiene sentido si hay planes CON
-  // ENTREGA visibles.
-  const entregaInicial =
-    conEntrega.length > 0
-      ? Math.max(0, Math.round(input.entregaPersonalizada || 0))
-      : 0;
+  const entregaInicial = Math.max(
+    0,
+    Math.round(
+      conEntrega.find((p) => (p.entregaPersonalizada ?? 0) > 0)
+        ?.entregaPersonalizada ?? 0
+    )
+  );
 
   const soloContado =
     contado.length > 0 && conEntrega.length === 0 && sinEntrega.length === 0;

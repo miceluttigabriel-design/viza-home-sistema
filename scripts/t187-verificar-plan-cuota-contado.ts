@@ -51,6 +51,10 @@ const plan = (
 // Plan A contado + planes B/C con entrega (calculados en el panel).
 const planesConContado = [plan("A", 1, 5_000_000), plan("B", 6), plan("C", 12)];
 const planesSinContado = [plan("B", 6), plan("C", 12)];
+const planesConEntregaPersonalizada = planesConContado.map((p) => ({
+  ...p,
+  entregaPersonalizada: p.letra === "B" ? 300_000 : 0,
+}));
 const sinEntrega = [plan("B", 6, 110_000)];
 
 console.log("═══ T187 · PLAN CUOTA · CONTADO + CON/SIN ENTREGA ═══");
@@ -59,11 +63,10 @@ console.log("═══ T187 · PLAN CUOTA · CONTADO + CON/SIN ENTREGA ═══
 console.log("\n[1] Contado + CON ENTREGA + SIN ENTREGA marcados");
 {
   const r = resolverFilasFinanciacion({
-    planes: planesConContado,
+    planes: planesConEntregaPersonalizada,
     planesSinEntrega: sinEntrega,
     mostrarConEntrega: true,
     mostrarSinEntrega: true,
-    entregaPersonalizada: 300_000,
   });
   check("dibuja la fila CONTADO", r.contado.length === 1);
   check("dibuja los 2 planes CON ENTREGA", r.conEntrega.length === 2);
@@ -77,11 +80,10 @@ console.log("\n[1] Contado + CON ENTREGA + SIN ENTREGA marcados");
 console.log("\n[2] Caso reportado: contado incluido y SOLO 'SIN ENTREGA' marcado");
 {
   const r = resolverFilasFinanciacion({
-    planes: planesConContado, // el panel todavía manda B/C calculados
+    planes: planesConEntregaPersonalizada, // el panel todavía manda B/C calculados
     planesSinEntrega: sinEntrega,
     mostrarConEntrega: false, // casilla CON ENTREGA desmarcada
     mostrarSinEntrega: true,
-    entregaPersonalizada: 300_000,
   });
   check("NO dibuja ningún plan CON ENTREGA", r.conEntrega.length === 0);
   check("SÍ dibuja la fila CONTADO", r.contado.length === 1);

@@ -1,26 +1,7 @@
 #!/usr/bin/env bun
-// ============================================================================
-// T189 — PLAN CUOTA: entrega inicial personalizada solo cuando supera la
-// cuota estándar (así la cuota baja y el margen se mantiene)
-// ----------------------------------------------------------------------------
-// Caso reportado por el dueño:
-//   "en PLAN CUOTA con entrega inicial, al agregar la entrega inicial apenas
-//    agarra la entrega y divide las cuotas por el total del plan. Lo que
-//    queremos es que al dar la entrega sus cuotas bajen el valor mensualmente,
-//    siempre con redondeo de cuotas iguales. Esto no es válido para el plan
-//    común que tiene la entrega inicial igual al valor de la cuota; aplica
-//    apenas en valores diferentes de la cuota para arriba."
-//
-// Regla:
-//   - Se calcula sobre el saldo restante (total - entrega) repartido entre
-//     las cuotas restantes, con redondeo comercial al millar superior.
-//   - Solo se aplica si la entrega supera la cuota estándar (así la cuota
-//     baja). Si es igual o menor, se mantiene el plan estándar.
-//   - El margen de las cuotas no cambia (se preserva proporcionalmente).
-//
-// Correr:  bun scripts/t189-verificar-entrega-inicial-personalizada.ts
-// ============================================================================
 import { readFileSync } from "fs";
+import { aplicarEntregaInicial } from "../src/lib/entrega-inicial";
+import { resolverFilasFinanciacion } from "../src/lib/pdf/presupuesto-planes";
 
 let ok = 0;
 let fallo = 0;
@@ -34,73 +15,78 @@ const check = (nombre: string, cond: boolean, detalle = "") => {
   }
 };
 
-console.log("═══ T189 · ENTREGA INICIAL PERSONALIZADA ═══");
+const plan6 = { cuotas: 6, valorPorCuota: 1_000_000, total: 6_000_000 };
 
+console.log("═══ T189 · PLAN CUOTA NORMAL · ENTREGA INICIAL ═══");
+
+console.log("\n[1] Entrega menor o igual: plan estándar sin cambios");
+for (const entrega of [900_000, 1_000_000]) {
+  const r = aplicarEntregaInicial(plan6, entrega);
+  check(
+    `entrega ${entrega}: conserva cuota y total`,
+    r.valorPorCuota === plan6.valorPorCuota &&
+      r.total === plan6.total &&
+      r.entregaPersonalizada === 0
+  );
+}
+
+console.log("\n[2] Entrega mayor: recalcula y baja la cuota");
+{
+  const r = aplicarEntregaInicial(plan6, 2_000_000);
+  check("cuota baja de 1.000.000 a 800.000", r.valorPorCuota === 800_000);
+  check("registra la entrega personalizada", r.entregaPersonalizada === 2_000_000);
+  check("total = entrega + 5 cuotas", r.total === 6_000_000);
+}
+
+console.log("\n[3] El redondeo nunca hace subir la cuota");
+{
+  const r = aplicarEntregaInicial(plan6, 1_000_001);
+  check(
+    "si el redondeo no permite bajar, conserva el plan estándar",
+    r.valorPorCuota === 1_000_000 && r.entregaPersonalizada === 0
+  );
+}
+
+console.log("\n[4] Con varios planes, la decisión es individual");
+const estandares = [
+  plan6,
+  { cuotas: 12, valorPorCuota: 600_000, total: 7_200_000 },
+];
+const calculados = estandares.map((p) => aplicarEntregaInicial(p, 800_000));
+check(
+  "el plan de 6 mantiene su cuota de 1.000.000",
+  calculados[0].valorPorCuota === 1_000_000 &&
+    calculados[0].entregaPersonalizada === 0
+);
+check(
+  "el plan de 12 baja su cuota a 582.000",
+  calculados[1].valorPorCuota === 582_000 &&
+    calculados[1].entregaPersonalizada === 800_000
+);
+check(
+  "ninguna cuota supera su valor estándar",
+  calculados.every((p, i) => p.valorPorCuota <= estandares[i].valorPorCuota)
+);
+
+console.log("\n[5] El PDF distingue los planes personalizados y estándar");
+{
+  const r = resolverFilasFinanciacion({
+    planes: calculados.map((p, i) => ({ ...p, letra: String.fromCharCode(65 + i) })),
+    mostrarConEntrega: true,
+  });
+  check("usa la entrega del plan personalizado", r.entregaInicial === 800_000);
+  check(
+    "conserva la marca individual de cada plan",
+    (r.conEntrega[0].entregaPersonalizada ?? 0) === 0 &&
+      r.conEntrega[1].entregaPersonalizada === 800_000
+  );
+}
+
+console.log("\n[6] Integración con el PLAN CUOTA normal");
 const panel = readFileSync("src/components/viza/sales-panel.tsx", "utf8");
-
-console.log("\n[1] Cuota estándar de referencia");
-check(
-  "se calcula minCuotaEstandar desde los planes",
-  /const minCuotaEstandar = useMemo/.test(panel)
-);
-check(
-  "usa getItemPriceN para la cuota estándar",
-  /itemsFinanciablesBase\.reduce\(\s*\n\s*\(s, it\) => s \+ getItemPriceN\(it, p\.cuotas\) \* it\.quantity/.test(panel)
-);
-
-console.log("\n[2] La entrega solo baja las cuotas cuando supera la cuota estándar");
-check(
-  "existe la bandera esEntregaCustom",
-  /const esEntregaCustom =/.test(panel)
-);
-check(
-  "se compara contra minCuotaEstandar",
-  /entregaExtra > minCuotaEstandar/.test(panel)
-);
-check(
-  "el cálculo usa el saldo restante (total - entrega)",
-  /const restante = Math\.max\(0, r\.total - entregaExtra\)/.test(panel)
-);
-check(
-  "reparte entre las cuotas restantes (cuotas - 1)",
-  /const cuotasRestantes = Math\.max\(1, r\.cuotas - 1\)/.test(panel)
-);
-check(
-  "aplica redondeo comercial (millar superior)",
-  /const valorPorCuotaAjust = redondeoComercial\(restante \/ cuotasRestantes\)/.test(panel)
-);
-check(
-  "el total del plan se mantiene (entrega + cuotas redondeadas)",
-  /total: entregaExtra \+ valorPorCuotaAjust \* cuotasRestantes/.test(panel)
-);
-
-console.log("\n[3] El plan estándar se mantiene si la entrega no supera la cuota");
-check(
-  "si no es custom, usa resultados (plan estándar)",
-  /setCalculatedPlanes\(resultados\)/.test(panel)
-);
-check(
-  "avisa al vendedor cuando la entrega no supera la cuota",
-  /La entrega no supera el valor de la cuota: se usará el plan estándar\./.test(panel)
-);
-
-console.log("\n[4] El PDF solo recibe la entrega cuando es custom");
-check(
-  "payload entregaPersonalizada compara contra minCuotaEstandar",
-  /Math\.max\(0, Math\.round\(entregaPersonalizada \|\| 0\)\) >\s*\n\s*minCuotaEstandar/.test(panel)
-);
-
-console.log("\n[5] La base de costo también respeta la regla");
-check(
-  "construirBasePorItem gatea con minCuotaEstandar",
-  /entregaExtraBase > minCuotaEstandar && sumaTotal > 0/.test(panel)
-);
-
-console.log("\n[6] La UI solo muestra 'entrega personalizada' cuando es custom");
-check(
-  "aviso de entrega inicial personalizada gateado",
-  /mostrarConEntrega && Math\.round\(entregaPersonalizada \|\| 0\) > minCuotaEstandar && \(/.test(panel)
-);
+check("aplica el cálculo a cada resultado", /aplicarEntregaInicial\(r, entregaExtra\)/.test(panel));
+check("no usa una cuota mínima global", !/minCuotaEstandar/.test(panel));
+check("la pantalla usa la entrega de cada plan", /p\.entregaPersonalizada \?\? 0/.test(panel));
 
 console.log(`\n═══ Resultado: ${ok} OK · ${fallo} FALLO ═══`);
 process.exit(fallo === 0 ? 0 : 1);

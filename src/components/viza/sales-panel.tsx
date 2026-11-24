@@ -35,6 +35,7 @@ import {
 } from "@/store/cotizacion";
 import { textoHashtag, textoHashtagValorRealGs } from "@/lib/hashtag-formato";
 import { formatPYG } from "@/lib/format";
+import { aplicarEntregaInicial } from "@/lib/entrega-inicial";
 import { PlanSafra } from "./plan-safra";
 import { PlanCheque } from "./plan-cheque";
 import { PlanMayorista } from "./plan-mayorista";
@@ -775,22 +776,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       !i.name.toUpperCase().includes("CASCO") && !esProductoRegalo(i.sku)
   );
 
-  // Cuota estándar del plan (la 1ª cuota de la BD). La entrega inicial
-  // personalizada solo "baja" las cuotas cuando supera este valor; si es
-  // igual o menor, se mantiene el plan estándar (no se recalcula).
-  const minCuotaEstandar = useMemo(() => {
-    if (planes.length === 0 || itemsFinanciablesBase.length === 0) {
-      return Infinity;
-    }
-    const cuotas = planes.map((p) =>
-      itemsFinanciablesBase.reduce(
-        (s, it) => s + getItemPriceN(it, p.cuotas) * it.quantity,
-        0
-      )
-    );
-    return cuotas.length ? Math.min(...cuotas) : Infinity;
-  }, [planes, itemsFinanciablesBase]);
-
   // Recargo vivo de SIN ENTREGA (0-30 días = 0%, 31-60 días = 3%), el mismo
   // que aplica el cálculo del plan.
   const margenSinEntregaBase = (() => {
@@ -808,6 +793,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
   const construirBasePorItem = (cuotas: number, conEntrega: boolean) => {
     const n = Math.max(1, Math.floor(Number(cuotas) || 1));
     const recargoSinEntrega = conEntrega ? 0 : margenSinEntregaBase;
+    const cuotaEstandar = itemsFinanciablesBase.reduce(
+      (sum, it) => sum + getItemPriceN(it, n) * it.quantity,
+      0
+    );
+    const entregaPlan = conEntrega
+      ? aplicarEntregaInicial(
+          {
+            cuotas: n,
+            valorPorCuota: cuotaEstandar,
+            total: cuotaEstandar * n,
+          },
+          entregaExtraBase
+        ).entregaPersonalizada
+      : 0;
     const filas = itemsFinanciablesBase.map((it) => {
       const qty = it.quantity;
       const precioCuota = getItemPriceN(it, n) * qty; // cuota N del ítem
@@ -845,8 +844,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       // Entrada del ítem: si hay entrega personalizada, se reparte en
       // proporción a su precio; si no, la entrada es su 1ª cuota.
       const entregaItem = conEntrega
-        ? entregaExtraBase > minCuotaEstandar && sumaTotal > 0
-          ? entregaExtraBase * (f.totalItem / sumaTotal)
+        ? entregaPlan > 0 && sumaTotal > 0
+          ? entregaPlan * (f.totalItem / sumaTotal)
           : cuotaItem
         : 0;
       const base = valorBaseSegunCuotas({
@@ -1018,16 +1017,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       mostrarConEntrega
         ? Math.max(0, Math.round(entregaPersonalizada || 0))
         : 0;
-    // La entrega inicial personalizada solo "baja" las cuotas cuando supera
-    // el valor de la cuota estándar (plan común). Si es igual o menor, se
-    // mantiene el plan estándar (la cuota no sube).
-    const esEntregaCustom =
-      entregaExtra > 0 && entregaExtra > minCuotaEstandar;
-    if (entregaExtra > 0 && !esEntregaCustom) {
-      toast.info(
-        "La entrega no supera el valor de la cuota: se usará el plan estándar."
-      );
-    }
     if (entregaExtra > 0) {
       const minTotalPlan = Math.min(...resultados.map((r) => r.total));
       if (entregaExtra >= minTotalPlan) {
@@ -1037,27 +1026,20 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         return;
       }
     }
-    if (esEntregaCustom) {
-      const ajustados = resultados.map((r) => {
-        // Cuotas que quedan después de la entrada personalizada
-        const cuotasRestantes = Math.max(1, r.cuotas - 1);
-        const restante = Math.max(0, r.total - entregaExtra);
-        // REDONDEO COMERCIAL: la cuota se redondea SIEMPRE al millar
-        // superior (Gs exacto, sin valores quebrados). El total del plan sube
-        // a lo sumo unos miles (entrega + cuotas ≥ total estándar): el margen
-        // nunca baja. Las cuotas quedan iguales entre sí.
-        const valorPorCuotaAjust = redondeoComercial(restante / cuotasRestantes);
-        return {
-          ...r,
-          valorPorCuota: valorPorCuotaAjust,
-          total: entregaExtra + valorPorCuotaAjust * cuotasRestantes,
-          calculado: true,
-        };
-      });
-      setCalculatedPlanes(ajustados);
-    } else {
-      setCalculatedPlanes(resultados);
+    const ajustados = resultados.map((r) => ({
+      ...r,
+      ...aplicarEntregaInicial(r, entregaExtra),
+      calculado: true,
+    }));
+    if (
+      entregaExtra > 0 &&
+      ajustados.some((p) => p.entregaPersonalizada === 0)
+    ) {
+      toast.info(
+        "Si la entrega no supera la cuota de un plan, ese plan mantiene sus valores estándar."
+      );
     }
+    setCalculatedPlanes(ajustados);
 
     // Si es sin_entrega y válido, calcular también los planes ajustados
     // Ahora también se calcula cuando mostrarSinEntrega está activado
@@ -1162,6 +1144,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
           cuotas: p.cuotas,
           valorPorCuota: p.valorPorCuota,
           total: p.total,
+          entregaPersonalizada: p.entregaPersonalizada ?? 0,
         });
       });
     }
@@ -1299,14 +1282,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         // Flags para mostrar/ocultar opciones en el PDF
         mostrarConEntrega,
         mostrarSinEntrega,
-        // Entrega inicial personalizada (Gs) - solo aplica a planes CON ENTREGA
-        // y solo cuando supera la cuota estándar (así la cuota baja).
-        entregaPersonalizada:
-          mostrarConEntrega &&
-          Math.max(0, Math.round(entregaPersonalizada || 0)) >
-            minCuotaEstandar
-            ? Math.max(0, Math.round(entregaPersonalizada || 0))
-            : 0,
         planes: planesForPdf,
         planesSinEntrega: planesSinEntregaForPdf,
         // Task 117: comparativo por producto (el PDF lo dibuja tal cual)
@@ -2442,10 +2417,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
           <div id="resultado-section">
             <Section title="RESULTADO DEL PRESUPUESTO" icon={<FileText className="h-4 w-4" />}>
               {/* ENTREGA INICIAL PERSONALIZADA - aviso cuando está activa */}
-              {mostrarConEntrega && Math.round(entregaPersonalizada || 0) > minCuotaEstandar && (
+              {mostrarConEntrega && calculatedPlanes.some((p) => (p.entregaPersonalizada ?? 0) > 0) && (
                 <div className="mb-3 rounded-lg border-2 border-emerald-300 bg-emerald-50 px-4 py-3 flex items-center justify-between gap-3">
                   <p className="text-sm font-bold text-stone-800 uppercase tracking-wide">
-                    Entrega inicial incluida en cada plan
+                    Entrega inicial personalizada
                   </p>
                   <p className="text-base font-extrabold tabular-nums text-emerald-700">
                     {formatPYG(Math.round(entregaPersonalizada))}
@@ -2538,8 +2513,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                         (sp) => sp.id === p.id
                       );
                       const entregaActiva =
-                        mostrarConEntrega &&
-                        Math.round(entregaPersonalizada || 0) > minCuotaEstandar;
+                        mostrarConEntrega && (p.entregaPersonalizada ?? 0) > 0;
                       const cuotasLabelCon =
                         p.cuotas === 1
                           ? "1 pago"
@@ -2646,13 +2620,15 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 // de arriba ("1 ENTRADA + 7 CUOTAS", no "8 CUOTAS"). Con
                 // entrega inicial personalizada la entrega va como fila
                 // propia, así que el plan muestra solo las cuotas (N-1).
-                const entregaActivaComp =
-                  Math.round(entregaPersonalizada || 0) > minCuotaEstandar;
-                const rótuloPlanComp = (letra: string, cuotas: number) => {
+                const rótuloPlanComp = (
+                  letra: string,
+                  cuotas: number,
+                  entregaActiva: boolean
+                ) => {
                   if (cuotas === 1) return `${letra} · PAGO`;
                   const n = cuotas - 1;
                   const word = `CUOTA${n !== 1 ? "S" : ""}`;
-                  if (entregaActivaComp) return `${letra} · ${n} ${word}`;
+                  if (entregaActiva) return `${letra} · ${n} ${word}`;
                   return `${letra} · 1 ENTRADA + ${n} ${word}`;
                 };
                 return (
@@ -2670,7 +2646,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                               )}
                               {calculatedPlanes.map((p, idx) => (
                                 <th key={p.id} className="text-right font-bold text-stone-700 px-3 py-2">
-                                  {p.cuotas > 1 && !entregaActivaComp ? (
+                                  {p.cuotas > 1 && (p.entregaPersonalizada ?? 0) === 0 ? (
                                     // Task 118: mismo rótulo que arriba, en 2
                                     // renglones para que no se estire la tabla.
                                     <>
@@ -2678,7 +2654,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                                       <span className="block">+ {p.cuotas - 1} CUOTA{p.cuotas - 1 !== 1 ? "S" : ""}</span>
                                     </>
                                   ) : (
-                                    rótuloPlanComp(letraDe(idx), p.cuotas)
+                                    rótuloPlanComp(
+                                      letraDe(idx),
+                                      p.cuotas,
+                                      (p.entregaPersonalizada ?? 0) > 0
+                                    )
                                   )}
                                 </th>
                               ))}
@@ -2779,7 +2759,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                     <p className="mt-2 text-[11px] text-stone-500 leading-relaxed">
                       Valores por producto según la lista de cada plan; la cuota unificada es la suma de todos los productos.
                       {margenSin !== null && margenSin > 0 ? " En SIN ENTREGA (31-60 días) el +3% y el redondeo comercial se aplican sobre el total unificado, por eso el total puede variar unos miles respecto a la suma de la columna." : ""}
-                      {mostrarConEntrega && Math.round(entregaPersonalizada || 0) > minCuotaEstandar ? " Con entrega inicial personalizada la cuota unificada se recalcula sobre el total; los valores por producto son los de la lista." : ""}
+                      {mostrarConEntrega && calculatedPlanes.some((p) => (p.entregaPersonalizada ?? 0) > 0) ? " Con entrega inicial personalizada la cuota unificada se recalcula sobre el total; los valores por producto son los de la lista." : ""}
                     </p>
                   </>
                 );

@@ -36,7 +36,7 @@ const DORADO_OSCURO = "#b89853";
 
 /** Datos de la cotización ya calculada, que se incluyen en el PDF de bodas. */
 export interface WeddingPdfData {
-  planes: { letra: string; cuotas: number; valorPorCuota: number; total: number }[];
+  planes: { letra: string; cuotas: number; valorPorCuota: number; total: number; entregaPersonalizada?: number }[];
   planesSinEntrega:
     | { letra: string; cuotas: number; valorPorCuota: number; total: number; fechas: string[] }[]
     | null;
