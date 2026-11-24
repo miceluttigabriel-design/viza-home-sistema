@@ -1124,14 +1124,19 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         total: contadoAjustado,
       });
     }
-    calculatedPlanes.forEach((p, idx) => {
-      planes.push({
-        letra: String.fromCharCode(65 + idx + (incluirContadoEnPresupuesto ? 1 : 0)),
-        cuotas: p.cuotas,
-        valorPorCuota: p.valorPorCuota,
-        total: p.total,
+    // Solo se envían los planes CON ENTREGA si la casilla está marcada.
+    // El estado conserva el cálculo para no perderlo al desmarcar/marcar,
+    // pero el PDF (y la Lista de Bodas) no deben mostrarlos si están ocultos.
+    if (mostrarConEntrega) {
+      calculatedPlanes.forEach((p, idx) => {
+        planes.push({
+          letra: String.fromCharCode(65 + idx + (incluirContadoEnPresupuesto ? 1 : 0)),
+          cuotas: p.cuotas,
+          valorPorCuota: p.valorPorCuota,
+          total: p.total,
+        });
       });
-    });
+    }
 
     // REGLA INDEPENDIENTE: se incluyen en el PDF si mostrarSinEntrega está
     // marcado y hay cálculos válidos (fecha + margen). No depende del radio.

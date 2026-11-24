@@ -24,6 +24,9 @@ import {
   drawNotaComparativo,
   type ComparativoFila,
 } from "../../../../lib/pdf/presupuesto-comparativo";
+// pedido del dueño: decide qué filas de financiación se dibujan (contado /
+// con entrega / sin entrega) respetando las casillas del panel.
+import { resolverFilasFinanciacion } from "../../../../lib/pdf/presupuesto-planes";
 
 // Task 88 (pedido del dueño): el margen adicional del contado se muestra en
 // el presupuesto como "VZH 3" (Viza Home + el número del margen, SIN el
@@ -707,16 +710,14 @@ export async function POST(req: NextRequest) {
     // Planes de financiación = los de cuotas > 1. El plan "Contado"
     // (cuotas === 1) se muestra como fila propia de la tabla (opción A),
     // también cuando el presupuesto se genera SOLO con el contado.
-    const planesFin = (body.planes || []).filter((p) => p.cuotas > 1);
-    const hayContado = (body.planes || []).some((p) => p.cuotas === 1);
-    const hayPlanesConEntrega = body.mostrarConEntrega !== false && planesFin.length > 0;
-    const hayPlanesSinEntrega = body.mostrarSinEntrega !== false && body.planesSinEntrega && body.planesSinEntrega.length > 0;
-
-    // CONTADO SOLO: si la única opción es el "Plan A: Contado" (sin ningún
-    // plan de cuotas), NO se dibuja la sección "OPCIONES DE FINANCIACIÓN":
-    // sería repetir el mismo valor que ya muestra el TOTAL CONTADO de arriba.
-    const soloContado =
-      hayContado && planesFin.length === 0 && !hayPlanesSinEntrega;
+    const filasFinanciacion = resolverFilasFinanciacion(body);
+    const {
+      contado: planesContado,
+      conEntrega: planesConEntrega,
+      sinEntrega: planesSinEntrega,
+      entregaInicial,
+      soloContado,
+    } = filasFinanciacion;
 
     if (!soloContado) {
       ensureSpace(120);
@@ -728,7 +729,7 @@ export async function POST(req: NextRequest) {
       const pColValor = 150;
       const pColTotal = contentW - pColBadge - pColCuotas - pColValor;
 
-      if (!hayPlanesConEntrega && !hayPlanesSinEntrega && !hayContado) {
+      if (!filasFinanciacion.hayOpciones) {
       ensureSpace(50);
       doc.setFillColor(...LIGHT);
       doc.roundedRect(margin, y, contentW, 38, 6, 6, "F");
@@ -782,16 +783,12 @@ export async function POST(req: NextRequest) {
       };
 
       // ===== CON ENTREGA + FILA CONTADO (opción A, también contado solo) =====
-      if ((body.mostrarConEntrega !== false && planesFin.length > 0) || hayContado) {
+      if (planesConEntrega.length > 0 || planesContado.length > 0) {
         // === ENTREGA INICIAL PERSONALIZADA: fila destacada propia ===
         // Si el vendedor definió una entrega inicial distinta a la 1ª cuota
         // estándar, se muestra como fila propia arriba de los planes, y cada
         // plan muestra solo las cuotas restantes (el total de cada plan ya
         // viene ajustado: entrega + cuotas = total estándar ± redondeo Gs).
-        const entregaInicial = Math.max(
-          0,
-          Math.round(body.entregaPersonalizada || 0)
-        );
         if (entregaInicial > 0) {
           ensureSpace(rowH);
           rowBase();
@@ -819,36 +816,36 @@ export async function POST(req: NextRequest) {
           y += rowH;
           rowIdx++;
         }
-        body.planes.forEach((plan) => {
-          // === FILA CONTADO (cuotas === 1) ===
-          // Se muestra siempre que el vendedor incluya el contado en el
-          // presupuesto (incluido el caso SOLO CONTADO, sin planes).
-          if (plan.cuotas === 1) {
-            ensureSpace(rowH);
-            rowBase();
-            let ppC = margin + 10;
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(11.5);
-            doc.setTextColor(...BLUE);
-            doc.text(plan.letra, ppC, y + 17.5);
-            badge(ppC, "CONTADO", GOLD, BLUE);
-            ppC += pColBadge;
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(9);
-            doc.setTextColor(...DARK);
-            doc.text("Contado", ppC, y + 17.5);
-            ppC += pColCuotas;
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(10.5);
-            doc.setTextColor(...BLUE);
-            doc.text(formatPYG(plan.valorPorCuota), ppC, y + 17.5);
-            ppC += pColValor;
-            doc.setTextColor(...DARK);
-            doc.text(formatPYG(plan.total), margin + contentW - 10, y + 17.5, { align: "right" });
-            y += rowH;
-            rowIdx++;
-            return;
-          }
+        // === FILA CONTADO (cuotas === 1) ===
+        // Se muestra siempre que el vendedor incluya el contado en el
+        // presupuesto (incluido el caso SOLO CONTADO, sin planes).
+        planesContado.forEach((plan) => {
+          ensureSpace(rowH);
+          rowBase();
+          let ppC = margin + 10;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(11.5);
+          doc.setTextColor(...BLUE);
+          doc.text(plan.letra, ppC, y + 17.5);
+          badge(ppC, "CONTADO", GOLD, BLUE);
+          ppC += pColBadge;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(...DARK);
+          doc.text("Contado", ppC, y + 17.5);
+          ppC += pColCuotas;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10.5);
+          doc.setTextColor(...BLUE);
+          doc.text(formatPYG(plan.valorPorCuota), ppC, y + 17.5);
+          ppC += pColValor;
+          doc.setTextColor(...DARK);
+          doc.text(formatPYG(plan.total), margin + contentW - 10, y + 17.5, { align: "right" });
+          y += rowH;
+          rowIdx++;
+        });
+        // Planes CON ENTREGA visibles (la casilla ya se respetó arriba).
+        planesConEntrega.forEach((plan) => {
           ensureSpace(rowH);
           rowBase();
           let pp2 = margin + 10;
@@ -882,8 +879,8 @@ export async function POST(req: NextRequest) {
       }
 
       // ===== SIN ENTREGA (misma tabla, no bloque separado) =====
-      if (hayPlanesSinEntrega && body.planesSinEntrega) {
-        body.planesSinEntrega.forEach((plan) => {
+      if (planesSinEntrega.length > 0) {
+        planesSinEntrega.forEach((plan) => {
           ensureSpace(rowH);
           rowBase();
           let pp2 = margin + 10;
@@ -921,9 +918,9 @@ export async function POST(req: NextRequest) {
     // (cliente viejo / llamada directa), esta sección no sale y el PDF queda
     // exactamente igual que siempre.
     const compItems = body.comparativoItems || [];
-    const planesColCon = body.mostrarConEntrega !== false ? planesFin : [];
-    const tablaConAplica = planesColCon.length > 0 || hayContado;
-    const tablaSinAplica = hayPlanesSinEntrega && !!body.planesSinEntrega;
+    const planesColCon = planesConEntrega;
+    const tablaConAplica = planesColCon.length > 0 || planesContado.length > 0;
+    const tablaSinAplica = planesSinEntrega.length > 0;
     if (!soloContado && compItems.length > 0 && (tablaConAplica || tablaSinAplica)) {
       const compPorSku = new Map(compItems.map((c) => [c.sku, c]));
       // Arma las filas del comparativo: una por producto del presupuesto.
@@ -968,22 +965,19 @@ export async function POST(req: NextRequest) {
       //  - Entrega estándar: el plan son 8 pagos = 1 ENTRADA + 7 CUOTAS.
       //  - Con entrega inicial personalizada: la entrega va como fila propia
       //    arriba, así que el plan muestra solo las cuotas restantes (N-1).
-      const entregaInicialComp = Math.max(
-        0,
-        Math.round(body.entregaPersonalizada || 0)
-      );
+      // La entrega sale del helper: es 0 si CON ENTREGA está desmarcada.
 
       // --- Tabla 1: CONTADO + planes CON ENTREGA (valores de la lista) ---
-      if (tablaConAplica && (planesColCon.length > 0 || hayContado)) {
+      if (tablaConAplica) {
         const colsCon = [
-          ...(hayContado
+          ...(planesContado.length > 0
             ? [{ titulo: "CONTADO", total: body.contadoAjustado ?? null }]
             : []),
           ...planesColCon.map((p) => ({
             // Task 118: mismo rótulo que la fila del plan arriba (1 ENTRADA +
             // N-1 CUOTAS; con entrega personalizada solo N-1 CUOTAS). En 2
             // líneas para que entre en la columna.
-            ...(entregaInicialComp > 0
+            ...(entregaInicial > 0
               ? {
                   titulo: `${p.letra} · ${p.cuotas - 1} CUOTA${
                     p.cuotas - 1 !== 1 ? "S" : ""
@@ -1011,21 +1005,21 @@ export async function POST(req: NextRequest) {
           contentW,
           y,
           cols: colsCon,
-          filas: filasDe(hayContado, planesColCon, "valoresPorCuotas"),
+          filas: filasDe(planesContado.length > 0, planesColCon, "valoresPorCuotas"),
           // Wrapper SIN estado: el helper pasa su y viva; acá solo se
           // decide si abre página (franja vendedor + footer respetados).
           ensureSpace: (curY, n) => (curY + n > yVend - 12 ? (doc.addPage(), 60) : curY),
         });
         comparativoDibujado = true;
-        if (entregaInicialComp > 0 && planesColCon.length > 0) {
+        if (entregaInicial > 0 && planesColCon.length > 0) {
           lineasNota.push(
-            `La entrega inicial (Gs ${entregaInicialComp.toLocaleString("es-PY")}) se descuenta del total del plan; los valores por producto son los de la lista.`
+            `La entrega inicial (Gs ${entregaInicial.toLocaleString("es-PY")}) se descuenta del total del plan; los valores por producto son los de la lista.`
           );
         }
       }
 
       // --- Tabla 2: planes SIN ENTREGA INICIAL (solo si salen en el PDF) ---
-      if (tablaSinAplica && body.planesSinEntrega) {
+      if (tablaSinAplica) {
         ensureSpace(110);
         y += 14;
         drawSectionTitle(
@@ -1040,11 +1034,11 @@ export async function POST(req: NextRequest) {
           margin,
           contentW,
           y,
-          cols: body.planesSinEntrega.map((p) => ({
+          cols: planesSinEntrega.map((p) => ({
             titulo: `${p.letra} · ${p.cuotas} CUOTA${p.cuotas !== 1 ? "S" : ""}`,
             total: p.valorPorCuota,
           })),
-          filas: filasDe(false, body.planesSinEntrega, "valoresSinEntrega"),
+          filas: filasDe(false, planesSinEntrega, "valoresSinEntrega"),
           ensureSpace: (curY, n) => (curY + n > yVend - 12 ? (doc.addPage(), 60) : curY),
         });
         comparativoDibujado = true;
