@@ -1278,6 +1278,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         planes: planesForPdf,
         planesSinEntrega: planesSinEntregaForPdf,
         // Task 117: comparativo por producto (el PDF lo dibuja tal cual)
+        // pedido del dueño: el PDF sigue la vista elegida. Si está en
+        // "Cuota unificada" NO se manda el comparativo.
+        incluirComparativo: vistaComparativo,
         comparativoItems,
       };
 
@@ -2418,8 +2421,8 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 </div>
               )}
               {/* Task 116: SELECTOR DE VISTA — unificado (de siempre) o
-                  comparativo por producto. SOLO cambia lo que se ve en
-                  pantalla; el cálculo y el PDF no se tocan. */}
+                  comparativo por producto. El cálculo no se toca; el PDF
+                  respeta esta vista (unificada = sin comparativo). */}
               <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                 <p className="text-[11px] font-semibold uppercase text-stone-500 tracking-wide">
                   Vista del cálculo

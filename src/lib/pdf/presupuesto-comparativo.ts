@@ -67,6 +67,17 @@ export function debeMostrarComparativo(
   return items.filter((c) => c.regalo !== true).length > 1;
 }
 
+// pedido del dueño: el PDF debe seguir la vista elegida en el panel.
+// "Cuota unificada" = sin comparativo; "Por producto (comparativo)" = con
+// comparativo, siempre que haya 2+ productos financiables.
+// Sin la bandera (clientes viejos / llamada directa) no se dibuja.
+export function debeIncluirComparativoEnPdf(
+  vistaComparativo: boolean | undefined,
+  items: { regalo?: boolean }[]
+): boolean {
+  return vistaComparativo === true && debeMostrarComparativo(items);
+}
+
 export interface TablaComparativoOpts {
   margin: number;
   contentW: number;

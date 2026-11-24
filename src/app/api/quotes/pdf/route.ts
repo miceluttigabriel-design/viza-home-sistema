@@ -22,7 +22,7 @@ import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
 import {
   drawTablaComparativo,
   drawNotaComparativo,
-  debeMostrarComparativo,
+  debeIncluirComparativoEnPdf,
   type ComparativoFila,
 } from "../../../../lib/pdf/presupuesto-comparativo";
 // pedido del dueño: decide qué filas de financiación se dibujan (contado /
@@ -110,6 +110,9 @@ interface PdfPayload {
   // SOLO PRESENTACIÓN: valores por producto ya calculados por el panel
   // (priceN de la lista × cantidad — la misma fuente del cálculo unificado).
   // Opcional: si no viene, el PDF sale EXACTAMENTE igual que siempre.
+  // pedido del dueño: el PDF sigue la vista del panel — "Cuota unificada"
+  // (false / ausente) NO dibuja el comparativo.
+  incluirComparativo?: boolean;
   comparativoItems?: {
     sku: string;
     regalo: boolean;
@@ -924,7 +927,7 @@ export async function POST(req: NextRequest) {
     const tablaSinAplica = planesSinEntrega.length > 0;
     if (
       !soloContado &&
-      debeMostrarComparativo(compItems) &&
+      debeIncluirComparativoEnPdf(body.incluirComparativo, compItems) &&
       (tablaConAplica || tablaSinAplica)
     ) {
       const compPorSku = new Map(compItems.map((c) => [c.sku, c]));
