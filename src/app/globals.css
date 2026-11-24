@@ -1,3 +1,7 @@
+/* Fuente Montserrat (identidad VIZA HOME). Va PRIMERO: CSS exige que todos
+   los @import precedan a las demás reglas, incluso a los de Tailwind una vez
+   expandidos. */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -368,7 +372,7 @@ tr:hover td.celda-costo-editado {
    FUENTE MONTSERRAT - Identidad VIZA HOME
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+/* El @import de Montserrat va al inicio del archivo (requisito de CSS). */
 
 /* Header: VIZA HOME, slogan, COTIZADOR */
 header h1,
