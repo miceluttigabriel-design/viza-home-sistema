@@ -57,6 +57,16 @@ export interface ComparativoFila {
   valores: (number | null)[];
 }
 
+// pedido del dueño: con UN SOLO producto financiable no hay nada que
+// comparar; la tabla repetiría los mismos valores de OPCIONES DE
+// FINANCIACIÓN y ensuciaría el presupuesto. Los regalos no cuentan (van con
+// "—"): se necesitan al menos 2 productos que se financian.
+export function debeMostrarComparativo(
+  items: { regalo?: boolean }[]
+): boolean {
+  return items.filter((c) => c.regalo !== true).length > 1;
+}
+
 export interface TablaComparativoOpts {
   margin: number;
   contentW: number;

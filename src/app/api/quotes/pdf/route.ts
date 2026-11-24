@@ -22,6 +22,7 @@ import { datosVendedorDeSesion } from "../../../../lib/vendedor-quote";
 import {
   drawTablaComparativo,
   drawNotaComparativo,
+  debeMostrarComparativo,
   type ComparativoFila,
 } from "../../../../lib/pdf/presupuesto-comparativo";
 // pedido del dueño: decide qué filas de financiación se dibujan (contado /
@@ -921,7 +922,11 @@ export async function POST(req: NextRequest) {
     const planesColCon = planesConEntrega;
     const tablaConAplica = planesColCon.length > 0 || planesContado.length > 0;
     const tablaSinAplica = planesSinEntrega.length > 0;
-    if (!soloContado && compItems.length > 0 && (tablaConAplica || tablaSinAplica)) {
+    if (
+      !soloContado &&
+      debeMostrarComparativo(compItems) &&
+      (tablaConAplica || tablaSinAplica)
+    ) {
       const compPorSku = new Map(compItems.map((c) => [c.sku, c]));
       // Arma las filas del comparativo: una por producto del presupuesto.
       // CONTADO usa el MISMO subtotal con margen que ya muestra la tabla de
