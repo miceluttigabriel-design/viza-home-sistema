@@ -148,7 +148,8 @@ interface CotizacionState {
   // Si el vendedor define un valor > 0, la ENTRADA del plan CON ENTREGA pasa
   // a ser ese monto (en vez de la 1ª cuota estándar de la BD). La entrega se
   // descuenta del VALOR BASE del plan y el margen de 1,5% por cuota se aplica
-  // solo al saldo financiado: la cuota y el total del plan bajan.
+  // solo al saldo financiado: si entrega más que la 1ª cuota, la cuota y el
+  // total bajan; si entrega menos, suben (financia más).
   // 0 = usar el valor estándar (comportamiento de siempre).
   entregaPersonalizada: number; // default 0
 

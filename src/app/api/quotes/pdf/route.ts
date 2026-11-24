@@ -792,7 +792,8 @@ export async function POST(req: NextRequest) {
         // estándar, se muestra como fila propia arriba de los planes, y cada
         // plan muestra solo las cuotas restantes. El total de cada plan ya
         // viene ajustado: la entrega se descuenta del valor base y el margen
-        // se calcula sobre el saldo (entrega + cuotas con menos interés).
+        // se calcula sobre el saldo (más entrega = menos interés; menos
+        // entrega que la 1ª cuota = más interés).
         if (entregaInicial > 0) {
           ensureSpace(rowH);
           rowBase();

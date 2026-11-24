@@ -991,9 +991,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
     // === ENTREGA INICIAL PERSONALIZADA (cuadrito opcional) ===
     // La entrega se descuenta del VALOR BASE del plan (precio de lista, sin el
     // interés de las cuotas financiadas) y el margen de 1,5% por cuota se
-    // aplica SOLO al saldo que queda financiado. Por eso, cuando el cliente
-    // entrega más que la 1ª cuota, la cuota y el TOTAL del plan bajan (paga
-    // menos interés) y entregar de más siempre le conviene.
+    // aplica SOLO al saldo que queda financiado:
+    //  · entrega MAYOR que la 1ª cuota → la cuota y el total BAJAN;
+    //  · entrega MENOR que la 1ª cuota → la cuota y el total SUBEN (financia
+    //    más, con la misma tasa mensual);
+    //  · entrega vacía o igual a la 1ª cuota → plan de siempre.
     // La cuenta exacta está en aplicarEntregaInicial().
     const entregaExtra =
       mostrarConEntrega
@@ -1028,7 +1030,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
       ajustados.some((p) => p.entregaPersonalizada === 0)
     ) {
       toast.info(
-        "Si la entrega no supera la cuota de un plan, ese plan mantiene sus valores estándar."
+        "Si la entrega coincide con la 1ª cuota de un plan, ese plan mantiene sus valores estándar."
       );
     }
     setCalculatedPlanes(ajustados);
@@ -2304,10 +2306,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
 
           {/* CUADRITO: VALOR DE ENTREGA INICIAL PERSONALIZADO (opcional) */}
           {/* Solo visible cuando CON ENTREGA INICIAL está marcado. Si queda
-              vacío, se usa la entrada estándar (la 1ª cuota de la BD). Si el
-              vendedor pone un valor mayor, la entrega se descuenta del valor
-              base y el 1,5% mensual se aplica solo al saldo financiado: la
-              cuota y el total del plan bajan. */}
+              vacío, se usa la entrada estándar (la 1ª cuota de la BD). La
+              entrega se descuenta del valor base y el 1,5% mensual se aplica
+              solo al saldo: si entrega más que la 1ª cuota, la cuota baja; si
+              entrega menos (ej. cuota 300.000 y tiene 250.000), la cuota sube. */}
           {mostrarConEntrega && (
             <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50/60 p-4">
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
@@ -2338,9 +2340,10 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                 </div>
               </div>
               <p className="text-[11px] leading-snug text-stone-500 mt-2">
-                Si la entrega supera la 1ª cuota, la cuota y el total del plan
-                bajan: el 1,5% mensual se calcula solo sobre el saldo que queda
-                financiado.
+                El 1,5% mensual se calcula solo sobre el saldo que queda
+                financiado: si la entrega supera la 1ª cuota, la cuota y el
+                total bajan; si entrega menos (ej. cuota 300.000 y tiene
+                250.000), la cuota sube.
               </p>
             </div>
           )}

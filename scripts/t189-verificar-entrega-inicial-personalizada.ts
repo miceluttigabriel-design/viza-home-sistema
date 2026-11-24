@@ -22,8 +22,8 @@ const plan6 = { cuotas: 6, valorPorCuota: 1_000_000, total: 6_000_000 };
 
 console.log("═══ T189 · PLAN CUOTA NORMAL · ENTREGA INICIAL ═══");
 
-console.log("\n[1] Entrega menor o igual: plan estándar sin cambios");
-for (const entrega of [900_000, 1_000_000]) {
+console.log("\n[1] Entrega vacía o igual a la 1ª cuota: plan estándar");
+for (const entrega of [0, 1_000_000]) {
   const r = aplicarEntregaInicial(plan6, entrega);
   check(
     `entrega ${entrega}: conserva cuota y total`,
@@ -44,16 +44,32 @@ console.log("\n[2] Entrega mayor: baja la cuota Y el total del plan");
   );
 }
 
-console.log("\n[3] El redondeo nunca hace subir la cuota");
+console.log("\n[3] Entrega MENOR: la cuota y el total suben (financia más)");
+{
+  // Caso del dueño: la cuota es 300.000 y el cliente tiene 250.000.
+  const plan = { cuotas: 6, valorPorCuota: 300_000, total: 1_800_000 };
+  const r = aplicarEntregaInicial(plan, 250_000);
+  check("cuota sube de 300.000 a 311.000", r.valorPorCuota === 311_000);
+  check("total sube a 1.805.000", r.total === 1_805_000);
+  check("registra la entrega personalizada", r.entregaPersonalizada === 250_000);
+  check(
+    "la cuota resultante es mayor a la estándar",
+    r.valorPorCuota > plan.valorPorCuota && r.total > plan.total
+  );
+}
+
+console.log("\n[4] El redondeo nunca hace pagar de más por entregar de más");
 {
   const r = aplicarEntregaInicial(plan6, 1_000_001);
   check(
     "si el redondeo no permite bajar, conserva el plan estándar",
-    r.valorPorCuota === 1_000_000 && r.entregaPersonalizada === 0
+    r.valorPorCuota === 1_000_000 &&
+      r.total === plan6.total &&
+      r.entregaPersonalizada === 0
   );
 }
 
-console.log("\n[4] El margen se calcula sobre el saldo (no sobre el total)");
+console.log("\n[5] El margen se calcula sobre el saldo (no sobre el total)");
 {
   const base = valorBasePlanEstandar(plan6);
   check(
@@ -61,8 +77,6 @@ console.log("\n[4] El margen se calcula sobre el saldo (no sobre el total)");
     Math.abs(base - 5_651_162.790697674) < 0.01,
     `base ${base.toFixed(2)}`
   );
-  // 2.000.000 de entrega: saldo = base − entrega; el 1,5% × 5 cuotas se
-  // aplica solo a ese saldo.
   const r = aplicarEntregaInicial(plan6, 2_000_000);
   const esperado = Math.ceil(
     ((base - 2_000_000) * (1 + 5 * 0.015)) / 5 / 1000
@@ -74,32 +88,31 @@ console.log("\n[4] El margen se calcula sobre el saldo (no sobre el total)");
   );
 }
 
-console.log("\n[5] Con varios planes, la decisión es individual");
+console.log("\n[6] Con varios planes, cada uno se mueve según su 1ª cuota");
 const estandares = [
   plan6,
   { cuotas: 12, valorPorCuota: 600_000, total: 7_200_000 },
 ];
 const calculados = estandares.map((p) => aplicarEntregaInicial(p, 800_000));
 check(
-  "el plan de 6 mantiene su cuota de 1.000.000",
-  calculados[0].valorPorCuota === 1_000_000 &&
-    calculados[0].entregaPersonalizada === 0
+  "el plan de 6 (cuota 1.000.000) SUBE a 1.043.000",
+  calculados[0].valorPorCuota === 1_043_000 &&
+    calculados[0].entregaPersonalizada === 800_000
 );
 check(
-  "el plan de 12 baja su cuota a 579.000",
+  "el plan de 12 (cuota 600.000) BAJA a 579.000",
   calculados[1].valorPorCuota === 579_000 &&
     calculados[1].entregaPersonalizada === 800_000
 );
 check(
-  "ninguna cuota supera su valor estándar",
-  calculados.every((p, i) => p.valorPorCuota <= estandares[i].valorPorCuota)
-);
-check(
-  "el plan de 12 también baja su total",
-  calculados[1].total === 7_169_000 && calculados[1].total < estandares[1].total
+  "el plan de 6 sube su total y el de 12 lo baja",
+  calculados[0].total === 6_015_000 &&
+    calculados[0].total > estandares[0].total &&
+    calculados[1].total === 7_169_000 &&
+    calculados[1].total < estandares[1].total
 );
 
-console.log("\n[6] Caso del dueño: 6 cuotas, entrega 2.300.000");
+console.log("\n[7] Caso del dueño: 6 cuotas, entrega 2.300.000");
 {
   const plan = { cuotas: 6, valorPorCuota: 1_018_000, total: 6_108_000 };
   const r = aplicarEntregaInicial(plan, 2_300_000);
@@ -111,7 +124,7 @@ console.log("\n[6] Caso del dueño: 6 cuotas, entrega 2.300.000");
   check("con 3.000.000: total 5.960.000", r3.total === 5_960_000);
 }
 
-console.log("\n[7] El PDF distingue los planes personalizados y estándar");
+console.log("\n[8] El PDF distingue los planes personalizados y estándar");
 {
   const r = resolverFilasFinanciacion({
     planes: calculados.map((p, i) => ({ ...p, letra: String.fromCharCode(65 + i) })),
@@ -120,12 +133,12 @@ console.log("\n[7] El PDF distingue los planes personalizados y estándar");
   check("usa la entrega del plan personalizado", r.entregaInicial === 800_000);
   check(
     "conserva la marca individual de cada plan",
-    (r.conEntrega[0].entregaPersonalizada ?? 0) === 0 &&
+    r.conEntrega[0].entregaPersonalizada === 800_000 &&
       r.conEntrega[1].entregaPersonalizada === 800_000
   );
 }
 
-console.log("\n[8] Integración con el PLAN CUOTA normal");
+console.log("\n[9] Integración con el PLAN CUOTA normal");
 const panel = readFileSync("src/components/viza/sales-panel.tsx", "utf8");
 check("aplica el cálculo a cada resultado", /aplicarEntregaInicial\(r, entregaExtra\)/.test(panel));
 check("no usa una cuota mínima global", !/minCuotaEstandar/.test(panel));
