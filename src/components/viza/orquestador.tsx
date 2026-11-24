@@ -3,8 +3,8 @@
 // ═══════════════════════════════════════════════════════════════════
 // SISTEMA ORQUESTADOR DE VIZA HOME — cara "ECOSISTEMA ISOMÉTRICO"
 //
-//   · CENTRO-ARRIBA: CASA CENTRAL de KATUETE, edificio de 2 pisos
-//     (planta baja = sucursal Katuete / planta alta = Central) = LA BASE
+//   · CENTRO-ARRIBA: CASA CENTRAL de KATUETE con la FACHADA REAL de la
+//     sucursal (foto recortada con fondo transparente) = LA BASE
 //   · IZQUIERDA: columna MÓDULOS → AUTOMATIZACIÓN → LA BASE
 //   · ADELANTE: las 3 sucursales (Nueva Esperanza, La Paloma y
 //     Saltos del Guairá) en fila frente a la Central, con sus líneas
@@ -214,8 +214,8 @@ function SucursalBanner({ nombre }: { nombre: string }) {
   );
 }
 
-// Cartel de la Casa Central: va arriba del edificio de 2 pisos y aclara
-// que la Central está en el primer piso y abajo está el salón de Katuete.
+// Cartel de la Casa Central: va arriba de la fachada real y aclara que la
+// Central está en el primer piso y abajo está el salón de Katuete.
 function CentralBanner() {
   return (
     <div
@@ -234,10 +234,10 @@ function CentralBanner() {
   );
 }
 
-// ─── Edificio isométrico dibujado en SVG ───
-// `pisos` permite dibujar la CASA CENTRAL de Katuete con 2 plantas: la
-// planta baja (sucursal) y arriba la Central, como es en la realidad.
-function Edificio({ x, y, s = 1, h = 56, central = false, pisos = 1 }: { x: number; y: number; s?: number; h?: number; central?: boolean; pisos?: number }) {
+// ─── Edificio isométrico dibujado en SVG (sucursales) ───
+// La Casa Central ya no usa este dibujo: muestra la fachada REAL de la
+// sucursal de Katuete (public/orquestador/central-viza-home.webp).
+function Edificio({ x, y, s = 1, h = 56, pisos = 1 }: { x: number; y: number; s?: number; h?: number; pisos?: number }) {
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
       {/* plataforma */}
@@ -284,26 +284,12 @@ function Edificio({ x, y, s = 1, h = 56, central = false, pisos = 1 }: { x: numb
           </g>
         );
       })}
-      {/* camionetas en el patio */}
-      <g transform={`translate(${central ? 20 : 34} ${h + 30})`}>
+      {/* camioneta en el patio */}
+      <g transform={`translate(34 ${h + 30})`}>
         <polygon points="0,0 34,17 34,29 0,12" fill="#2563eb" />
         <polygon points="34,17 46,11 46,23 34,29" fill="#1e3a8a" />
         <polygon points="0,0 12,-6 46,11 34,17" fill="#e2e8f0" />
       </g>
-      {central && (
-        <>
-          <g transform={`translate(-30 ${h + 38})`}>
-            <polygon points="0,0 34,17 34,29 0,12" fill="#2563eb" />
-            <polygon points="34,17 46,11 46,23 34,29" fill="#1e3a8a" />
-            <polygon points="0,0 12,-6 46,11 34,17" fill="#e2e8f0" />
-          </g>
-          <g transform={`translate(-80 ${h + 12})`}>
-            <polygon points="0,0 34,17 34,29 0,12" fill="#2563eb" />
-            <polygon points="34,17 46,11 46,23 34,29" fill="#1e3a8a" />
-            <polygon points="0,0 12,-6 46,11 34,17" fill="#e2e8f0" />
-          </g>
-        </>
-      )}
     </g>
   );
 }
@@ -359,12 +345,11 @@ const R = {
   compra: { x: 32, y: 408, w: 268, h: 64 },
   // La Base cierra la columna, debajo del panel de automatización.
   base: { x: 32, y: 504, w: 268, h: 70 },
-  // Task 185 (pedido del dueño): Katuete es la CASA CENTRAL (planta baja =
-  // sucursal, planta alta = Central). Ya no se dibuja aparte: el edificio de
-  // Katuete es el edificio central de 2 pisos. Las otras 3 sucursales van
-  // adelante, en una fila frente a la Central.
-  // Cartel arriba de la Casa Central (2 pisos).
-  centralBanner: { x: 630, y: 64, w: 300, h: 56 },
+  // Katuete es la CASA CENTRAL. Ya no se dibuja con el edificio isométrico
+  // genérico: el centro y arriba va la FACHADA REAL de la sucursal (foto con
+  // fondo transparente). Las otras 3 sucursales van adelante, en una fila.
+  // Cartel arriba de la Casa Central.
+  centralBanner: { x: 630, y: 150, w: 300, h: 56 },
   neBanner: { x: 230, y: 600, w: 300, h: 56 },
   lpBanner: { x: 610, y: 600, w: 300, h: 56 },
   sgBanner: { x: 990, y: 600, w: 300, h: 56 },
@@ -394,6 +379,51 @@ function Escenario({ children }: { children: ReactNode }) {
 
 function Conector({ color = DORADO }: { color?: string }) {
   return <div className="mx-auto h-7 w-0.5 rounded" style={{ background: `linear-gradient(${color}, ${color}55)`, boxShadow: `0 0 10px ${color}66` }} />;
+}
+
+// ─── Casa Central: fachada real sobre una plataforma isométrica ───
+// La foto de la sucursal se apoya en el mismo tipo de plataforma que usan
+// las sucursales del dibujo (rombo azul). Así queda "medio 3D", a escala y
+// apenas más grande que una sucursal: no un cartel gigante.
+const CENTRAL_W = 500;
+// La foto mide 1200x335: se mantiene la proporción exacta para no deformarla.
+const CENTRAL_H = Math.round((CENTRAL_W * 335) / 1200); // 140
+function CasaCentral({ cx = 780, base = 450 }: { cx?: number; base?: number }) {
+  return (
+    <g>
+      {/* halo de luz en el piso */}
+      <ellipse cx={cx} cy={base + 18} rx={300} ry={40} fill="url(#centralGlow)">
+        <animate attributeName="opacity" values="0.55;1;0.55" dur="5s" repeatCount="indefinite" />
+      </ellipse>
+      {/* plataforma isométrica, igual estilo que las sucursales */}
+      <polygon
+        points={`${cx},${base - 62} ${cx + 270},${base} ${cx},${base + 62} ${cx - 270},${base}`}
+        fill="#101d36"
+        stroke="#3b82f6"
+        strokeOpacity="0.8"
+        strokeWidth="1.5"
+        filter="url(#glow)"
+      />
+      <polygon
+        points={`${cx},${base - 50} ${cx + 240},${base} ${cx},${base + 50} ${cx - 240},${base}`}
+        fill="#1a2a48"
+        opacity="0.8"
+      />
+      {/* fachada real de Katuete (foto recortada, fondo transparente) */}
+      <image
+        href="/orquestador/central-viza-home.webp"
+        x={cx - CENTRAL_W / 2}
+        y={base - CENTRAL_H}
+        width={CENTRAL_W}
+        height={CENTRAL_H}
+        preserveAspectRatio="xMidYMid meet"
+        style={{
+          filter:
+            "drop-shadow(0 12px 14px rgba(0,0,0,0.55)) drop-shadow(0 0 22px rgba(56,160,255,0.22))",
+        }}
+      />
+    </g>
+  );
 }
 
 export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onGoGestion, onGoCompra, onGoDistribucion }: OrquestadorProps) {
@@ -479,17 +509,22 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
               <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
                 <feGaussianBlur stdDeviation="4" />
               </filter>
+              {/* Halo azul que apoya la fachada real de la Casa Central. */}
+              <radialGradient id="centralGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.40" />
+                <stop offset="55%" stopColor="#2563eb" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
+              </radialGradient>
               {(Object.keys(COLORES) as Estilo[]).map((t) => (
                 <Flecha key={t} id={`f-${t}`} color={COLORES[t]} />
               ))}
             </defs>
 
-            {/* edificios: la Central de Katuete (2 pisos, centro y arriba) y
-                las 3 sucursales adelante, en una fila */}
+            {/* Las 3 sucursales, adelante y en fila. La Casa Central (centro
+                y arriba) se muestra aparte con la FACHADA REAL de Katuete. */}
             <Edificio x={380} y={760} />
             <Edificio x={760} y={760} />
             <Edificio x={1140} y={760} />
-            <Edificio x={780} y={320} s={1.4} h={70} pisos={2} central />
 
             {/* Panel automatización → cuadro de La Base (conectores cortos en
                 la columna izquierda) */}
@@ -498,25 +533,30 @@ export function Orquestador({ user, onGoBase, onGoStock, onGoSales, onGoCrm, onG
             <Linea d="M 218 488 L 218 504" t="sync" ida={false} />
             <Linea d="M 280 488 L 280 504" t="post" ida={false} />
             {/* La Base → edificio central */}
-            <Linea d="M 300 539 C 400 560, 540 505, 620 438" t="sync" />
+            <Linea d="M 300 539 C 410 566, 520 514, 566 458" t="sync" />
 
             {/* Nueva Esperanza → Central */}
             <Linea d="M 530 612 C 570 600, 592 520, 626 452" t="pedidos" ida={false} />
             <Linea d="M 530 630 C 575 620, 606 545, 640 470" t="fisico" ida={false} />
-            <Linea d="M 530 648 C 582 640, 620 570, 654 488" t="sync" ida={false} />
+            <Linea d="M 530 648 C 582 640, 620 570, 654 481" t="sync" ida={false} />
             {/* La Paloma → Central */}
-            <Linea d="M 680 600 C 708 570, 740 535, 756 520" t="pedidos" ida={false} />
-            <Linea d="M 780 600 L 780 518" t="fisico" ida={false} />
-            <Linea d="M 860 600 C 832 570, 812 535, 804 520" t="sync" ida={false} />
+            <Linea d="M 680 600 C 708 570, 740 535, 756 500" t="pedidos" ida={false} />
+            <Linea d="M 780 600 L 780 498" t="fisico" ida={false} />
+            <Linea d="M 860 600 C 832 570, 812 535, 804 500" t="sync" ida={false} />
             {/* Saltos del Guairá → Central */}
             <Linea d="M 990 612 C 950 600, 928 520, 934 452" t="pedidos" ida={false} />
             <Linea d="M 990 630 C 945 620, 914 545, 920 470" t="fisico" ida={false} />
-            <Linea d="M 990 648 C 938 640, 900 570, 906 488" t="sync" ida={false} />
+            <Linea d="M 990 648 C 938 640, 900 570, 906 481" t="sync" ida={false} />
 
-            {/* Módulos (columna izquierda) ↔ Central */}
-            <Linea d="M 308 79 C 395 130, 500 250, 620 356" t="pedidos" ida={false} />
-            <Linea d="M 308 159 C 400 200, 505 285, 622 378" t="pagos" ida={false} />
-            <Linea d="M 308 239 C 405 275, 510 320, 624 400" t="post" ida={false} />
+            {/* Módulos (columna izquierda) → Central: llegan al lateral
+                izquierdo de la fachada real. */}
+            <Linea d="M 308 79 C 395 130, 470 270, 524 396" t="pedidos" ida={false} />
+            <Linea d="M 308 159 C 400 200, 480 300, 527 418" t="pagos" ida={false} />
+            <Linea d="M 308 239 C 405 275, 490 330, 530 440" t="post" ida={false} />
+
+            {/* Casa Central: fachada REAL de la sucursal de Katuete sobre
+                plataforma isométrica, a escala con las sucursales. */}
+            <CasaCentral />
           </svg>
 
           {/* Columna izquierda: MÓDULOS DEL SISTEMA → AUTOMATIZACIÓN /
