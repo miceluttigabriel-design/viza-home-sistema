@@ -146,9 +146,9 @@ interface CotizacionState {
 
   // === ENTREGA INICIAL PERSONALIZADA (Plan CUOTA) ===
   // Si el vendedor define un valor > 0, la ENTRADA del plan CON ENTREGA pasa
-  // a ser ese monto (en vez de la 1ª cuota estándar de la BD) y el resto
-  // (total del plan − entrega) se reparte entre las cuotas restantes.
-  // El TOTAL del plan no cambia => el margen de la BD queda intacto.
+  // a ser ese monto (en vez de la 1ª cuota estándar de la BD). La entrega se
+  // descuenta del VALOR BASE del plan y el margen de 1,5% por cuota se aplica
+  // solo al saldo financiado: la cuota y el total del plan bajan.
   // 0 = usar el valor estándar (comportamiento de siempre).
   entregaPersonalizada: number; // default 0
 

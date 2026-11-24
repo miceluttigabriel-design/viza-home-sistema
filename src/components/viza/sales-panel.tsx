@@ -35,7 +35,10 @@ import {
 } from "@/store/cotizacion";
 import { textoHashtag, textoHashtagValorRealGs } from "@/lib/hashtag-formato";
 import { formatPYG } from "@/lib/format";
-import { aplicarEntregaInicial } from "@/lib/entrega-inicial";
+import {
+  aplicarEntregaInicial,
+  valorBasePlanEstandar,
+} from "@/lib/entrega-inicial";
 import { PlanSafra } from "./plan-safra";
 import { PlanCheque } from "./plan-cheque";
 import { PlanMayorista } from "./plan-mayorista";
@@ -784,29 +787,13 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
     return calcularMargenPorcentaje(dias) ?? 0;
   })();
 
-  const entregaExtraBase = mostrarConEntrega
-    ? Math.max(0, Math.round(entregaPersonalizada || 0))
-    : 0;
-
   // Devuelve { porItem, valorBase } de un plan: base de CADA producto y su
   // suma. `cuotas` es la cantidad de pagos del plan (la 1ª es la entrada).
+  // La base es el PRECIO DE LISTA: no depende de la entrega personalizada
+  // (la entrega cambia la cuota y el total del plan, no el valor base).
   const construirBasePorItem = (cuotas: number, conEntrega: boolean) => {
     const n = Math.max(1, Math.floor(Number(cuotas) || 1));
     const recargoSinEntrega = conEntrega ? 0 : margenSinEntregaBase;
-    const cuotaEstandar = itemsFinanciablesBase.reduce(
-      (sum, it) => sum + getItemPriceN(it, n) * it.quantity,
-      0
-    );
-    const entregaPlan = conEntrega
-      ? aplicarEntregaInicial(
-          {
-            cuotas: n,
-            valorPorCuota: cuotaEstandar,
-            total: cuotaEstandar * n,
-          },
-          entregaExtraBase
-        ).entregaPersonalizada
-      : 0;
     const filas = itemsFinanciablesBase.map((it) => {
       const qty = it.quantity;
       const precioCuota = getItemPriceN(it, n) * qty; // cuota N del ítem
@@ -833,7 +820,6 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         totalItem: totalItem > 0 ? totalItem * (1 + recargoSinEntrega) : 0,
       };
     });
-    const sumaTotal = filas.reduce((sum, f) => sum + f.totalItem, 0);
     const porItem: Record<string, number> = {};
     for (const f of filas) {
       if (f.totalItem <= 0 || f.costo <= 0) {
@@ -841,19 +827,14 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
         continue;
       }
       const cuotaItem = f.totalItem / n;
-      // Entrada del ítem: si hay entrega personalizada, se reparte en
-      // proporción a su precio; si no, la entrada es su 1ª cuota.
-      const entregaItem = conEntrega
-        ? entregaPlan > 0 && sumaTotal > 0
-          ? entregaPlan * (f.totalItem / sumaTotal)
-          : cuotaItem
-        : 0;
+      // Entrada del ítem = su 1ª cuota estándar (la base no cambia con la
+      // entrega personalizada).
       const base = valorBaseSegunCuotas({
         total: f.totalItem,
         cuotas: n,
         valorPorCuota: cuotaItem,
         conEntrega,
-        entregaPersonalizada: entregaItem,
+        entregaPersonalizada: 0,
       });
       // REGLA DEL DUEÑO: el valor base SIEMPRE es mayor que el costo. Si con
       // el margen/precio disponible no se cumple, la línea muestra "—" en vez
@@ -1008,20 +989,31 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
     });
 
     // === ENTREGA INICIAL PERSONALIZADA (cuadrito opcional) ===
-    // Si el vendedor define un valor de entrega distinto, la ENTRADA del plan
-    // (que por estándar es la 1ª cuota de la BD) pasa a ser ese monto y el
-    // resto (total del plan − entrega) se reparte entre las cuotas restantes.
-    // REGLA DE MARGEN: el TOTAL del plan se mantiene (entrega + cuotas =
-    // total estándar ± redondeo en Gs), así el margen de la BD queda intacto.
+    // La entrega se descuenta del VALOR BASE del plan (precio de lista, sin el
+    // interés de las cuotas financiadas) y el margen de 1,5% por cuota se
+    // aplica SOLO al saldo que queda financiado. Por eso, cuando el cliente
+    // entrega más que la 1ª cuota, la cuota y el TOTAL del plan bajan (paga
+    // menos interés) y entregar de más siempre le conviene.
+    // La cuenta exacta está en aplicarEntregaInicial().
     const entregaExtra =
       mostrarConEntrega
         ? Math.max(0, Math.round(entregaPersonalizada || 0))
         : 0;
     if (entregaExtra > 0) {
-      const minTotalPlan = Math.min(...resultados.map((r) => r.total));
-      if (entregaExtra >= minTotalPlan) {
+      // La entrega no puede cubrir todo el valor base del plan más chico: no
+      // quedaría saldo que financiar. Se avisa con el valor base a la vista.
+      const planesFinanciables = resultados.filter(
+        (r) => r.cuotas > 1 && r.total > 0
+      );
+      const minBasePlan =
+        planesFinanciables.length > 0
+          ? Math.min(
+              ...planesFinanciables.map((r) => valorBasePlanEstandar(r))
+            )
+          : 0;
+      if (minBasePlan > 0 && entregaExtra >= minBasePlan) {
         toast.error(
-          `La entrega (GS ${entregaExtra.toLocaleString("es-PY")}) no puede superar el total del plan más chico (GS ${minTotalPlan.toLocaleString("es-PY")}).`
+          `La entrega (GS ${entregaExtra.toLocaleString("es-PY")}) no puede cubrir todo el valor base del plan más chico (GS ${Math.round(minBasePlan).toLocaleString("es-PY")}). Debe quedar un saldo para financiar.`
         );
         return;
       }
@@ -2313,9 +2305,9 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
           {/* CUADRITO: VALOR DE ENTREGA INICIAL PERSONALIZADO (opcional) */}
           {/* Solo visible cuando CON ENTREGA INICIAL está marcado. Si queda
               vacío, se usa la entrada estándar (la 1ª cuota de la BD). Si el
-              vendedor pone un valor, la entrada pasa a ser ese monto y el
-              resto del total se reparte entre las cuotas restantes, sin
-              cambiar el total del plan (el margen queda intacto). */}
+              vendedor pone un valor mayor, la entrega se descuenta del valor
+              base y el 1,5% mensual se aplica solo al saldo financiado: la
+              cuota y el total del plan bajan. */}
           {mostrarConEntrega && (
             <div className="mt-3 rounded-xl border border-emerald-300 bg-emerald-50/60 p-4">
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
@@ -2345,6 +2337,11 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                   />
                 </div>
               </div>
+              <p className="text-[11px] leading-snug text-stone-500 mt-2">
+                Si la entrega supera la 1ª cuota, la cuota y el total del plan
+                bajan: el 1,5% mensual se calcula solo sobre el saldo que queda
+                financiado.
+              </p>
             </div>
           )}
 
@@ -2759,7 +2756,7 @@ export function SalesPanel({ user, onGoAdmin, onGoGestion, isSupremo, onGoBase, 
                     <p className="mt-2 text-[11px] text-stone-500 leading-relaxed">
                       Valores por producto según la lista de cada plan; la cuota unificada es la suma de todos los productos.
                       {margenSin !== null && margenSin > 0 ? " En SIN ENTREGA (31-60 días) el +3% y el redondeo comercial se aplican sobre el total unificado, por eso el total puede variar unos miles respecto a la suma de la columna." : ""}
-                      {mostrarConEntrega && calculatedPlanes.some((p) => (p.entregaPersonalizada ?? 0) > 0) ? " Con entrega inicial personalizada la cuota unificada se recalcula sobre el total; los valores por producto son los de la lista." : ""}
+                      {mostrarConEntrega && calculatedPlanes.some((p) => (p.entregaPersonalizada ?? 0) > 0) ? " Con entrega inicial personalizada la cuota unificada se recalcula sobre el saldo (valor base − entrega); los valores por producto son los de la lista." : ""}
                     </p>
                   </>
                 );

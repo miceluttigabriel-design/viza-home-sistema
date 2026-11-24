@@ -790,8 +790,9 @@ export async function POST(req: NextRequest) {
         // === ENTREGA INICIAL PERSONALIZADA: fila destacada propia ===
         // Si el vendedor definió una entrega inicial distinta a la 1ª cuota
         // estándar, se muestra como fila propia arriba de los planes, y cada
-        // plan muestra solo las cuotas restantes (el total de cada plan ya
-        // viene ajustado: entrega + cuotas = total estándar ± redondeo Gs).
+        // plan muestra solo las cuotas restantes. El total de cada plan ya
+        // viene ajustado: la entrega se descuenta del valor base y el margen
+        // se calcula sobre el saldo (entrega + cuotas con menos interés).
         if (entregaInicial > 0) {
           ensureSpace(rowH);
           rowBase();
@@ -1020,7 +1021,7 @@ export async function POST(req: NextRequest) {
         comparativoDibujado = true;
         if (entregaInicial > 0 && planesColCon.length > 0) {
           lineasNota.push(
-            `La entrega inicial (Gs ${entregaInicial.toLocaleString("es-PY")}) se descuenta del total del plan; los valores por producto son los de la lista.`
+            `La entrega inicial (Gs ${entregaInicial.toLocaleString("es-PY")}) se descuenta del valor base del plan y el margen se calcula sobre el saldo; los valores por producto son los de la lista.`
           );
         }
       }
