@@ -1,0 +1,19 @@
+{
+  "name": "viza-agente-stock",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agente local que exporta el inventario del CtrCredito y lo importa en VIZA HOME (stock automatico).",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "prueba": "node src/index.mjs --una-vez",
+    "diagnostico": "node src/index.mjs --una-vez --forzar --diagnostico",
+    "exportar": "node src/exportar.mjs"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.49.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

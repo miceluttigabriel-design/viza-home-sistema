@@ -1,0 +1,11 @@
+{
+  "url": "http://170.233.219.8:8080/",
+  "pasos": [
+    { "accion": "esperar", "ms": 1000 },
+    { "accion": "llenar", "selector": "input[name=\"login\"]", "valor": "{{ERP_USUARIO}}" },
+    { "accion": "llenar", "selector": "input[name=\"pswd\"]", "valor": "{{ERP_CLAVE}}" },
+    { "accion": "click", "selector": "input.btn-signin" },
+    { "accion": "esperar", "ms": 6000 },
+    { "accion": "captura" }
+  ]
+}

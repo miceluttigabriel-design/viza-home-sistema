@@ -16,6 +16,7 @@ import {
   guardarHabilitadoStockAuto,
   puedeControlarStockAuto,
 } from "@/lib/config-stock-auto";
+import { getEtapaStockAuto } from "@/lib/stock-auto-etapa";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +26,10 @@ export async function GET() {
     if (!session) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
-    const cfg = await getConfigStockAuto();
+    const [cfg, etapa] = await Promise.all([getConfigStockAuto(), getEtapaStockAuto()]);
     return NextResponse.json({
       ...cfg,
+      ...etapa,
       puedeControlar: puedeControlarStockAuto(
         (session.user as any)?.role,
         (session.user as any)?.email

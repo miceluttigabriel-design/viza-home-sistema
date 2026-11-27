@@ -34,6 +34,10 @@ interface EstadoStockAuto {
   heartbeat: string | null;
   actualizadoPor?: string | null;
   puedeControlar?: boolean;
+  // Etapa en vivo que informa el agente (exportando / preview / aplicando).
+  etapa?: string | null;
+  mensaje?: string | null;
+  desde?: string | null;
 }
 
 // Si la ultima senal de la PC tiene mas de estos minutos, se considera
@@ -53,6 +57,17 @@ function textoHace(iso: string | null): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `hace ${h} h`;
   return `hace ${Math.floor(h / 24)} d`;
+}
+
+// Etapas que el agente informa mientras trabaja. El boton las muestra para
+// que el duenio sepa que esta pasando (no un spinner mudo).
+const ETAPAS_EN_CURSO = new Set(["exportando", "preview", "aplicando"]);
+
+function textoBotonEtapa(etapa: string | null | undefined): string | null {
+  if (etapa === "exportando") return "EXPORTANDO...";
+  if (etapa === "preview") return "LEYENDO...";
+  if (etapa === "aplicando") return "IMPORTANDO...";
+  return null;
 }
 
 interface StockAutoControlProps {
@@ -97,12 +112,14 @@ export function StockAutoControl({ onActualizado }: StockAutoControlProps = {}) 
     };
   }, [cargar]);
 
-  // Refresco: 20 s normal, 5 s mientras esperamos una corrida manual.
+  // Refresco: 20 s normal, 5 s mientras esperamos una corrida manual o el
+  // agente esta en pleno trabajo (exportando / leyendo / importando).
   useEffect(() => {
-    const ms = esperandoDesde ? 5000 : 20000;
+    const etapaActiva = Boolean(estado?.etapa && ETAPAS_EN_CURSO.has(estado.etapa));
+    const ms = esperandoDesde || etapaActiva ? 5000 : 20000;
     const id = window.setInterval(() => void cargar(), ms);
     return () => window.clearInterval(id);
-  }, [cargar, esperandoDesde]);
+  }, [cargar, esperandoDesde, estado?.etapa]);
 
   useEffect(() => {
     onActualizadoRef.current = onActualizado;
@@ -225,7 +242,16 @@ export function StockAutoControl({ onActualizado }: StockAutoControlProps = {}) 
     ? Date.now() - new Date(estado.heartbeat).getTime()
     : Number.POSITIVE_INFINITY;
   const enLinea = Number.isFinite(ultimaSenalMs) && ultimaSenalMs < FRESCO_MIN * 60 * 1000;
-  const ocupado = guardando || pidiendo || Boolean(esperandoDesde);
+  const etapaEnCurso = Boolean(estado.etapa && ETAPAS_EN_CURSO.has(estado.etapa));
+  const ocupado = guardando || pidiendo || Boolean(esperandoDesde) || etapaEnCurso;
+  // Pedido enviado con la PC apagada: queda en cola 30 minutos.
+  const pedidoEnCola = Boolean(estado.pedidoManual) && !enLinea;
+  const textoBoton = textoBotonEtapa(estado.etapa) || (esperandoDesde ? "ACTUALIZANDO..." : "ACTUALIZAR");
+  const textoPc = enLinea
+    ? `en linea ${textoHace(estado.heartbeat)}`
+    : estado.heartbeat
+      ? `sin senal ${textoHace(estado.heartbeat)}`
+      : "nunca conectada";
 
   return (
     <span className="inline-flex items-center gap-1.5 flex-wrap">
@@ -261,10 +287,16 @@ export function StockAutoControl({ onActualizado }: StockAutoControlProps = {}) 
           ocupado ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"
         }`}
         style={{ background: "linear-gradient(135deg, #8a6d2f 0%, #b08a3e 100%)" }}
-        title="Pedirle a la PC que exporte el CtrCredito e importe la planilla AHORA (sin esperar a la proxima hora)"
+        title={
+          etapaEnCurso
+            ? estado.mensaje || "La PC esta trabajando en este momento."
+            : "Pedirle a la PC que exporte el CtrCredito e importe la planilla AHORA (sin esperar a la proxima hora)"
+        }
       >
-        <RefreshCw className={`h-3 w-3 ${Boolean(esperandoDesde) ? "animate-spin" : ""}`} />
-        {esperandoDesde ? "ACTUALIZANDO..." : "ACTUALIZAR"}
+        <RefreshCw
+          className={`h-3 w-3 ${Boolean(esperandoDesde) || etapaEnCurso ? "animate-spin" : ""}`}
+        />
+        {textoBoton}
       </button>
 
       {/* Estado de la PC */}
@@ -277,12 +309,24 @@ export function StockAutoControl({ onActualizado }: StockAutoControlProps = {}) 
         title={
           enLinea
             ? "La PC del robot esta encendida y conectada (deja una senal cada minuto)."
-            : "La PC del robot no da senal: esta apagada, sin internet o el robot no pudo entrar al sistema (correo/clave). La actualizacion automatica NO va a pasar hasta que vuelva."
+            : estado.heartbeat
+              ? `La PC del robot no da senal desde ${textoHace(estado.heartbeat)}. Puede estar apagada, sin internet o el robot no pudo entrar al sistema (correo/clave). La actualizacion automatica NO va a pasar hasta que vuelva.`
+              : "La PC del robot todavia nunca se conecto. Instala y arranca el agente en esa PC para que el stock se actualice solo."
         }
       >
         {enLinea ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-        PC: {enLinea ? `en linea ${textoHace(estado.heartbeat)}` : "sin senal"}
+        PC: {textoPc}
       </span>
+
+      {/* Pedido esperando a que la PC vuelva */}
+      {pedidoEnCola && (
+        <span
+          className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full ring-1 text-[11px] font-semibold bg-amber-50 text-amber-800 ring-amber-200"
+          title="El pedido quedo guardado. Se ejecuta solo cuando la PC vuelva a estar en linea, siempre que no pasen mas de 30 minutos."
+        >
+          PEDIDO EN COLA
+        </span>
+      )}
 
       {/* Chip "ULTIMA": ELIMINADO (pedido del duenio). El resultado de la
           ultima importacion ya se ve en el chip de STOCK de arriba

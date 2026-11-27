@@ -1,0 +1,12 @@
+{
+  "url": "http://170.233.219.8/",
+  "pasos": [
+    { "accion": "esperar", "ms": 1000 },
+    { "accion": "llenar", "selector": "#usuario", "valor": "{{ERP_USUARIO}}" },
+    { "accion": "llenar", "selector": "#clave", "valor": "{{ERP_CLAVE}}" },
+    { "accion": "click", "selector": "#btnEntrar" },
+    { "accion": "esperarSelector", "selector": "#menu", "timeoutMs": 30000 },
+    { "accion": "click", "selector": "text=Inventario" },
+    { "accion": "descargar", "selector": "#btnExportar", "timeoutMs": 120000 }
+  ]
+}

@@ -14,6 +14,7 @@ import {
   puedeControlarStockAuto,
   registrarResultadoStockAuto,
 } from "@/lib/config-stock-auto";
+import { registrarEtapaStockAuto } from "@/lib/stock-auto-etapa";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,12 @@ export async function POST(req: NextRequest) {
       actualizados: Number(body?.actualizados) || 0,
       mensaje: typeof body?.mensaje === "string" ? body.mensaje : "",
     });
+
+    // La etapa queda cerrada: el boton vuelve a decir ACTUALIZAR.
+    await registrarEtapaStockAuto(
+      body?.ok === true ? "listo" : "error",
+      typeof body?.mensaje === "string" ? body.mensaje : null
+    );
 
     return NextResponse.json({ ok: true });
   } catch (error) {
