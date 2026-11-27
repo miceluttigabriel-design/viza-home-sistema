@@ -76,26 +76,34 @@ export async function exportarCtrCredito() {
     await pagina.evaluate(() => {
       if (window.openMenuItem) window.openMenuItem("menu_item_88");
     });
-    await esperar(9000);
-
-    // 4. Encontrar el frame de la grilla y apretar "Busqueda"
-    let frame = pagina.frames().find((f) => f.url().includes("grid_inventario_stock_new"));
+    let frame = null;
+    for (let i = 0; i < 10; i++) {
+      await esperar(3000);
+      frame = pagina.frames().find((f) => f.url().includes("grid_inventario_stock_new"));
+      if (frame) break;
+    }
     if (!frame) throw new Error("No aparecio la grilla de inventario");
-    const linkBusq = frame.locator("#sc_b_pesq_bot").first();
-    if (await linkBusq.count()) {
-      await linkBusq.click();
+    log.info(`grid frame url: ${frame.url()}`);
+    // Esperar a que aparezca el boton Busqueda y apretarlo
+    let btnBusq = frame.locator("#sc_b_pesq_bot").first();
+    for (let i = 0; i < 10 && !(await btnBusq.count()); i++) {
+      await esperar(2000);
+      btnBusq = frame.locator("#sc_b_pesq_bot").first();
+    }
+    if (await btnBusq.count()) {
+      await btnBusq.click();
       await esperar(12000);
     }
     frame = pagina.frames().find((f) => f.url().includes("grid_inventario_stock_new")) || frame;
-
-    // 5. Apretar "Exportar" y luego "Excel"
-    log.info("Pidiendo la exportacion a Excel...");
+    log.info(`xls_top count: ${await frame.locator("#xls_top").count()}`);
+    // El link Excel existe en el DOM pero esta oculto hasta que se despliega
+    // el grupo "Exportar". Lo hacemos visible clickeando el grupo.
     const btnExportar = frame.locator("#sc_btgp_btn_group_1_top").first();
     if (await btnExportar.count()) await btnExportar.click();
-    await esperar(1500);
+    await esperar(2000);
     const linkExcel = frame.locator("#xls_top").first();
     if (!(await linkExcel.count())) throw new Error("No aparecio el boton Excel en la grilla");
-    await linkExcel.click();
+    await linkExcel.click({ force: true });
     await esperar(6000);
 
     // 6. En el modal de config, apretar "Aceptar"

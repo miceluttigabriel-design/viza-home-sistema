@@ -453,6 +453,69 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ─── RECONCILIACION: productos en la BD que NO vienen en la planilla ───
+    // El reporte del ERP filtra "Saldo > 0", asi que los productos que
+    // cayeron a 0 (o se dieron de baja) no aparecen. Los reconciliamos:
+    //   - codigo < 100.000  -> se eliminan (limpieza)
+    //   - codigo >= 100.000 -> stock = 0
+    // Solo si la planilla trae una cantidad razonable de codigos (evita
+    // borrar todo por una exportacion parcial/filtrada).
+    let puestosEnCero = 0;
+    let huerfanosCount = 0;
+    const skusEnPlanilla = new Set([
+      ...body.nuevos.map((n) => n.sku),
+      ...body.actualizados.map((a) => a.sku),
+    ]);
+    if (skusEnPlanilla.size >= 100) {
+      const huerfanos = await db.product.findMany({
+        where: { sku: { notIn: [...skusEnPlanilla] } },
+        select: { id: true, sku: true },
+      });
+      huerfanosCount = huerfanos.length;
+      // DEBUG: incluir en la respuesta para diagnosticar
+      (globalThis as any).__debugHuerfanos = huerfanos.map((h) => h.sku).slice(0, 10);
+      (globalThis as any).__debugSkusEnPlanillaSize = skusEnPlanilla.size;
+      (globalThis as any).__debugTiene100458 = skusEnPlanilla.has("100458");
+      const idsEliminarHuerf: string[] = [];
+      const skusACero: string[] = [];
+      for (const p of huerfanos) {
+        if (Number(p.sku) < 100000) idsEliminarHuerf.push(p.id);
+        else skusACero.push(p.sku);
+      }
+      // Excluir los que tienen presupuestos.
+      if (idsEliminarHuerf.length > 0) {
+        const conCot = await db.quoteItem.findMany({
+          where: { productId: { in: idsEliminarHuerf } },
+          select: { productId: true },
+        });
+        const idsConCot = new Set(conCot.map((q) => q.productId));
+        const idsABorrarH = idsEliminarHuerf.filter((id) => !idsConCot.has(id));
+        if (idsABorrarH.length > 0) {
+          await db.stockSucursal.deleteMany({ where: { productId: { in: idsABorrarH } } });
+          await db.costoEditado.deleteMany({ where: { productId: { in: idsABorrarH } } });
+          await db.productHashtag.deleteMany({ where: { productId: { in: idsABorrarH } } });
+          await db.productCapacidad.deleteMany({ where: { productId: { in: idsABorrarH } } });
+          await db.productCores.deleteMany({ where: { productId: { in: idsABorrarH } } });
+          await db.productStockIdeal.deleteMany({ where: { productId: { in: idsABorrarH } } });
+          const rDelH = await db.product.deleteMany({ where: { id: { in: idsABorrarH } } });
+          eliminados += rDelH.count;
+        }
+      }
+      // Poner en 0 el stock de los >= 100.000 que no vinieron en la planilla.
+      if (skusACero.length > 0) {
+        // bulk update stock = 0
+        const BATCH = 200;
+        for (let i = 0; i < skusACero.length; i += BATCH) {
+          const lote = skusACero.slice(i, i + BATCH);
+          const skuList = lote.map((s) => `'${s.replace(/'/g, "''")}'`).join(",");
+          await db.$executeRawUnsafe(
+            `UPDATE "Product" SET "stock" = 0 WHERE "sku" IN (${skuList})`
+          );
+        }
+        puestosEnCero = skusACero.length;
+      }
+    }
+
     // ─────────────────────────────────────────────────────
     // 4.b Leer los inputs ACTUALES de la BD de cada producto a actualizar
     // (costos y márgenes guardados). Sirven para recalcular la cadena con el
@@ -823,6 +886,8 @@ export async function POST(req: NextRequest) {
       margenesAutomaticas,
       conSafraAutomatica,
       eliminados,
+      puestosEnCero,
+      huerfanosCount,
       omitidos,
       // Task 157: códigos existentes a los que se les completó proveedor/marca
       // (solo cuando el campo estaba vacío; nunca pisa datos cargados).

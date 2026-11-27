@@ -74,83 +74,108 @@ async function correrCiclo() {
       return;
     }
 
-    // 3. Planilla
-    await cliente.avisarEtapa("exportando", "Buscando la planilla del CtrCredito");
-    // Si la exportacion tarda, seguimos mandando senal de vida cada 2 minutos
-    // para que el panel no muestre "PC sin senal" en el medio.
-    const latido = setInterval(() => {
-      cliente.avisarEtapa("exportando", "Exportando del CtrCredito").catch(() => {});
-    }, 120_000);
-    let planilla;
-    try {
-      planilla = await obtenerPlanilla();
-    } finally {
-      clearInterval(latido);
-    }
-    if (!planilla) {
-      const eraPedido = Boolean(cfg.pedidoManual);
-      log.aviso("No hay planilla nueva para importar. Se reintenta en la proxima vuelta.");
-      await cliente.avisarEtapa("", "Esperando planilla del ERP");
-      if (eraPedido) {
-        // El duenio apreto ACTUALIZAR y la PC esta en linea, pero no hay
-        // archivo: avisamos claro en vez de dejarlo esperando 3 minutos.
-        await cliente.resultado({
-          ok: false,
-          nuevos: 0,
-          actualizados: 0,
-          mensaje: "No hay planilla nueva del ERP para importar (revisa la exportacion).",
-        });
+    // 3. Dos pasadas:
+    //    (a) "default" -> productos con stock > 0 (filtro original del reporte)
+    //    (b) "cero"    -> productos con stock 0 (para actualizarlos a 0 y
+    //                     eliminar los < 100.000)
+    const totales = {
+      creados: 0,
+      actualizados: 0,
+      eliminados: 0,
+      omitidos: 0,
+      conCosto: 0,
+      protegidos: 0,
+      puestosEnCero: 0,
+    };
+
+    for (const filtro of ["default"]) {
+      const etiqueta = filtro === "cero" ? "sin stock" : "con stock";
+      await cliente.avisarEtapa("exportando", `Exportando productos ${etiqueta}`);
+
+      const latido = setInterval(() => {
+        cliente.avisarEtapa("exportando", `Exportando productos ${etiqueta}`).catch(() => {});
+      }, 120_000);
+      let planilla;
+      try {
+        planilla = await obtenerPlanilla(filtro);
+      } finally {
+        clearInterval(latido);
       }
-      return;
-    }
+      if (!planilla) {
+        log.aviso(`No hay planilla (${etiqueta}). Se reintenta en la proxima vuelta.`);
+        await cliente.avisarEtapa("", "Esperando planilla del ERP");
+        if (filtro === "default" && cfg.pedidoManual) {
+          await cliente.resultado({
+            ok: false,
+            nuevos: 0,
+            actualizados: 0,
+            mensaje: "No hay planilla nueva del ERP para importar (revisa la exportacion).",
+          });
+        }
+        continue;
+      }
 
-    // 4. Preview
-    await cliente.avisarEtapa("preview", "Leyendo la planilla");
-    log.info("Subiendo planilla para la vista previa...");
-    const preview = await cliente.preview(planilla.archivo);
-    if (!preview?.codigosUnicos) {
-      throw new Error("La planilla no tiene codigos validos (revisa que sea el inventario correcto)");
-    }
-    log.info(
-      `Preview: ${preview.codigosUnicos} codigos · ${preview.nuevosCount} nuevos · ${preview.actualizadosCount} actualizados`
-    );
-    if (preview.eliminadosCount) log.info(`Se eliminaran ${preview.eliminadosCount} codigos < 100.000 con stock 0`);
-    for (const aviso of preview.errores || []) log.aviso(`Preview: ${aviso}`);
-
-    // Diagnostico: lee todo pero NO toca el stock.
-    if (DIAGNOSTICO) {
-      log.ok(
-        `Diagnostico OK: ${preview.codigosUnicos} codigos leidos (${preview.nuevosCount} nuevos, ${preview.actualizadosCount} actualizados). No se importo nada.`
+      await cliente.avisarEtapa("preview", `Leyendo planilla ${etiqueta}`);
+      log.info(`Subiendo planilla (${etiqueta}) para la vista previa...`);
+      const preview = await cliente.preview(planilla.archivo);
+      if (!preview?.codigosUnicos) {
+        throw new Error("La planilla no tiene codigos validos (revisa que sea el inventario correcto)");
+      }
+      log.info(
+        `Preview ${etiqueta}: ${preview.codigosUnicos} codigos · ${preview.nuevosCount} nuevos · ${preview.actualizadosCount} actualizados`
       );
-      await cliente.avisarEtapa("", "Diagnostico terminado (no se importo nada)");
-      return;
+      if (preview.eliminadosCount) {
+        log.info(`Se eliminaran ${preview.eliminadosCount} codigos < 100.000 con stock 0`);
+      }
+      for (const aviso of preview.errores || []) log.aviso(`Preview: ${aviso}`);
+
+      if (DIAGNOSTICO) {
+        log.ok(
+          `Diagnostico (${etiqueta}): ${preview.codigosUnicos} codigos leidos. No se importo nada.`
+        );
+        await cliente.avisarEtapa("", "Diagnostico terminado (no se importo nada)");
+        continue;
+      }
+
+      await cliente.avisarEtapa("aplicando", `Importando productos ${etiqueta}`);
+      log.info(`Aplicando la importacion (${etiqueta})...`);
+      const resultado = await cliente.aplicar(preview);
+
+      // DEBUG: mostrar la respuesta completa del apply
+      log.info(`APPLY RESPONSE: ${JSON.stringify(resultado)}`);
+
+      totales.creados += resultado.creados ?? 0;
+      totales.actualizados += resultado.actualizados ?? 0;
+      totales.eliminados += resultado.eliminados ?? 0;
+      totales.omitidos += resultado.omitidos ?? 0;
+      totales.conCosto += resultado.conCostoActualizado ?? 0;
+      totales.protegidos += resultado.costosProtegidos ?? 0;
+      totales.puestosEnCero += resultado.puestosEnCero ?? 0;
+
+      marcarProcesada(planilla);
+      log.ok(
+        `Importacion (${etiqueta}) terminada: ${resultado.creados ?? 0} nuevos · ${resultado.actualizados ?? 0} actualizados · ${resultado.eliminados ?? 0} eliminados · huerfanos=${resultado.huerfanosCount ?? 0} · enCero=${resultado.puestosEnCero ?? 0}`
+      );
     }
 
-    // 5. Aplicar
-    await cliente.avisarEtapa("aplicando", "Importando en STOCK GENERAL");
-    log.info("Aplicando la importacion...");
-    const resultado = await cliente.aplicar(preview);
-
-    // 6. Informar
-    const partes = [
-      `${resultado.creados ?? 0} nuevos`,
-      `${resultado.actualizados ?? 0} actualizados`,
-    ];
-    if (resultado.eliminados) partes.push(`${resultado.eliminados} eliminados`);
-    if (resultado.omitidos) partes.push(`${resultado.omitidos} omitidos`);
-    if (resultado.conCostoActualizado) partes.push(`${resultado.conCostoActualizado} con costo nuevo`);
-    if (resultado.costosProtegidos) partes.push(`${resultado.costosProtegidos} con costo protegido`);
+    // 6. Informar (una sola vez, con los totales de ambas pasadas)
+    const partes = [`${totales.creados} nuevos`, `${totales.actualizados} actualizados`];
+    if (totales.eliminados) partes.push(`${totales.eliminados} eliminados`);
+    if (totales.omitidos) partes.push(`${totales.omitidos} omitidos`);
+    if (totales.puestosEnCero) partes.push(`${totales.puestosEnCero} puestos en cero`);
+    if (totales.conCosto) partes.push(`${totales.conCosto} con costo nuevo`);
+    if (totales.protegidos) partes.push(`${totales.protegidos} con costo protegido`);
     const mensaje = partes.join(" · ");
 
     await cliente.resultado({
       ok: true,
-      nuevos: resultado.creados ?? 0,
-      actualizados: resultado.actualizados ?? 0,
-      eliminados: resultado.eliminados ?? 0,
+      nuevos: totales.creados,
+      actualizados: totales.actualizados,
+      eliminados: totales.eliminados,
       mensaje,
     });
-    marcarProcesada(planilla);
-    log.ok(`Importacion terminada: ${mensaje}`);
+    await cliente.avisarEtapa("", "Importacion terminada");
+    log.ok(`Importacion completa: ${mensaje}`);
   } catch (error) {
     const mensaje = error?.message || String(error);
     log.error(mensaje);
