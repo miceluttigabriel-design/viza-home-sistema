@@ -40,6 +40,7 @@ export interface ConfigStockAuto {
   ultimoMensaje: string | null;
   ultimosNuevos: number;
   ultimosActualizados: number;
+  ultimosEliminados: number;
   pedidoManual: string | null;
   heartbeat: string | null;
   actualizadoPor: string;
@@ -56,6 +57,7 @@ export const CONFIG_STOCK_AUTO_DEFAULT: ConfigStockAuto = {
   ultimoMensaje: null,
   ultimosNuevos: 0,
   ultimosActualizados: 0,
+  ultimosEliminados: 0,
   pedidoManual: null,
   heartbeat: null,
   actualizadoPor: "SISTEMA",
@@ -73,6 +75,7 @@ interface FilaConfig {
   ultimoMensaje: string | null;
   ultimosNuevos: number;
   ultimosActualizados: number;
+  ultimosEliminados: number;
   pedidoManual: Date | null;
   heartbeat: Date | null;
   actualizadoPor: string | null;
@@ -94,12 +97,16 @@ export async function ensureTablaConfigStockAuto(): Promise<boolean> {
          "ultimoMensaje" TEXT,
          "ultimosNuevos" INTEGER NOT NULL DEFAULT 0,
          "ultimosActualizados" INTEGER NOT NULL DEFAULT 0,
+         "ultimosEliminados" INTEGER NOT NULL DEFAULT 0,
          "pedidoManual" TIMESTAMP(3),
          "heartbeat" TIMESTAMP(3),
          "actualizadoPor" TEXT NOT NULL DEFAULT 'SISTEMA',
          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
          CONSTRAINT "ConfigStockAuto_pkey" PRIMARY KEY ("id")
        )`
+    );
+    await db.$executeRawUnsafe(
+      `ALTER TABLE "ConfigStockAuto" ADD COLUMN IF NOT EXISTS "ultimosEliminados" INTEGER NOT NULL DEFAULT 0`
     );
     estadoTabla = "lista";
     return true;
@@ -128,7 +135,7 @@ export async function getConfigStockAuto(): Promise<ConfigStockAuto> {
 
     const filas = await db.$queryRawUnsafe<FilaConfig[]>(
       `SELECT "habilitado", "ultimaCorrida", "ultimaOk", "ultimoMensaje",
-              "ultimosNuevos", "ultimosActualizados", "pedidoManual",
+              "ultimosNuevos", "ultimosActualizados", "ultimosEliminados", "pedidoManual",
               "heartbeat", "actualizadoPor", "updatedAt"
          FROM "ConfigStockAuto"
         WHERE "id" = $1
@@ -147,6 +154,7 @@ export async function getConfigStockAuto(): Promise<ConfigStockAuto> {
       ultimoMensaje: f.ultimoMensaje ?? null,
       ultimosNuevos: Number(f.ultimosNuevos) || 0,
       ultimosActualizados: Number(f.ultimosActualizados) || 0,
+      ultimosEliminados: Number(f.ultimosEliminados) || 0,
       // Un pedido viejo (PC apagada) se ignora: no se dispara solo.
       pedidoManual: haceMinutos(pedido, PEDIDO_VIGENTE_MINUTOS) ? null : pedido,
       heartbeat: aIso(f.heartbeat),
@@ -233,10 +241,12 @@ export async function registrarResultadoStockAuto(datos: {
   ok: boolean;
   nuevos: number;
   actualizados: number;
+  eliminados?: number;
   mensaje: string;
 }): Promise<void> {
   const nuevos = Math.max(0, Math.trunc(Number(datos.nuevos) || 0));
   const actualizados = Math.max(0, Math.trunc(Number(datos.actualizados) || 0));
+  const eliminados = Math.max(0, Math.trunc(Number(datos.eliminados) || 0));
   const mensaje = (datos.mensaje || "").slice(0, 500);
   try {
     const ok = await ensureTablaConfigStockAuto();
@@ -244,14 +254,15 @@ export async function registrarResultadoStockAuto(datos: {
     await db.$executeRawUnsafe(
       `INSERT INTO "ConfigStockAuto"
          ("id", "ultimaCorrida", "ultimaOk", "ultimoMensaje", "ultimosNuevos",
-          "ultimosActualizados", "pedidoManual", "heartbeat", "actualizadoPor", "updatedAt")
-       VALUES ($1, NOW(), $2, $3, $4, $5, NULL, NOW(), 'AGENTE', NOW())
+          "ultimosActualizados", "ultimosEliminados", "pedidoManual", "heartbeat", "actualizadoPor", "updatedAt")
+       VALUES ($1, NOW(), $2, $3, $4, $5, $6, NULL, NOW(), 'AGENTE', NOW())
        ON CONFLICT ("id") DO UPDATE SET
          "ultimaCorrida" = NOW(),
          "ultimaOk" = EXCLUDED."ultimaOk",
          "ultimoMensaje" = EXCLUDED."ultimoMensaje",
          "ultimosNuevos" = EXCLUDED."ultimosNuevos",
          "ultimosActualizados" = EXCLUDED."ultimosActualizados",
+         "ultimosEliminados" = EXCLUDED."ultimosEliminados",
          "pedidoManual" = NULL,
          "heartbeat" = NOW(),
          "actualizadoPor" = 'AGENTE',
@@ -260,7 +271,8 @@ export async function registrarResultadoStockAuto(datos: {
       datos.ok === true,
       mensaje,
       nuevos,
-      actualizados
+      actualizados,
+      eliminados
     );
   } catch {
     // el proximo ping vuelve a mandar el estado; el panel no se rompe

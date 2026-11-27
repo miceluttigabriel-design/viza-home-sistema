@@ -425,6 +425,7 @@ export async function POST(req: NextRequest) {
       // true = el admin editó y guardó un costo a mano → la importación NO
       // pisa su costo (solo stock). La vista lo muestra como PROTEGIDO.
       costoProtegido: boolean;
+      seraEliminado: boolean;
     }> = [];
 
     for (const codigo of codigosList) {
@@ -441,6 +442,7 @@ export async function POST(req: NextRequest) {
           costoActual: existente.costGs ?? null,
           costoNuevo: data.costProd,
           costoProtegido: protegidosIds.has(existente.id),
+          seraEliminado: Number(codigo) < 100000 && data.stockSumado === 0,
           proveedorActual: existente.fabricante ?? null,
           marcaActual: existente.marca ?? null,
           proveedor: data.proveedor,
@@ -496,6 +498,7 @@ export async function POST(req: NextRequest) {
       codigosUnicos: codigosList.length,
       nuevosCount: nuevos.length,
       actualizadosCount: actualizados.length,
+      eliminadosCount: actualizados.filter((a) => a.seraEliminado).length,
       nuevos,
       actualizados,
       // Task 98 (nuevo, opcional para clientes viejos):

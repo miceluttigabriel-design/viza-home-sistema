@@ -114,6 +114,7 @@ async function correrCiclo() {
     log.info(
       `Preview: ${preview.codigosUnicos} codigos · ${preview.nuevosCount} nuevos · ${preview.actualizadosCount} actualizados`
     );
+    if (preview.eliminadosCount) log.info(`Se eliminaran ${preview.eliminadosCount} codigos < 100.000 con stock 0`);
     for (const aviso of preview.errores || []) log.aviso(`Preview: ${aviso}`);
 
     // Diagnostico: lee todo pero NO toca el stock.
@@ -135,6 +136,8 @@ async function correrCiclo() {
       `${resultado.creados ?? 0} nuevos`,
       `${resultado.actualizados ?? 0} actualizados`,
     ];
+    if (resultado.eliminados) partes.push(`${resultado.eliminados} eliminados`);
+    if (resultado.omitidos) partes.push(`${resultado.omitidos} omitidos`);
     if (resultado.conCostoActualizado) partes.push(`${resultado.conCostoActualizado} con costo nuevo`);
     if (resultado.costosProtegidos) partes.push(`${resultado.costosProtegidos} con costo protegido`);
     const mensaje = partes.join(" · ");
@@ -143,6 +146,7 @@ async function correrCiclo() {
       ok: true,
       nuevos: resultado.creados ?? 0,
       actualizados: resultado.actualizados ?? 0,
+      eliminados: resultado.eliminados ?? 0,
       mensaje,
     });
     marcarProcesada(planilla);

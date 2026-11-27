@@ -384,7 +384,13 @@ export async function POST(req: NextRequest) {
         stock: a.stockNuevo,
         costProd: a.costoNuevo ?? null,
       }));
-    const trulyNew = [...trulyNewFromNuevos, ...trulyNewFromActualizados];
+    const todosLosNuevos = [...trulyNewFromNuevos, ...trulyNewFromActualizados];
+    const omitidos = todosLosNuevos.filter(
+      (n) => Number(n.sku) < 100000 && n.stock === 0
+    ).length;
+    const trulyNew = todosLosNuevos.filter(
+      (n) => !(Number(n.sku) < 100000 && n.stock === 0)
+    );
 
     // Items que ya existen → SOLO costo (COSTO GS) + stock (REGLA DE ORO del
     // usuario: al importar/re-importar nada más se toca). Se conserva el costo
@@ -410,6 +416,42 @@ export async function POST(req: NextRequest) {
         marca: a.marca ?? null,
       }));
     const allUpdates = [...updatesFromNuevos, ...updatesFromActualizados];
+
+    // ─── REGLA DEL DUEÑO: códigos < 100.000 con stock 0 se ELIMINAN ───
+    // (limpieza de códigos viejos/bajos). Solo se borran los que NO tienen
+    // presupuestos asociados (integridad histórica). Se limpian también las
+    // tablas satélite (StockSucursal, CostoEditado, etc.).
+    const skusAEliminar = allUpdates
+      .filter((u) => Number(u.sku) < 100000 && u.stock === 0)
+      .map((u) => u.sku);
+    let eliminados = 0;
+    if (skusAEliminar.length > 0) {
+      const filasEliminar = await db.product.findMany({
+        where: { sku: { in: skusAEliminar } },
+        select: { id: true, sku: true },
+      });
+      const idsEliminar = filasEliminar.map((p) => p.id);
+      // Excluir los que tienen presupuestos (no romper historial).
+      const conCotizacion =
+        idsEliminar.length > 0
+          ? await db.quoteItem.findMany({
+              where: { productId: { in: idsEliminar } },
+              select: { productId: true },
+            })
+          : [];
+      const idsConCotizacion = new Set(conCotizacion.map((q) => q.productId));
+      const idsABorrar = idsEliminar.filter((id) => !idsConCotizacion.has(id));
+      if (idsABorrar.length > 0) {
+        await db.stockSucursal.deleteMany({ where: { productId: { in: idsABorrar } } });
+        await db.costoEditado.deleteMany({ where: { productId: { in: idsABorrar } } });
+        await db.productHashtag.deleteMany({ where: { productId: { in: idsABorrar } } });
+        await db.productCapacidad.deleteMany({ where: { productId: { in: idsABorrar } } });
+        await db.productCores.deleteMany({ where: { productId: { in: idsABorrar } } });
+        await db.productStockIdeal.deleteMany({ where: { productId: { in: idsABorrar } } });
+        const rDel = await db.product.deleteMany({ where: { id: { in: idsABorrar } } });
+        eliminados = rDel.count;
+      }
+    }
 
     // ─────────────────────────────────────────────────────
     // 4.b Leer los inputs ACTUALES de la BD de cada producto a actualizar
@@ -780,6 +822,8 @@ export async function POST(req: NextRequest) {
       costosProtegidos,
       margenesAutomaticas,
       conSafraAutomatica,
+      eliminados,
+      omitidos,
       // Task 157: códigos existentes a los que se les completó proveedor/marca
       // (solo cuando el campo estaba vacío; nunca pisa datos cargados).
       proveedorMarcaCompletados,

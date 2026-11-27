@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
       ok: body?.ok === true,
       nuevos: Number(body?.nuevos) || 0,
       actualizados: Number(body?.actualizados) || 0,
+      eliminados: Number(body?.eliminados) || 0,
       mensaje: typeof body?.mensaje === "string" ? body.mensaje : "",
     });
 

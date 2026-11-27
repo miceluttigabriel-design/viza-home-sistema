@@ -30,6 +30,7 @@ interface EstadoStockAuto {
   ultimoMensaje: string | null;
   ultimosNuevos: number;
   ultimosActualizados: number;
+  ultimosEliminados?: number;
   pedidoManual: string | null;
   heartbeat: string | null;
   actualizadoPor?: string | null;
@@ -139,7 +140,8 @@ export function StockAutoControl({ onActualizado }: StockAutoControlProps = {}) 
       );
     } else {
       toast.success(
-        `Stock actualizado: ${estado.ultimosNuevos} nuevos · ${estado.ultimosActualizados} actualizados`,
+        `Stock actualizado: ${estado.ultimosNuevos} nuevos · ${estado.ultimosActualizados} actualizados` +
+          (estado.ultimosEliminados ? ` · ${estado.ultimosEliminados} eliminados` : ""),
         { duration: 10000 }
       );
       // La tabla de la Base se refresca sola: el duenio ve el stock nuevo
