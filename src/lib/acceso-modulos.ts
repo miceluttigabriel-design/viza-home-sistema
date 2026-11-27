@@ -103,8 +103,8 @@ export function accesosDeUsuario(user: {
     puedeVerStock: !esComun,
     // La Base queda para Supremo/Admin/VIP. ESPECIAL y COMÚN la ven
     // bloqueada en el Orquestador y no reciben la navegación.
-    puedeVerBase: esSupremo || esAdminRol || esVip,
+    puedeVerBase: esSupremo || esAdminRol || esVip || esEspecial,
     puedeVerGestion: esSupremo,
-    baseSoloLectura: esVip,
+    baseSoloLectura: esVip || esEspecial,
   };
 }

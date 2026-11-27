@@ -40,12 +40,19 @@ export const EMAILS_SOLO_LECTURA_BASE: string[] = [
 // para no romper los llamados viejos). Un VIP ve la Base completa y el
 // Orquestador, pero no puede editar NADA: ni celdas, ni etiquetas, ni hashtag,
 // ni importar, ni borrar.
+import { ENCARGADOS_SUCURSAL } from "@/lib/encargados-sucursal";
+
+// Devuelve true si el email recibido es un usuario de consulta (solo lectura).
 export function esEmailSoloLectura(
   email: string | null | undefined,
   role?: string | null
 ): boolean {
-  if (role === "vip") return true;
+  // VIPs (rol "vip" o lista fija) y ESPECIAL (4 encargados) son solo lectura
+  // de la base: ven todo pero no editan nada.
+  if (role === "vip" || role === "especial") return true;
   const e = (email || "").trim().toLowerCase();
   if (!e) return false;
-  return EMAILS_SOLO_LECTURA_BASE.includes(e);
+  if (EMAILS_SOLO_LECTURA_BASE.includes(e)) return true;
+  // Los 4 encargados de sucursal (ESPECIAL) también son solo lectura de la base.
+  return !!ENCARGADOS_SUCURSAL[e];
 }
